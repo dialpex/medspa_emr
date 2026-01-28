@@ -77,28 +77,64 @@ export type PatientTimeline = {
 };
 
 /**
+ * Normalize phone number - extract digits only
+ */
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+/**
  * Get patients list with optional search
  */
 export async function getPatients(search?: string): Promise<PatientListItem[]> {
   const user = await requirePermission("patients", "view");
 
-  const where: any = {
+  const baseWhere = {
     clinicId: user.clinicId,
     deletedAt: null,
   };
 
-  if (search && search.trim()) {
-    const searchTerm = search.trim();
-    where.OR = [
-      { firstName: { contains: searchTerm } },
-      { lastName: { contains: searchTerm } },
-      { email: { contains: searchTerm } },
-      { phone: { contains: searchTerm } },
-    ];
+  // If no search, return all patients
+  if (!search || !search.trim()) {
+    const patients = await prisma.patient.findMany({
+      where: baseWhere,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        dateOfBirth: true,
+        tags: true,
+        appointments: {
+          where: { deletedAt: null },
+          orderBy: { startTime: "desc" },
+          take: 1,
+          select: { startTime: true },
+        },
+      },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    });
+
+    return patients.map((p) => ({
+      id: p.id,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      email: p.email,
+      phone: p.phone,
+      dateOfBirth: p.dateOfBirth,
+      tags: p.tags,
+      lastAppointment: p.appointments[0]?.startTime ?? null,
+    }));
   }
 
-  const patients = await prisma.patient.findMany({
-    where,
+  const searchTerm = search.trim().toLowerCase();
+  const searchDigits = normalizePhone(searchTerm);
+
+  // Fetch all patients for this clinic and filter in memory
+  // This handles phone number formatting differences
+  const allPatients = await prisma.patient.findMany({
+    where: baseWhere,
     select: {
       id: true,
       firstName: true,
@@ -117,7 +153,24 @@ export async function getPatients(search?: string): Promise<PatientListItem[]> {
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });
 
-  return patients.map((p) => ({
+  // Filter patients matching search term
+  const filtered = allPatients.filter((p) => {
+    const firstName = p.firstName.toLowerCase();
+    const lastName = p.lastName.toLowerCase();
+    const email = (p.email || "").toLowerCase();
+    const phone = p.phone || "";
+    const phoneDigits = normalizePhone(phone);
+
+    return (
+      firstName.includes(searchTerm) ||
+      lastName.includes(searchTerm) ||
+      email.includes(searchTerm) ||
+      phone.includes(searchTerm) ||
+      (searchDigits.length >= 3 && phoneDigits.includes(searchDigits))
+    );
+  });
+
+  return filtered.map((p) => ({
     id: p.id,
     firstName: p.firstName,
     lastName: p.lastName,
