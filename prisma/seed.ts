@@ -687,6 +687,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       items: {
         create: [
           {
+            clinicId: clinic.id,
             serviceId: services[0].id,
             description: "Botox - Forehead (20 units)",
             quantity: 1,
@@ -698,6 +699,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       payments: {
         create: [
           {
+            clinicId: clinic.id,
             amount: 350,
             paymentMethod: "credit",
             reference: "VISA-4242",
@@ -723,6 +725,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       items: {
         create: [
           {
+            clinicId: clinic.id,
             serviceId: services[3].id,
             description: "Juvederm Ultra - Lips (1 syringe)",
             quantity: 1,
@@ -741,6 +744,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
   // ===========================================
   const membershipCredit = await prisma.membershipCredit.create({
     data: {
+      clinicId: clinic.id,
       patientId: patients[2].id,
       planId: membershipPlans[1].id, // Silver
       totalCredits: 25,
@@ -749,16 +753,19 @@ By signing below, I confirm my consent to proceed with treatment.`,
       ledger: {
         create: [
           {
+            clinicId: clinic.id,
             change: 25,
             balance: 25,
             description: "Initial membership purchase",
           },
           {
+            clinicId: clinic.id,
             change: -3,
             balance: 22,
             description: "Botox treatment credit redemption",
           },
           {
+            clinicId: clinic.id,
             change: -2,
             balance: 20,
             description: "Chemical peel credit redemption",
@@ -770,6 +777,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
 
   const membershipCredit2 = await prisma.membershipCredit.create({
     data: {
+      clinicId: clinic.id,
       patientId: patients[4].id,
       planId: membershipPlans[2].id, // Gold
       totalCredits: 50,
@@ -778,16 +786,19 @@ By signing below, I confirm my consent to proceed with treatment.`,
       ledger: {
         create: [
           {
+            clinicId: clinic.id,
             change: 50,
             balance: 50,
             description: "Initial membership purchase",
           },
           {
+            clinicId: clinic.id,
             change: -8,
             balance: 42,
             description: "Sculptra session 1 credit redemption",
           },
           {
+            clinicId: clinic.id,
             change: -4,
             balance: 38,
             description: "Botox full face credit redemption",

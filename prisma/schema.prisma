@@ -26,18 +26,22 @@ model Clinic {
   updatedAt DateTime @updatedAt
 
   // Relations
-  users        User[]
-  patients     Patient[]
-  services     Service[]
-  appointments Appointment[]
-  charts       Chart[]
-  photos       Photo[]
-  consents     ConsentTemplate[]
-  patientConsents PatientConsent[]
-  invoices     Invoice[]
-  memberships  MembershipPlan[]
-  auditLogs    AuditLog[]
-  rooms        Room[]
+  users             User[]
+  patients          Patient[]
+  services          Service[]
+  appointments      Appointment[]
+  charts            Chart[]
+  photos            Photo[]
+  consents          ConsentTemplate[]
+  patientConsents   PatientConsent[]
+  invoices          Invoice[]
+  invoiceItems      InvoiceItem[]
+  payments          Payment[]
+  memberships       MembershipPlan[]
+  membershipCredits MembershipCredit[]
+  creditLedgers     CreditLedger[]
+  auditLogs         AuditLog[]
+  rooms             Room[]
 }
 
 // ===========================================
@@ -372,6 +376,7 @@ model Invoice {
 
 model InvoiceItem {
   id          String  @id @default(cuid())
+  clinicId    String
   invoiceId   String
   serviceId   String?
   description String
@@ -380,14 +385,17 @@ model InvoiceItem {
   total       Float
 
   // Relations
+  clinic  Clinic   @relation(fields: [clinicId], references: [id])
   invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   service Service? @relation(fields: [serviceId], references: [id])
 
+  @@index([clinicId])
   @@index([invoiceId])
 }
 
 model Payment {
   id            String   @id @default(cuid())
+  clinicId      String
   invoiceId     String
   amount        Float
   paymentMethod String   // cash, credit, debit, etc.
@@ -396,8 +404,10 @@ model Payment {
   createdAt     DateTime @default(now())
 
   // Relations
+  clinic  Clinic  @relation(fields: [clinicId], references: [id])
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@index([clinicId])
   @@index([invoiceId])
 }
 
@@ -426,6 +436,7 @@ model MembershipPlan {
 
 model MembershipCredit {
   id           String    @id @default(cuid())
+  clinicId     String
   patientId    String
   planId       String
   totalCredits Int
@@ -436,16 +447,19 @@ model MembershipCredit {
   updatedAt    DateTime  @updatedAt
 
   // Relations
+  clinic  Clinic         @relation(fields: [clinicId], references: [id])
   patient Patient        @relation(fields: [patientId], references: [id])
   plan    MembershipPlan @relation(fields: [planId], references: [id])
   ledger  CreditLedger[]
 
+  @@index([clinicId])
   @@index([patientId])
   @@index([expiresAt])
 }
 
 model CreditLedger {
   id                   String           @id @default(cuid())
+  clinicId             String
   membershipCreditId   String
   change               Int              // Positive for additions, negative for usage
   balance              Int              // Running balance after this transaction
@@ -453,8 +467,10 @@ model CreditLedger {
   createdAt            DateTime         @default(now())
 
   // Relations
+  clinic           Clinic           @relation(fields: [clinicId], references: [id])
   membershipCredit MembershipCredit @relation(fields: [membershipCreditId], references: [id], onDelete: Cascade)
 
+  @@index([clinicId])
   @@index([membershipCreditId])
 }
 
