@@ -293,14 +293,15 @@ model Photo {
 // ===========================================
 
 model ConsentTemplate {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   clinicId  String
   name      String
-  content   String   // HTML or Markdown content
-  version   String   @default("1.0")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  content   String    // HTML or Markdown content
+  version   String    @default("1.0")
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft delete
 
   // Relations
   clinic          Clinic           @relation(fields: [clinicId], references: [id])
@@ -310,17 +311,18 @@ model ConsentTemplate {
 }
 
 model PatientConsent {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   clinicId          String
   patientId         String
   templateId        String
-  signatureData     String?  // Base64 or JSON signature data
+  signatureData     String?   // Base64 or JSON signature data
   signedAt          DateTime?
   ipAddress         String?
   userAgent         String?
-  templateSnapshot  String?  // Snapshot of template content at signing time
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  templateSnapshot  String?   // Snapshot of template content at signing time
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime? // Soft delete
 
   // Relations
   clinic   Clinic          @relation(fields: [clinicId], references: [id])
