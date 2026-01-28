@@ -3,47 +3,45 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import {
+  Calendar,
+  Users,
+  Tag,
+  Bell,
+  BarChart3,
+  Package,
+  Gift,
+  Settings,
+  Sparkles,
+  LayoutGrid,
+  MessageCircle,
+  ChevronDown,
+} from "lucide-react";
 import type { Role } from "@prisma/client";
 
 type NavItem = {
   label: string;
   href: string;
-  roles?: Role[]; // If undefined, visible to all roles
+  icon: React.ReactNode;
+  roles?: Role[];
 };
 
 const navItems: NavItem[] = [
-  { label: "Calendar", href: "/calendar" },
-  { label: "Patients", href: "/patients" },
-  { label: "Inbox", href: "/inbox" },
-  {
-    label: "Sales",
-    href: "/sales",
-    roles: ["Owner", "Admin", "Billing"],
-  },
-  {
-    label: "Reports",
-    href: "/reports",
-    roles: ["Owner", "Admin", "Billing", "MedicalDirector"],
-  },
-  { label: "AI Marketing", href: "/marketing" },
-  { label: "Settings", href: "/settings" },
+  { label: "Calendar", href: "/calendar", icon: <Calendar className="size-4" /> },
+  { label: "Patients", href: "/patients", icon: <Users className="size-4" /> },
+  { label: "Sales", href: "/sales", icon: <Tag className="size-4" />, roles: ["Owner", "Admin", "Billing"] },
+  { label: "Inbox", href: "/inbox", icon: <Bell className="size-4" /> },
+  { label: "Reports", href: "/reports", icon: <BarChart3 className="size-4" />, roles: ["Owner", "Admin", "Billing", "MedicalDirector"] },
+  { label: "AI Marketing", href: "/marketing", icon: <Sparkles className="size-4" /> },
+  { label: "Settings", href: "/settings", icon: <Settings className="size-4" /> },
 ];
 
-type NavBarProps = {
-  user: {
-    name: string;
-    role: Role;
-  };
-};
-
-export function NavBar({ user }: NavBarProps) {
+export function NavBar({ user }: { user: { name: string; role: Role } }) {
   const pathname = usePathname();
 
-  // Filter nav items based on user role
-  const visibleItems = navItems.filter((item) => {
-    if (!item.roles) return true;
-    return item.roles.includes(user.role);
-  });
+  const visibleItems = navItems.filter((item) =>
+    !item.roles || item.roles.includes(user.role)
+  );
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -51,40 +49,60 @@ export function NavBar({ user }: NavBarProps) {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white">
+    <header className="sticky top-0 z-50 border-b border-gray-200 bg-gradient-to-b from-purple-50 to-white">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
-        {/* Navigation Tabs */}
-        <nav className="flex h-full items-center gap-1">
-          {visibleItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`relative flex h-full items-center px-4 text-sm font-medium transition-colors ${
-                isActive(item.href)
-                  ? "text-blue-600"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              {item.label}
-              {/* Active indicator */}
-              {isActive(item.href) && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 animate-in fade-in slide-in-from-bottom-1 duration-200" />
-              )}
-            </Link>
-          ))}
-        </nav>
-
-        {/* User Info & Sign Out */}
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <p className="text-sm font-medium text-gray-900">{user.name}</p>
-            <p className="text-xs text-gray-500">{user.role}</p>
+        {/* Logo + Navigation */}
+        <div className="flex items-center gap-2">
+          {/* Logo */}
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 text-white font-bold text-lg mr-2">
+            M
           </div>
+
+          {/* Navigation Tabs */}
+          <nav className="flex items-center gap-1">
+            {visibleItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                  isActive(item.href)
+                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                {item.icon}
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+
+        {/* Right side: Apps, Messages, User */}
+        <div className="flex items-center gap-3">
+          {/* Apps button */}
+          <button className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">
+            <LayoutGrid className="size-4" />
+            Apps
+          </button>
+
+          {/* Messages */}
+          <button className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100">
+            <MessageCircle className="size-5" />
+          </button>
+
+          {/* User profile */}
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
-            className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+            className="flex items-center gap-3 rounded-full py-1 pl-1 pr-3 hover:bg-gray-100 transition-colors"
           >
-            Sign out
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-pink-400 text-white text-sm font-medium">
+              {user.name.charAt(0)}
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-medium text-gray-900 leading-tight">{user.name}</p>
+              <p className="text-xs text-gray-500 leading-tight">{user.role}</p>
+            </div>
+            <ChevronDown className="size-4 text-gray-400" />
           </button>
         </div>
       </div>
