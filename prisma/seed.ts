@@ -554,7 +554,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       createdById: provider1.id,
       status: "MDSigned",
       chiefComplaint: "Forehead lines and wrinkles",
-      areasTreeated: JSON.stringify(["Forehead", "Glabella"]),
+      areasTreated: JSON.stringify(["Forehead", "Glabella"]),
       productsUsed: JSON.stringify([
         {
           name: "Botox",
@@ -583,7 +583,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       createdById: provider1.id,
       status: "NeedsSignOff",
       chiefComplaint: "Lip enhancement - desires fuller lips",
-      areasTreeated: JSON.stringify(["Upper lip", "Lower lip", "Vermillion border"]),
+      areasTreated: JSON.stringify(["Upper lip", "Lower lip", "Vermillion border"]),
       productsUsed: JSON.stringify([
         {
           name: "Juvederm Ultra XC",
@@ -608,7 +608,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       createdById: provider2.id,
       status: "NeedsSignOff",
       chiefComplaint: "Volume loss in cheeks and temples - session 2 of 3",
-      areasTreeated: JSON.stringify(["Cheeks", "Temples", "Jawline"]),
+      areasTreated: JSON.stringify(["Cheeks", "Temples", "Jawline"]),
       productsUsed: JSON.stringify([
         {
           name: "Sculptra",

@@ -220,7 +220,7 @@ model Chart {
 
   // Treatment details
   chiefComplaint  String?
-  areasTreeated   String?     // JSON array of areas
+  areasTreated   String?     // JSON array of areas
   productsUsed    String?     // JSON array of products with lot/expiration
   dosageUnits     String?
   technique       String?
