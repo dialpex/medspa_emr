@@ -17,8 +17,15 @@
     "db:reset": "prisma migrate reset"
   },
   "dependencies": {
+    "@js-temporal/polyfill": "^0.5.1",
     "@prisma/client": "^6.19.2",
     "@radix-ui/react-tabs": "^1.1.13",
+    "@schedule-x/calendar": "^4.1.0",
+    "@schedule-x/drag-and-drop": "^3.7.3",
+    "@schedule-x/events-service": "^4.1.0",
+    "@schedule-x/react": "^4.1.0",
+    "@schedule-x/resize": "^3.7.3",
+    "@schedule-x/theme-default": "^4.1.0",
     "bcrypt": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
