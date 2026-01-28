@@ -1,9 +1,17 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
+// Default password for all demo users
+const DEFAULT_PASSWORD = "password123";
+
 async function main() {
   console.log("Seeding database...");
+
+  // Generate password hash for demo users
+  const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+  console.log("Generated password hash for demo users");
 
   // ===========================================
   // CLINIC
@@ -45,7 +53,7 @@ async function main() {
       email: "sarah.owner@radiancemedspa.com",
       name: "Dr. Sarah Mitchell",
       role: "Owner",
-      passwordHash: "$2b$10$placeholder", // Placeholder hash
+      passwordHash: passwordHash,
     },
   });
 
@@ -55,7 +63,7 @@ async function main() {
       email: "dr.chen@radiancemedspa.com",
       name: "Dr. Michael Chen",
       role: "MedicalDirector",
-      passwordHash: "$2b$10$placeholder",
+      passwordHash: passwordHash,
     },
   });
 
@@ -65,7 +73,7 @@ async function main() {
       email: "jessica.np@radiancemedspa.com",
       name: "Jessica Adams, NP",
       role: "Provider",
-      passwordHash: "$2b$10$placeholder",
+      passwordHash: passwordHash,
     },
   });
 
@@ -75,7 +83,7 @@ async function main() {
       email: "emily.rn@radiancemedspa.com",
       name: "Emily Rodriguez, RN",
       role: "Provider",
-      passwordHash: "$2b$10$placeholder",
+      passwordHash: passwordHash,
     },
   });
 
@@ -85,7 +93,7 @@ async function main() {
       email: "amanda.front@radiancemedspa.com",
       name: "Amanda Thompson",
       role: "FrontDesk",
-      passwordHash: "$2b$10$placeholder",
+      passwordHash: passwordHash,
     },
   });
 
@@ -95,7 +103,7 @@ async function main() {
       email: "robert.billing@radiancemedspa.com",
       name: "Robert Garcia",
       role: "Billing",
-      passwordHash: "$2b$10$placeholder",
+      passwordHash: passwordHash,
     },
   });
 
