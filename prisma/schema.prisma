@@ -1,0 +1,502 @@
+// Prisma schema for MedSpa EMR
+// SQLite for local dev, Postgres-compatible schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================
+// MULTI-TENANCY
+// ===========================================
+
+model Clinic {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  address   String?
+  phone     String?
+  email     String?
+  timezone  String   @default("America/New_York")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users        User[]
+  patients     Patient[]
+  services     Service[]
+  appointments Appointment[]
+  charts       Chart[]
+  photos       Photo[]
+  consents     ConsentTemplate[]
+  patientConsents PatientConsent[]
+  invoices     Invoice[]
+  memberships  MembershipPlan[]
+  auditLogs    AuditLog[]
+  rooms        Room[]
+}
+
+// ===========================================
+// USERS & ROLES
+// ===========================================
+
+enum Role {
+  Owner
+  Admin
+  Provider
+  FrontDesk
+  Billing
+  MedicalDirector
+  ReadOnly
+}
+
+model User {
+  id            String    @id @default(cuid())
+  clinicId      String
+  email         String    @unique
+  name          String
+  passwordHash  String?
+  role          Role      @default(Provider)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  clinic               Clinic              @relation(fields: [clinicId], references: [id])
+  appointments         Appointment[]       @relation("AppointmentProvider")
+  charts               Chart[]             @relation("ChartCreator")
+  signedCharts         Chart[]             @relation("ChartSigner")
+  auditLogs            AuditLog[]
+  photosTaken          Photo[]
+
+  @@index([clinicId])
+  @@index([email])
+}
+
+// ===========================================
+// PATIENTS & CRM
+// ===========================================
+
+model Patient {
+  id            String    @id @default(cuid())
+  clinicId      String
+  firstName     String
+  lastName      String
+  email         String?
+  phone         String?
+  dateOfBirth   DateTime?
+  gender        String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  allergies     String?   // Stored as text, can be JSON in practice
+  medicalNotes  String?
+  tags          String?   // Comma-separated or JSON array
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime? // Soft delete
+
+  // Relations
+  clinic           Clinic            @relation(fields: [clinicId], references: [id])
+  appointments     Appointment[]
+  charts           Chart[]
+  photos           Photo[]
+  consents         PatientConsent[]
+  invoices         Invoice[]
+  membershipCredits MembershipCredit[]
+
+  @@index([clinicId])
+  @@index([lastName, firstName])
+  @@index([email])
+  @@index([phone])
+}
+
+// ===========================================
+// SCHEDULING
+// ===========================================
+
+model Room {
+  id        String   @id @default(cuid())
+  clinicId  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clinic       Clinic        @relation(fields: [clinicId], references: [id])
+  appointments Appointment[]
+
+  @@index([clinicId])
+}
+
+enum AppointmentStatus {
+  Scheduled
+  Confirmed
+  CheckedIn
+  InProgress
+  Completed
+  NoShow
+  Cancelled
+}
+
+model Appointment {
+  id          String            @id @default(cuid())
+  clinicId    String
+  patientId   String
+  providerId  String
+  serviceId   String?
+  roomId      String?
+  startTime   DateTime
+  endTime     DateTime
+  status      AppointmentStatus @default(Scheduled)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  deletedAt   DateTime?         // Soft delete
+
+  // Relations
+  clinic   Clinic   @relation(fields: [clinicId], references: [id])
+  patient  Patient  @relation(fields: [patientId], references: [id])
+  provider User     @relation("AppointmentProvider", fields: [providerId], references: [id])
+  service  Service? @relation(fields: [serviceId], references: [id])
+  room     Room?    @relation(fields: [roomId], references: [id])
+  chart    Chart?
+  invoice  Invoice?
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([providerId])
+  @@index([startTime])
+}
+
+// ===========================================
+// SERVICES
+// ===========================================
+
+model Service {
+  id          String   @id @default(cuid())
+  clinicId    String
+  name        String
+  description String?
+  duration    Int      @default(30) // in minutes
+  price       Float    @default(0)
+  category    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  clinic       Clinic        @relation(fields: [clinicId], references: [id])
+  appointments Appointment[]
+  invoiceItems InvoiceItem[]
+
+  @@index([clinicId])
+}
+
+// ===========================================
+// CLINICAL CHARTING
+// ===========================================
+
+enum ChartStatus {
+  Draft
+  NeedsSignOff
+  MDSigned
+}
+
+model Chart {
+  id              String      @id @default(cuid())
+  clinicId        String
+  patientId       String
+  appointmentId   String?     @unique
+  createdById     String
+  status          ChartStatus @default(Draft)
+
+  // Treatment details
+  chiefComplaint  String?
+  areasTreeated   String?     // JSON array of areas
+  productsUsed    String?     // JSON array of products with lot/expiration
+  dosageUnits     String?
+  technique       String?
+  aftercareNotes  String?
+  additionalNotes String?
+
+  // Medical Director sign-off metadata
+  signedById      String?
+  signedByName    String?
+  signedAt        DateTime?
+  recordHash      String?     // Immutable hash for integrity verification
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?   // Soft delete
+
+  // Relations
+  clinic      Clinic       @relation(fields: [clinicId], references: [id])
+  patient     Patient      @relation(fields: [patientId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  createdBy   User         @relation("ChartCreator", fields: [createdById], references: [id])
+  signedBy    User?        @relation("ChartSigner", fields: [signedById], references: [id])
+  photos      Photo[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([status])
+  @@index([createdById])
+}
+
+// ===========================================
+// CLINICAL PHOTOS
+// ===========================================
+
+model Photo {
+  id           String   @id @default(cuid())
+  clinicId     String
+  patientId    String
+  chartId      String?
+  takenById    String
+  filename     String
+  storagePath  String   // Path in storage system
+  mimeType     String
+  sizeBytes    Int
+  category     String?  // before, after, progress, etc.
+  annotations  String?  // JSON: vector overlays, points, lines
+  caption      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime? // Soft delete
+
+  // Relations
+  clinic   Clinic  @relation(fields: [clinicId], references: [id])
+  patient  Patient @relation(fields: [patientId], references: [id])
+  chart    Chart?  @relation(fields: [chartId], references: [id])
+  takenBy  User    @relation(fields: [takenById], references: [id])
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([chartId])
+}
+
+// ===========================================
+// CONSENTS
+// ===========================================
+
+model ConsentTemplate {
+  id        String   @id @default(cuid())
+  clinicId  String
+  name      String
+  content   String   // HTML or Markdown content
+  version   String   @default("1.0")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clinic          Clinic           @relation(fields: [clinicId], references: [id])
+  patientConsents PatientConsent[]
+
+  @@index([clinicId])
+}
+
+model PatientConsent {
+  id                String   @id @default(cuid())
+  clinicId          String
+  patientId         String
+  templateId        String
+  signatureData     String?  // Base64 or JSON signature data
+  signedAt          DateTime?
+  ipAddress         String?
+  userAgent         String?
+  templateSnapshot  String?  // Snapshot of template content at signing time
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  clinic   Clinic          @relation(fields: [clinicId], references: [id])
+  patient  Patient         @relation(fields: [patientId], references: [id])
+  template ConsentTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([clinicId])
+  @@index([patientId])
+}
+
+// ===========================================
+// BILLING
+// ===========================================
+
+enum InvoiceStatus {
+  Draft
+  Sent
+  PartiallyPaid
+  Paid
+  Void
+  Refunded
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  clinicId      String
+  patientId     String
+  appointmentId String?       @unique
+  invoiceNumber String
+  status        InvoiceStatus @default(Draft)
+  subtotal      Float         @default(0)
+  discountAmount Float        @default(0)
+  discountPercent Float?
+  taxAmount     Float         @default(0)
+  taxRate       Float?
+  total         Float         @default(0)
+  notes         String?
+  dueDate       DateTime?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  clinic      Clinic       @relation(fields: [clinicId], references: [id])
+  patient     Patient      @relation(fields: [patientId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  items       InvoiceItem[]
+  payments    Payment[]
+
+  @@unique([clinicId, invoiceNumber])
+  @@index([clinicId])
+  @@index([patientId])
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  serviceId   String?
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Float
+  total       Float
+
+  // Relations
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [serviceId], references: [id])
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  invoiceId     String
+  amount        Float
+  paymentMethod String   // cash, credit, debit, etc.
+  reference     String?  // External reference number
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  // Relations
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+// ===========================================
+// MEMBERSHIPS & PACKAGES
+// ===========================================
+
+model MembershipPlan {
+  id            String   @id @default(cuid())
+  clinicId      String
+  name          String
+  description   String?
+  price         Float
+  credits       Int      // Number of credits included
+  validityDays  Int      @default(365) // How long credits are valid
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  clinic            Clinic             @relation(fields: [clinicId], references: [id])
+  membershipCredits MembershipCredit[]
+
+  @@index([clinicId])
+}
+
+model MembershipCredit {
+  id           String    @id @default(cuid())
+  patientId    String
+  planId       String
+  totalCredits Int
+  usedCredits  Int       @default(0)
+  expiresAt    DateTime
+  purchasedAt  DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  patient Patient        @relation(fields: [patientId], references: [id])
+  plan    MembershipPlan @relation(fields: [planId], references: [id])
+  ledger  CreditLedger[]
+
+  @@index([patientId])
+  @@index([expiresAt])
+}
+
+model CreditLedger {
+  id                   String           @id @default(cuid())
+  membershipCreditId   String
+  change               Int              // Positive for additions, negative for usage
+  balance              Int              // Running balance after this transaction
+  description          String?
+  createdAt            DateTime         @default(now())
+
+  // Relations
+  membershipCredit MembershipCredit @relation(fields: [membershipCreditId], references: [id], onDelete: Cascade)
+
+  @@index([membershipCreditId])
+}
+
+// ===========================================
+// AUDIT LOGGING
+// ===========================================
+
+enum AuditAction {
+  ChartView
+  ChartCreate
+  ChartUpdate
+  ChartSign
+  PhotoView
+  PhotoUpload
+  ConsentView
+  ConsentSign
+  PatientView
+  PatientCreate
+  PatientUpdate
+  Login
+  Logout
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  clinicId    String
+  userId      String?
+  action      AuditAction
+  entityType  String?     // Chart, Photo, Patient, etc.
+  entityId    String?
+  details     String?     // JSON with additional context
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  // Relations
+  clinic Clinic @relation(fields: [clinicId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([clinicId])
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
