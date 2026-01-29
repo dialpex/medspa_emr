@@ -23,7 +23,6 @@ type ChartData = {
   areasTreated: string | null;
   productsUsed: string | null;
   dosageUnits: string | null;
-  technique: string | null;
   aftercareNotes: string | null;
   additionalNotes: string | null;
   signedByName: string | null;
@@ -171,7 +170,7 @@ export function ChartDetail({ chart }: { chart: ChartData }) {
               <JsonDisplay label="Areas Treated" value={chart.areasTreated} />
               <JsonDisplay label="Products Used" value={chart.productsUsed} />
               <DetailRow label="Dosage/Units" value={chart.dosageUnits} />
-              <DetailRow label="Technique" value={chart.technique} />
+
               <DetailRow label="Aftercare Notes" value={chart.aftercareNotes} />
               <DetailRow label="Additional Notes" value={chart.additionalNotes} />
             </>

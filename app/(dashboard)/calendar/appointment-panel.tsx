@@ -28,7 +28,7 @@ import {
 } from "@/lib/actions/appointments";
 import { StatusBadge, STATUS_LABELS } from "./appointment-card";
 import { AppointmentForm } from "./appointment-form";
-import { createChart } from "@/lib/actions/charts";
+import { createChart, getCharts } from "@/lib/actions/charts";
 
 // Next logical status transitions
 const NEXT_STATUS: Partial<Record<AppointmentStatus, { status: AppointmentStatus; label: string }>> = {
@@ -343,6 +343,19 @@ export function AppointmentPanel({
                   (detail.status === "InProgress" || detail.status === "Completed") && (
                     <button
                       onClick={async () => {
+                        // Check if a chart already exists for this appointment
+                        const existing = await getCharts({ patientId: detail.patientId });
+                        const existingChart = existing.find(
+                          (c) => c.appointmentId === detail.id
+                        );
+                        if (existingChart) {
+                          router.push(
+                            existingChart.status === "Draft"
+                              ? `/charts/${existingChart.id}/edit`
+                              : `/charts/${existingChart.id}`
+                          );
+                          return;
+                        }
                         const result = await createChart({
                           patientId: detail.patientId,
                           appointmentId: detail.id,

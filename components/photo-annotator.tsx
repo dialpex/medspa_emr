@@ -14,6 +14,13 @@ interface PhotoAnnotatorProps {
   onClose: () => void;
 }
 
+interface PendingPoint {
+  x: number;
+  y: number;
+  screenX: number;
+  screenY: number;
+}
+
 export function PhotoAnnotator({
   photoId,
   photoUrl,
@@ -23,6 +30,7 @@ export function PhotoAnnotator({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const unitsInputRef = useRef<HTMLInputElement>(null);
   const [tool, setTool] = useState<AnnotationTool>("point");
   const [color, setColor] = useState(COLORS[0]);
   const [annotations, setAnnotations] = useState<Annotation[]>(() => {
@@ -33,14 +41,17 @@ export function PhotoAnnotator({
   });
   const [saving, setSaving] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const containerSizeRef = useRef<{ width: number; height: number } | null>(null);
 
-  // For line tool: track first click
+  // Pending point waiting for units input
+  const [pendingPoint, setPendingPoint] = useState<PendingPoint | null>(null);
+  const [pendingUnits, setPendingUnits] = useState("");
+
+  // For line tool
   const lineStartRef = useRef<{ x: number; y: number } | null>(null);
-  // For freehand: track drawing
+  // For freehand
   const drawingRef = useRef(false);
   const freehandPointsRef = useRef<{ x: number; y: number }[]>([]);
-
-  const pointCount = annotations.filter((a) => a.type === "point").length;
 
   const getNormalizedCoords = (e: React.MouseEvent): { x: number; y: number } | null => {
     const canvas = canvasRef.current;
@@ -51,6 +62,15 @@ export function PhotoAnnotator({
       y: (e.clientY - rect.top) / rect.height,
     };
   };
+
+  useEffect(() => {
+    if (imgLoaded && containerRef.current && !containerSizeRef.current) {
+      containerSizeRef.current = {
+        width: containerRef.current.clientWidth,
+        height: containerRef.current.clientHeight,
+      };
+    }
+  }, [imgLoaded]);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -63,11 +83,10 @@ export function PhotoAnnotator({
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
 
-    // Scale canvas display to container
-    const container = containerRef.current;
-    if (container) {
-      const maxW = container.clientWidth;
-      const maxH = container.clientHeight - 60;
+    const size = containerSizeRef.current;
+    if (size) {
+      const maxW = size.width - 32;
+      const maxH = size.height - 32;
       const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 1);
       canvas.style.width = `${img.naturalWidth * scale}px`;
       canvas.style.height = `${img.naturalHeight * scale}px`;
@@ -84,14 +103,20 @@ export function PhotoAnnotator({
       if (ann.type === "point") {
         const px = ann.x * canvas.width;
         const py = ann.y * canvas.height;
+        const label = String(ann.label ?? ann.number);
+        const radius = label.length > 2 ? 24 : 18;
         ctx.beginPath();
-        ctx.arc(px, py, 12, 0, Math.PI * 2);
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
         ctx.fill();
+        // Outline for visibility
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
         ctx.fillStyle = "white";
-        ctx.font = "bold 14px sans-serif";
+        ctx.font = `bold ${label.length > 2 ? 16 : 20}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(String(ann.number), px, py);
+        ctx.fillText(label, px, py);
       } else if (ann.type === "line") {
         ctx.beginPath();
         ctx.moveTo(ann.x1 * canvas.width, ann.y1 * canvas.height);
@@ -107,43 +132,90 @@ export function PhotoAnnotator({
         ctx.stroke();
       }
     }
-  }, [annotations, imgLoaded]);
+
+    // Draw pending point as a ghost circle
+    if (pendingPoint) {
+      const px = pendingPoint.x * canvas.width;
+      const py = pendingPoint.y * canvas.height;
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(px, py, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }, [annotations, imgLoaded, pendingPoint, color]);
 
   useEffect(() => { redraw(); }, [redraw]);
 
+  // Focus input when pending point appears
+  useEffect(() => {
+    if (pendingPoint && unitsInputRef.current) {
+      unitsInputRef.current.focus();
+    }
+  }, [pendingPoint]);
+
+  const confirmPendingPoint = () => {
+    if (!pendingPoint) return;
+    const value = pendingUnits.trim();
+    if (!value) return;
+    setAnnotations((prev) => [
+      ...prev,
+      {
+        type: "point",
+        id: `p_${Date.now()}`,
+        x: pendingPoint.x,
+        y: pendingPoint.y,
+        number: prev.filter((a) => a.type === "point").length + 1,
+        label: value,
+        color,
+      },
+    ]);
+    setPendingPoint(null);
+    setPendingUnits("");
+  };
+
+  const cancelPendingPoint = () => {
+    setPendingPoint(null);
+    setPendingUnits("");
+  };
+
   const handleCanvasClick = (e: React.MouseEvent) => {
+    // If there's a pending point, cancel it first
+    if (pendingPoint) {
+      cancelPendingPoint();
+      return;
+    }
+
     const coords = getNormalizedCoords(e);
     if (!coords) return;
 
     if (tool === "point") {
-      setAnnotations((prev) => [
-        ...prev,
-        {
-          type: "point",
-          id: `p_${Date.now()}`,
-          x: coords.x,
-          y: coords.y,
-          number: pointCount + 1,
-          color,
-        },
-      ]);
+      setPendingPoint({
+        x: coords.x,
+        y: coords.y,
+        screenX: e.clientX,
+        screenY: e.clientY,
+      });
+      setPendingUnits("");
     } else if (tool === "line") {
       if (!lineStartRef.current) {
         lineStartRef.current = coords;
       } else {
+        const start = lineStartRef.current;
+        lineStartRef.current = null;
         setAnnotations((prev) => [
           ...prev,
           {
             type: "line",
             id: `l_${Date.now()}`,
-            x1: lineStartRef.current!.x,
-            y1: lineStartRef.current!.y,
+            x1: start.x,
+            y1: start.y,
             x2: coords.x,
             y2: coords.y,
             color,
           },
         ]);
-        lineStartRef.current = null;
       }
     }
   };
@@ -192,28 +264,36 @@ export function PhotoAnnotator({
     onClose();
   };
 
+  // Compute popover position clamped to viewport
+  const popoverStyle = pendingPoint
+    ? {
+        left: Math.min(pendingPoint.screenX, window.innerWidth - 200),
+        top: Math.max(pendingPoint.screenY - 80, 8),
+      }
+    : undefined;
+
   return (
-    <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center">
+      <div className="bg-white w-full h-full flex flex-col">
         {/* Toolbar */}
         <div className="flex items-center justify-between p-3 border-b">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { setTool("point"); lineStartRef.current = null; }}
+              onClick={() => { setTool("point"); lineStartRef.current = null; cancelPendingPoint(); }}
               className={`p-2 rounded-lg ${tool === "point" ? "bg-purple-100 text-purple-700" : "text-gray-500 hover:bg-gray-100"}`}
               title="Point (injection site)"
             >
               <CircleDotIcon className="size-5" />
             </button>
             <button
-              onClick={() => { setTool("line"); lineStartRef.current = null; }}
+              onClick={() => { setTool("line"); lineStartRef.current = null; cancelPendingPoint(); }}
               className={`p-2 rounded-lg ${tool === "line" ? "bg-purple-100 text-purple-700" : "text-gray-500 hover:bg-gray-100"}`}
               title="Line"
             >
               <MinusIcon className="size-5" />
             </button>
             <button
-              onClick={() => { setTool("freehand"); lineStartRef.current = null; }}
+              onClick={() => { setTool("freehand"); lineStartRef.current = null; cancelPendingPoint(); }}
               className={`p-2 rounded-lg ${tool === "freehand" ? "bg-purple-100 text-purple-700" : "text-gray-500 hover:bg-gray-100"}`}
               title="Freehand draw"
             >
@@ -244,8 +324,7 @@ export function PhotoAnnotator({
         </div>
 
         {/* Canvas area */}
-        <div ref={containerRef} className="flex-1 overflow-auto flex items-center justify-center p-4 bg-gray-100 min-h-0">
-          {/* Hidden image for loading */}
+        <div ref={containerRef} className="flex-1 overflow-auto flex items-center justify-center p-4 bg-gray-100 min-h-0 relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             ref={imgRef}
@@ -264,6 +343,45 @@ export function PhotoAnnotator({
             className="cursor-crosshair"
           />
         </div>
+
+        {/* Units input popover */}
+        {pendingPoint && popoverStyle && (
+          <div
+            className="fixed z-[70] bg-white rounded-lg shadow-xl border border-gray-200 p-3 w-48"
+            style={{ left: popoverStyle.left, top: popoverStyle.top }}
+          >
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">
+              Units / Label
+            </label>
+            <input
+              ref={unitsInputRef}
+              type="text"
+              value={pendingUnits}
+              onChange={(e) => setPendingUnits(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmPendingPoint();
+                if (e.key === "Escape") cancelPendingPoint();
+              }}
+              placeholder="e.g. 5"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+            />
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={confirmPendingPoint}
+                disabled={!pendingUnits.trim()}
+                className="flex-1 py-1 text-xs font-medium text-white bg-purple-600 rounded hover:bg-purple-700 disabled:opacity-40"
+              >
+                Place
+              </button>
+              <button
+                onClick={cancelPendingPoint}
+                className="flex-1 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 p-3 border-t">

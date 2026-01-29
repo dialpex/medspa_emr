@@ -9,6 +9,7 @@ import {
 import type { TemplateFieldConfig } from "@/lib/types/charts";
 
 export interface TemplateInput {
+  type?: string;
   name: string;
   description?: string;
   category?: string;
@@ -61,6 +62,7 @@ export async function createTemplate(input: TemplateInput) {
     const template = await prisma.chartTemplate.create({
       data: {
         clinicId: user.clinicId,
+        type: input.type ?? "chart",
         name: input.name,
         description: input.description,
         category: input.category,
@@ -89,6 +91,7 @@ export async function updateTemplate(id: string, input: Partial<TemplateInput>) 
     const template = await prisma.chartTemplate.update({
       where: { id },
       data: {
+        ...(input.type !== undefined && { type: input.type }),
         ...(input.name !== undefined && { name: input.name }),
         ...(input.description !== undefined && { description: input.description }),
         ...(input.category !== undefined && { category: input.category }),

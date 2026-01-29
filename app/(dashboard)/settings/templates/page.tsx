@@ -12,9 +12,9 @@ export default async function TemplatesPage() {
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Chart Templates</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Forms & Charts</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Configure templates for clinical charting
+            Manage chart templates used during patient visits
           </p>
         </div>
         {canManage && (
@@ -23,7 +23,7 @@ export default async function TemplatesPage() {
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700"
           >
             <PlusIcon className="size-4" />
-            New Template
+            New Chart or Form
           </Link>
         )}
       </div>
@@ -38,6 +38,7 @@ export default async function TemplatesPage() {
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Name</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Type</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Category</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Fields</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
@@ -54,6 +55,15 @@ export default async function TemplatesPage() {
                       {t.description && (
                         <div className="text-xs text-gray-500">{t.description}</div>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
+                        t.type === "form"
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-purple-50 text-purple-700"
+                      }`}>
+                        {t.type === "form" ? "Form" : "Chart"}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {t.category ?? "—"}

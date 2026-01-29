@@ -223,6 +223,7 @@ enum ChartStatus {
 model ChartTemplate {
   id           String   @id @default(cuid())
   clinicId     String
+  type         String   @default("chart") // "chart" or "form"
   name         String
   description  String?
   category     String?

@@ -7,11 +7,17 @@ import type { TemplateFieldConfig, FieldType } from "@/lib/types/charts";
 import { createTemplate, updateTemplate } from "@/lib/actions/chart-templates";
 
 const FIELD_TYPES: { value: FieldType; label: string }[] = [
+  { value: "heading", label: "Section Heading" },
   { value: "text", label: "Text" },
   { value: "textarea", label: "Textarea" },
   { value: "select", label: "Select" },
   { value: "multiselect", label: "Multi-select" },
   { value: "number", label: "Number" },
+  { value: "date", label: "Date" },
+  { value: "checklist", label: "Checklist" },
+  { value: "signature", label: "Signature" },
+  { value: "photo-pair", label: "Before/After Photos" },
+  { value: "photo-single", label: "Single Photo" },
   { value: "json-areas", label: "Area Picker" },
   { value: "json-products", label: "Product Rows" },
 ];
@@ -19,6 +25,7 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
 interface TemplateFormProps {
   template?: {
     id: string;
+    type: string;
     name: string;
     description: string | null;
     category: string | null;
@@ -29,6 +36,7 @@ interface TemplateFormProps {
 
 export function TemplateForm({ template }: TemplateFormProps) {
   const router = useRouter();
+  const [type, setType] = useState(template?.type ?? "chart");
   const [name, setName] = useState(template?.name ?? "");
   const [description, setDescription] = useState(template?.description ?? "");
   const [category, setCategory] = useState(template?.category ?? "");
@@ -71,6 +79,7 @@ export function TemplateForm({ template }: TemplateFormProps) {
     setError("");
 
     const input = {
+      type,
       name: name.trim(),
       description: description.trim() || undefined,
       category: category.trim() || undefined,
@@ -95,6 +104,41 @@ export function TemplateForm({ template }: TemplateFormProps) {
       {error && (
         <div className="p-3 text-sm text-red-700 bg-red-50 rounded-lg">{error}</div>
       )}
+
+      {/* Type selector */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => setType("chart")}
+            className={`flex-1 p-3 rounded-lg border text-left transition-colors ${
+              type === "chart"
+                ? "border-purple-500 bg-purple-50"
+                : "border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            <div className="text-sm font-medium text-gray-900">Chart</div>
+            <div className="text-xs text-gray-500 mt-0.5">
+              Clinical documentation for treatments and procedures
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setType("form")}
+            className={`flex-1 p-3 rounded-lg border text-left transition-colors ${
+              type === "form"
+                ? "border-purple-500 bg-purple-50"
+                : "border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            <div className="text-sm font-medium text-gray-900">Form</div>
+            <div className="text-xs text-gray-500 mt-0.5">
+              Intake forms, questionnaires, and other patient documents
+            </div>
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -183,7 +227,7 @@ export function TemplateForm({ template }: TemplateFormProps) {
                     </option>
                   ))}
                 </select>
-                {(field.type === "select" || field.type === "multiselect" || field.type === "json-areas") && (
+                {(field.type === "select" || field.type === "multiselect" || field.type === "json-areas" || field.type === "checklist") && (
                   <input
                     type="text"
                     value={field.options?.join(", ") ?? ""}
@@ -192,7 +236,19 @@ export function TemplateForm({ template }: TemplateFormProps) {
                         options: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
                       })
                     }
-                    placeholder="Options (comma-separated)"
+                    placeholder={field.type === "checklist" ? "Checklist items (comma-separated)" : "Options (comma-separated)"}
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                )}
+                {field.type === "photo-pair" && (
+                  <input
+                    type="text"
+                    value={field.photoLabels?.join(", ") ?? "Before Photo, After Photo"}
+                    onChange={(e) => {
+                      const parts = e.target.value.split(",").map((s) => s.trim());
+                      updateField(i, { photoLabels: [parts[0] || "Before", parts[1] || "After"] as [string, string] });
+                    }}
+                    placeholder="Labels (e.g. Before Photo, After Photo)"
                     className="rounded border border-gray-300 px-2 py-1.5 text-sm"
                   />
                 )}

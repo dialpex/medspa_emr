@@ -45,14 +45,19 @@ export function PhotoAnnotationRenderer({
       if (ann.type === "point") {
         const px = ann.x * canvas.width;
         const py = ann.y * canvas.height;
+        const label = String(ann.label ?? ann.number);
+        const radius = label.length > 2 ? 24 : 18;
         ctx.beginPath();
-        ctx.arc(px, py, 12, 0, Math.PI * 2);
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
         ctx.fill();
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
         ctx.fillStyle = "white";
-        ctx.font = "bold 14px sans-serif";
+        ctx.font = `bold ${label.length > 2 ? 16 : 20}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(String(ann.number), px, py);
+        ctx.fillText(label, px, py);
       } else if (ann.type === "line") {
         ctx.beginPath();
         ctx.moveTo(ann.x1 * canvas.width, ann.y1 * canvas.height);

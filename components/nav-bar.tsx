@@ -7,7 +7,6 @@ import { useRef, useState, useEffect } from "react";
 import {
   Calendar,
   Users,
-  ClipboardList,
   Tag,
   Bell,
   BarChart3,
@@ -32,7 +31,6 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: "Calendar", href: "/calendar", icon: <Calendar className="size-4" /> },
   { label: "Patients", href: "/patients", icon: <Users className="size-4" /> },
-  { label: "Charts", href: "/charts", icon: <ClipboardList className="size-4" />, roles: ["Owner", "Admin", "Provider", "MedicalDirector"] },
   { label: "Sales", href: "/sales", icon: <Tag className="size-4" />, roles: ["Owner", "Admin", "Billing"] },
   { label: "Inbox", href: "/inbox", icon: <Bell className="size-4" /> },
   { label: "Reports", href: "/reports", icon: <BarChart3 className="size-4" />, roles: ["Owner", "Admin", "Billing", "MedicalDirector"] },

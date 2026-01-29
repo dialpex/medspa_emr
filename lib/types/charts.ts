@@ -4,8 +4,14 @@ export type FieldType =
   | "select"
   | "multiselect"
   | "number"
+  | "date"
+  | "checklist"
+  | "signature"
+  | "photo-pair"
+  | "photo-single"
   | "json-areas"
-  | "json-products";
+  | "json-products"
+  | "heading";
 
 export interface TemplateFieldConfig {
   key: string;
@@ -15,6 +21,8 @@ export interface TemplateFieldConfig {
   options?: string[];
   defaultValue?: string;
   placeholder?: string;
+  /** For photo-pair: labels for before/after slots e.g. ["Before Photo", "After Photo"] */
+  photoLabels?: [string, string];
 }
 
 export interface PointAnnotation {

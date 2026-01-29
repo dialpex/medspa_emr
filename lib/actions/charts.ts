@@ -14,7 +14,7 @@ export interface ChartUpdateInput {
   areasTreated?: string;
   productsUsed?: string;
   dosageUnits?: string;
-  technique?: string;
+
   aftercareNotes?: string;
   additionalNotes?: string;
 }
@@ -34,7 +34,7 @@ function generateRecordHash(chart: {
   areasTreated: string | null;
   productsUsed: string | null;
   dosageUnits: string | null;
-  technique: string | null;
+
   aftercareNotes: string | null;
   additionalNotes: string | null;
 }): string {
@@ -44,7 +44,7 @@ function generateRecordHash(chart: {
     areasTreated: chart.areasTreated,
     productsUsed: chart.productsUsed,
     dosageUnits: chart.dosageUnits,
-    technique: chart.technique,
+
     aftercareNotes: chart.aftercareNotes,
     additionalNotes: chart.additionalNotes,
   });
@@ -177,7 +177,7 @@ export async function getChart(chartId: string): Promise<ActionResult<{
   areasTreated: string | null;
   productsUsed: string | null;
   dosageUnits: string | null;
-  technique: string | null;
+
   aftercareNotes: string | null;
   additionalNotes: string | null;
   signedById: string | null;
