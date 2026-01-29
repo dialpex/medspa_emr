@@ -52,6 +52,120 @@ function generateRecordHash(chart: {
 }
 
 /**
+ * Create a new chart
+ */
+export async function createChart(input: {
+  patientId: string;
+  appointmentId?: string;
+  templateId?: string;
+}): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await requirePermission("charts", "create");
+
+    const chart = await prisma.chart.create({
+      data: {
+        clinicId: user.clinicId,
+        patientId: input.patientId,
+        appointmentId: input.appointmentId,
+        templateId: input.templateId,
+        createdById: user.id,
+        status: "Draft",
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "ChartCreate",
+        entityType: "Chart",
+        entityId: chart.id,
+        details: JSON.stringify({
+          patientId: input.patientId,
+          appointmentId: input.appointmentId,
+          templateId: input.templateId,
+        }),
+      },
+    });
+
+    return { success: true, data: { id: chart.id } };
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return { success: false, error: error.message };
+    }
+    throw error;
+  }
+}
+
+/**
+ * List charts with optional filters
+ */
+export async function getCharts(filters?: {
+  status?: string;
+  patientId?: string;
+  providerId?: string;
+}) {
+  const user = await requirePermission("charts", "view");
+
+  return prisma.chart.findMany({
+    where: {
+      clinicId: user.clinicId,
+      deletedAt: null,
+      ...(filters?.status && { status: filters.status as "Draft" | "NeedsSignOff" | "MDSigned" }),
+      ...(filters?.patientId && { patientId: filters.patientId }),
+      ...(filters?.providerId && { createdById: filters.providerId }),
+    },
+    include: {
+      patient: { select: { firstName: true, lastName: true } },
+      createdBy: { select: { name: true } },
+      template: { select: { name: true } },
+      appointment: { select: { startTime: true, service: { select: { name: true } } } },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
+/**
+ * Get chart with photos and template for editor/detail view
+ */
+export async function getChartWithPhotos(chartId: string) {
+  const user = await requirePermission("charts", "view");
+
+  const chart = await prisma.chart.findUnique({
+    where: { id: chartId },
+    include: {
+      patient: { select: { firstName: true, lastName: true, allergies: true } },
+      createdBy: { select: { name: true } },
+      signedBy: { select: { name: true } },
+      template: true,
+      photos: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: "asc" },
+      },
+      appointment: {
+        select: { startTime: true, service: { select: { name: true } } },
+      },
+    },
+  });
+
+  if (!chart) return null;
+  enforceTenantIsolation(user, chart.clinicId);
+
+  await prisma.auditLog.create({
+    data: {
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "ChartView",
+      entityType: "Chart",
+      entityId: chartId,
+      details: JSON.stringify({ patientId: chart.patientId }),
+    },
+  });
+
+  return chart;
+}
+
+/**
  * Get a chart by ID with permission and tenant checks
  */
 export async function getChart(chartId: string): Promise<ActionResult<{

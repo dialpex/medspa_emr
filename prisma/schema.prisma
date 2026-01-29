@@ -42,6 +42,7 @@ model Clinic {
   creditLedgers     CreditLedger[]
   auditLogs         AuditLog[]
   rooms             Room[]
+  chartTemplates    ChartTemplate[]
 }
 
 // ===========================================
@@ -63,10 +64,14 @@ model User {
   clinicId      String
   email         String    @unique
   name          String
-  passwordHash  String?
-  emailVerified DateTime?
-  role          Role      @default(Provider)
-  isActive      Boolean   @default(true)
+  passwordHash    String?
+  emailVerified   DateTime?
+  role            Role      @default(Provider)
+  isActive        Boolean   @default(true)
+  phone           String?
+  alias           String?
+  pronouns        String?
+  profileImageUrl String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -215,11 +220,30 @@ enum ChartStatus {
   MDSigned
 }
 
+model ChartTemplate {
+  id           String   @id @default(cuid())
+  clinicId     String
+  name         String
+  description  String?
+  category     String?
+  fieldsConfig String   // JSON array of field definitions
+  isActive     Boolean  @default(true)
+  isSystem     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  clinic Clinic @relation(fields: [clinicId], references: [id])
+  charts Chart[]
+  @@index([clinicId])
+}
+
 model Chart {
   id              String      @id @default(cuid())
   clinicId        String
   patientId       String
   appointmentId   String?     @unique
+  templateId      String?
   createdById     String
   status          ChartStatus @default(Draft)
 
@@ -243,11 +267,12 @@ model Chart {
   deletedAt       DateTime?   // Soft delete
 
   // Relations
-  clinic      Clinic       @relation(fields: [clinicId], references: [id])
-  patient     Patient      @relation(fields: [patientId], references: [id])
-  appointment Appointment? @relation(fields: [appointmentId], references: [id])
-  createdBy   User         @relation("ChartCreator", fields: [createdById], references: [id])
-  signedBy    User?        @relation("ChartSigner", fields: [signedById], references: [id])
+  clinic      Clinic         @relation(fields: [clinicId], references: [id])
+  patient     Patient        @relation(fields: [patientId], references: [id])
+  appointment Appointment?   @relation(fields: [appointmentId], references: [id])
+  template    ChartTemplate? @relation(fields: [templateId], references: [id])
+  createdBy   User           @relation("ChartCreator", fields: [createdById], references: [id])
+  signedBy    User?          @relation("ChartSigner", fields: [signedById], references: [id])
   photos      Photo[]
 
   @@index([clinicId])

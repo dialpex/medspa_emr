@@ -385,6 +385,63 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log(`Created ${consentTemplates.length} consent templates`);
 
   // ===========================================
+  // CHART TEMPLATES
+  // ===========================================
+  const chartTemplates = await Promise.all([
+    prisma.chartTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        name: "Neurotoxin Treatment",
+        description: "Standard template for Botox and neurotoxin treatments",
+        category: "Injectables",
+        isSystem: true,
+        fieldsConfig: JSON.stringify([
+          { key: "areas", label: "Treatment Areas", type: "json-areas", required: true, options: ["Forehead", "Glabella", "Crow's Feet", "Bunny Lines", "Lip Flip", "Masseter", "Platysma Bands", "Hyperhidrosis"] },
+          { key: "products", label: "Products Used", type: "json-products", required: true },
+          { key: "total_units", label: "Total Units", type: "number", required: true, placeholder: "e.g. 40" },
+          { key: "technique", label: "Injection Technique", type: "select", options: ["Standard", "Micro-Botox", "Deep Injection", "Intradermal"] },
+          { key: "aftercare", label: "Aftercare Instructions", type: "textarea", defaultValue: "Avoid lying down for 4 hours. No strenuous exercise for 24 hours. Do not massage treated areas." },
+        ]),
+      },
+    }),
+    prisma.chartTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        name: "Dermal Filler Treatment",
+        description: "Standard template for hyaluronic acid filler treatments",
+        category: "Fillers",
+        isSystem: true,
+        fieldsConfig: JSON.stringify([
+          { key: "areas", label: "Treatment Areas", type: "json-areas", required: true, options: ["Lips", "Nasolabial Folds", "Marionette Lines", "Cheeks", "Jawline", "Chin", "Temples", "Under Eyes", "Nose"] },
+          { key: "products", label: "Products Used", type: "json-products", required: true },
+          { key: "total_syringes", label: "Total Syringes", type: "number", placeholder: "e.g. 2" },
+          { key: "technique", label: "Injection Technique", type: "select", options: ["Linear Threading", "Serial Puncture", "Fanning", "Cross-hatching", "Bolus", "Cannula"] },
+          { key: "anesthesia", label: "Anesthesia", type: "select", options: ["Topical Lidocaine", "Dental Block", "None", "Product Contains Lidocaine"] },
+          { key: "aftercare", label: "Aftercare Instructions", type: "textarea", defaultValue: "Apply ice as needed. Avoid hot beverages for 24 hours. No strenuous exercise for 24-48 hours. Arnica gel recommended for bruising." },
+        ]),
+      },
+    }),
+    prisma.chartTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        name: "IV Drip Therapy",
+        description: "Template for IV vitamin and hydration treatments",
+        category: "Wellness",
+        isSystem: true,
+        fieldsConfig: JSON.stringify([
+          { key: "ingredients", label: "Drip Ingredients", type: "multiselect", required: true, options: ["Normal Saline", "Vitamin C", "B-Complex", "B12", "Glutathione", "Magnesium", "Zinc", "NAD+", "Biotin"] },
+          { key: "volume", label: "Total Volume (mL)", type: "number", placeholder: "e.g. 1000" },
+          { key: "access_site", label: "IV Access Site", type: "select", options: ["Right AC", "Left AC", "Right Hand", "Left Hand", "Right Forearm", "Left Forearm"] },
+          { key: "vitals_pre", label: "Pre-Treatment Vitals", type: "text", placeholder: "BP, HR, SpO2" },
+          { key: "vitals_post", label: "Post-Treatment Vitals", type: "text", placeholder: "BP, HR, SpO2" },
+          { key: "aftercare", label: "Aftercare Instructions", type: "textarea", defaultValue: "Stay hydrated. Bandage may be removed after 1 hour. Report any swelling, redness, or pain at IV site." },
+        ]),
+      },
+    }),
+  ]);
+  console.log(`Created ${chartTemplates.length} chart templates`);
+
+  // ===========================================
   // MEMBERSHIP PLANS
   // ===========================================
   const membershipPlans = await Promise.all([
@@ -905,6 +962,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log("- 10 Services");
   console.log("- 5 Patients");
   console.log("- 3 Consent Templates");
+  console.log("- 3 Chart Templates (Neurotoxin, Dermal Filler, IV Drip)");
   console.log("- 3 Membership Plans");
   console.log("- 8 Appointments");
   console.log("- 4 Charts (1 MDSigned, 2 NeedsSignOff, 1 Draft)");

@@ -14,6 +14,7 @@ import {
   AlertTriangleIcon,
   EditIcon,
   Loader2Icon,
+  FileTextIcon,
 } from "lucide-react";
 import type { AppointmentStatus } from "@prisma/client";
 import {
@@ -27,6 +28,7 @@ import {
 } from "@/lib/actions/appointments";
 import { StatusBadge, STATUS_LABELS } from "./appointment-card";
 import { AppointmentForm } from "./appointment-form";
+import { createChart } from "@/lib/actions/charts";
 
 // Next logical status transitions
 const NEXT_STATUS: Partial<Record<AppointmentStatus, { status: AppointmentStatus; label: string }>> = {
@@ -335,6 +337,26 @@ export function AppointmentPanel({
                     {nextStatus.label}
                   </button>
                 )}
+
+                {/* Start Chart button */}
+                {permissions.canEdit &&
+                  (detail.status === "InProgress" || detail.status === "Completed") && (
+                    <button
+                      onClick={async () => {
+                        const result = await createChart({
+                          patientId: detail.patientId,
+                          appointmentId: detail.id,
+                        });
+                        if (result.success && result.data) {
+                          router.push(`/charts/${result.data.id}/edit`);
+                        }
+                      }}
+                      className="w-full py-2 px-4 text-sm font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 flex items-center justify-center gap-2 border border-purple-200"
+                    >
+                      <FileTextIcon className="h-4 w-4" />
+                      Start Chart
+                    </button>
+                  )}
 
                 <div className="flex gap-2">
                   {permissions.canEdit && (
