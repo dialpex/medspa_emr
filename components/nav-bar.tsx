@@ -3,19 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { useRef, useState, useEffect } from "react";
 import {
   Calendar,
   Users,
   Tag,
   Bell,
   BarChart3,
-  Package,
-  Gift,
   Settings,
   Sparkles,
   LayoutGrid,
   MessageCircle,
   ChevronDown,
+  User,
+  HelpCircle,
+  LogOut,
 } from "lucide-react";
 import type { Role } from "@prisma/client";
 
@@ -38,6 +40,20 @@ const navItems: NavItem[] = [
 
 export function NavBar({ user }: { user: { name: string; role: Role } }) {
   const pathname = usePathname();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    if (dropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownOpen]);
 
   const visibleItems = navItems.filter((item) =>
     !item.roles || item.roles.includes(user.role)
@@ -45,6 +61,8 @@ export function NavBar({ user }: { user: { name: string; role: Role } }) {
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
+    // Don't highlight /settings for /settings/account (account settings is separate)
+    if (href === "/settings") return pathname === "/settings" || (pathname.startsWith("/settings") && !pathname.startsWith("/settings/account"));
     return pathname.startsWith(href);
   };
 
@@ -90,20 +108,50 @@ export function NavBar({ user }: { user: { name: string; role: Role } }) {
             <MessageCircle className="size-5" />
           </button>
 
-          {/* User profile */}
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex items-center gap-3 rounded-full py-1 pl-1 pr-3 hover:bg-gray-100 transition-colors"
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-pink-400 text-white text-sm font-medium">
-              {user.name.charAt(0)}
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-medium text-gray-900 leading-tight">{user.name}</p>
-              <p className="text-xs text-gray-500 leading-tight">{user.role}</p>
-            </div>
-            <ChevronDown className="size-4 text-gray-400" />
-          </button>
+          {/* User profile dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen((v) => !v)}
+              className="flex items-center gap-3 rounded-full py-1 pl-1 pr-3 hover:bg-gray-100 transition-colors"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-pink-400 text-white text-sm font-medium">
+                {user.name.charAt(0)}
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium text-gray-900 leading-tight">{user.name}</p>
+                <p className="text-xs text-gray-500 leading-tight">{user.role.replace(/([a-z])([A-Z])/g, "$1 $2")}</p>
+              </div>
+              <ChevronDown className={`size-4 text-gray-400 transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute right-0 mt-1 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                <Link
+                  href="/settings/account"
+                  onClick={() => setDropdownOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <User className="size-4" />
+                  Account Settings
+                </Link>
+                <button
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  onClick={() => setDropdownOpen(false)}
+                >
+                  <HelpCircle className="size-4" />
+                  Help
+                </button>
+                <hr className="my-1 border-gray-100" />
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                >
+                  <LogOut className="size-4" />
+                  Sign Out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

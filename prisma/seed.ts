@@ -385,6 +385,117 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log(`Created ${consentTemplates.length} consent templates`);
 
   // ===========================================
+  // CHART TEMPLATES
+  // ===========================================
+  const chartTemplates = await Promise.all([
+    prisma.chartTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        type: "chart",
+        name: "Patient Treatment Chart",
+        description: "Advanced treatment record",
+        category: "Injectables",
+        isSystem: true,
+        fieldsConfig: JSON.stringify([
+          { key: "medication", label: "Medication", type: "textarea", placeholder: "List current medications" },
+          { key: "allergies", label: "Allergies", type: "text", required: true, placeholder: "List known allergies" },
+          { key: "medical_history", label: "Current and Past Medical History", type: "textarea", placeholder: "Relevant medical history" },
+
+          { key: "treatment_heading", label: "Treatment Details", type: "heading" },
+          { key: "treatment_notes", label: "Treatment Notes", type: "textarea", placeholder: "Describe the treatment performed" },
+          { key: "treatment_checklist", label: "Treatment Checklist", type: "checklist", options: [
+            "Skin prepped and cleansed with chlorhexidine and alcohol",
+            "Pre and post care instructions given",
+            "No contraindications noted",
+          ]},
+
+          { key: "other_heading", label: "Other", type: "heading" },
+          { key: "skin_type", label: "Skin Type", type: "select", options: ["Type I", "Type II", "Type III", "Type IV", "Type V", "Type VI"] },
+          { key: "local_anesthesia", label: "Local Anesthesia", type: "select", options: [
+            "BTL cream 20/10/10",
+            "Lidocaine cream 10%",
+            "Dental block with Lidocaine 2%",
+            "Facial block with 5ml 2% lidocaine and 1ml Bicarb",
+            "23% Lidocaine and tetracaine 7%",
+            "None",
+          ]},
+
+          { key: "photos_heading", label: "Photos", type: "heading" },
+          { key: "photos_front", label: "Front", type: "photo-pair", photoLabels: ["Before Photo", "After Photo"] },
+          { key: "photos_left", label: "Left Profile", type: "photo-pair", photoLabels: ["Before Left Profile", "Post Left Profile"] },
+          { key: "photos_right", label: "Right Profile", type: "photo-pair", photoLabels: ["Before Right Profile", "Post Right Profile"] },
+          { key: "photos_body", label: "Body", type: "photo-pair", photoLabels: ["Before Body Photo", "After Body Photo"] },
+
+          { key: "mapping_heading", label: "Mapping", type: "heading" },
+          { key: "mapping_photo", label: "Mapping", type: "photo-single" },
+
+          { key: "signatures_heading", label: "Signatures", type: "heading" },
+          { key: "provider_signature", label: "Signature", type: "signature", required: true },
+          { key: "treatment_date", label: "Treatment Date", type: "date", required: true },
+          { key: "md_signature", label: "Medical Director Signature", type: "signature" },
+        ]),
+      },
+    }),
+    prisma.chartTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        type: "chart",
+        name: "Neurotoxin Treatment",
+        description: "Botox and neurotoxin injection record",
+        category: "Injectables",
+        isSystem: true,
+        fieldsConfig: JSON.stringify([
+          { key: "allergies", label: "Allergies", type: "text", required: true },
+          { key: "areas", label: "Treatment Areas", type: "json-areas", required: true, options: ["Forehead", "Glabella", "Crow's Feet", "Bunny Lines", "Lip Flip", "Masseter", "Platysma Bands", "Hyperhidrosis"] },
+          { key: "products", label: "Products Used", type: "json-products", required: true },
+          { key: "total_units", label: "Total Units", type: "number", required: true, placeholder: "e.g. 40" },
+          { key: "technique", label: "Injection Technique", type: "select", options: ["Standard", "Micro-Botox", "Deep Injection", "Intradermal"] },
+          { key: "treatment_checklist", label: "Treatment Checklist", type: "checklist", options: [
+            "Skin prepped and cleansed",
+            "Pre and post care instructions given",
+            "No contraindications noted",
+            "Ice applied post treatment",
+          ]},
+          { key: "photos_front", label: "Front", type: "photo-pair", photoLabels: ["Before Photo", "After Photo"] },
+          { key: "mapping", label: "Injection Mapping", type: "photo-single" },
+          { key: "aftercare", label: "Aftercare Instructions", type: "textarea", defaultValue: "Avoid lying down for 4 hours. No strenuous exercise for 24 hours. Do not massage treated areas." },
+          { key: "provider_signature", label: "Provider Signature", type: "signature", required: true },
+          { key: "treatment_date", label: "Treatment Date", type: "date", required: true },
+        ]),
+      },
+    }),
+    prisma.chartTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        type: "form",
+        name: "Patient Intake Form",
+        description: "New patient intake questionnaire",
+        category: "Forms",
+        isSystem: true,
+        fieldsConfig: JSON.stringify([
+          { key: "reason_for_visit", label: "Reason for Visit", type: "textarea", required: true, placeholder: "What brings you in today?" },
+          { key: "medications", label: "Current Medications", type: "textarea", placeholder: "List all current medications" },
+          { key: "allergies", label: "Allergies", type: "text", required: true, placeholder: "List known allergies or write None" },
+          { key: "medical_conditions", label: "Medical Conditions", type: "checklist", options: [
+            "Diabetes",
+            "High blood pressure",
+            "Heart disease",
+            "Autoimmune disorder",
+            "Bleeding disorder",
+            "Pregnancy or breastfeeding",
+            "History of keloid scarring",
+            "None of the above",
+          ]},
+          { key: "previous_treatments", label: "Previous Aesthetic Treatments", type: "textarea", placeholder: "List any previous cosmetic procedures" },
+          { key: "patient_signature", label: "Patient Signature", type: "signature", required: true },
+          { key: "date", label: "Date", type: "date", required: true },
+        ]),
+      },
+    }),
+  ]);
+  console.log(`Created ${chartTemplates.length} chart templates`);
+
+  // ===========================================
   // MEMBERSHIP PLANS
   // ===========================================
   const membershipPlans = await Promise.all([
@@ -905,6 +1016,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log("- 10 Services");
   console.log("- 5 Patients");
   console.log("- 3 Consent Templates");
+  console.log("- 3 Chart Templates (Neurotoxin, Dermal Filler, IV Drip)");
   console.log("- 3 Membership Plans");
   console.log("- 8 Appointments");
   console.log("- 4 Charts (1 MDSigned, 2 NeedsSignOff, 1 Draft)");

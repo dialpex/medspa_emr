@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { getPatient, getPatientTimeline } from "@/lib/actions/patients";
-import { requirePermission } from "@/lib/rbac";
+import { getCharts } from "@/lib/actions/charts";
+import { requirePermission, hasPermission } from "@/lib/rbac";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PatientHeader } from "./patient-header";
 import { PatientDetails } from "./patient-details";
 import { PatientTimeline } from "./patient-timeline";
+import { PatientCharts } from "./patient-charts";
 
 export default async function PatientPage({
   params,
@@ -14,9 +16,12 @@ export default async function PatientPage({
   const { id } = await params;
   const user = await requirePermission("patients", "view");
 
-  const [patient, timeline] = await Promise.all([
+  const canViewCharts = hasPermission(user.role, "charts", "view");
+
+  const [patient, timeline, charts] = await Promise.all([
     getPatient(id),
     getPatientTimeline(id),
+    canViewCharts ? getCharts({ patientId: id }) : Promise.resolve([]),
   ]);
 
   if (!patient) {
@@ -36,6 +41,7 @@ export default async function PatientPage({
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          {canViewCharts && <TabsTrigger value="charts">Charts</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="details" className="mt-4">
@@ -45,6 +51,12 @@ export default async function PatientPage({
         <TabsContent value="timeline" className="mt-4">
           <PatientTimeline timeline={timeline} />
         </TabsContent>
+
+        {canViewCharts && (
+          <TabsContent value="charts" className="mt-4">
+            <PatientCharts charts={charts} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
