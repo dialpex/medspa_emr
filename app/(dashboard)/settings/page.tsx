@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileTextIcon, SyringeIcon, HomeIcon } from "lucide-react";
+import { FileTextIcon, SyringeIcon, HomeIcon, UsersIcon } from "lucide-react";
 
 const settingsItems = [
   {
@@ -19,6 +19,12 @@ const settingsItems = [
     description: "Business info, hours, social accounts, and calendar settings",
     href: "/settings/location",
     icon: HomeIcon,
+  },
+  {
+    label: "Users",
+    description: "Manage staff accounts, roles, and permissions",
+    href: "/settings/users",
+    icon: UsersIcon,
   },
 ];
 

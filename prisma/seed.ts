@@ -940,6 +940,136 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log("Created 2 invoices");
 
   // ===========================================
+  // ADDITIONAL SALES DATA (Nov 2025 – Jan 2026)
+  // ===========================================
+  const salesData: {
+    patientIdx: number;
+    serviceIdx: number;
+    date: Date;
+    method: string;
+    ref: string;
+  }[] = [
+    // --- November 2025 ---
+    // Week 1
+    { patientIdx: 3, serviceIdx: 0, date: new Date("2025-11-03T10:00:00"), method: "credit", ref: "VISA-9901" },
+    { patientIdx: 5, serviceIdx: 6, date: new Date("2025-11-04T14:00:00"), method: "cash", ref: "" },
+    { patientIdx: 7, serviceIdx: 8, date: new Date("2025-11-05T09:00:00"), method: "credit", ref: "AMEX-3310" },
+    // Week 2
+    { patientIdx: 0, serviceIdx: 3, date: new Date("2025-11-10T11:00:00"), method: "credit", ref: "VISA-4242" },
+    { patientIdx: 2, serviceIdx: 7, date: new Date("2025-11-11T15:00:00"), method: "debit", ref: "DBT-5501" },
+    { patientIdx: 4, serviceIdx: 4, date: new Date("2025-11-12T10:30:00"), method: "credit", ref: "MC-7788" },
+    { patientIdx: 8, serviceIdx: 0, date: new Date("2025-11-13T13:00:00"), method: "cash", ref: "" },
+    // Week 3
+    { patientIdx: 1, serviceIdx: 5, date: new Date("2025-11-17T09:30:00"), method: "credit", ref: "VISA-1122" },
+    { patientIdx: 9, serviceIdx: 2, date: new Date("2025-11-18T14:00:00"), method: "credit", ref: "AMEX-6644" },
+    { patientIdx: 6, serviceIdx: 1, date: new Date("2025-11-19T11:00:00"), method: "debit", ref: "DBT-8820" },
+    { patientIdx: 11, serviceIdx: 6, date: new Date("2025-11-20T16:00:00"), method: "cash", ref: "" },
+    { patientIdx: 10, serviceIdx: 3, date: new Date("2025-11-21T10:00:00"), method: "credit", ref: "VISA-3355" },
+    // Week 4
+    { patientIdx: 4, serviceIdx: 7, date: new Date("2025-11-24T09:00:00"), method: "credit", ref: "MC-2299" },
+    { patientIdx: 0, serviceIdx: 2, date: new Date("2025-11-25T13:30:00"), method: "debit", ref: "DBT-4410" },
+
+    // --- December 2025 ---
+    // Week 1
+    { patientIdx: 2, serviceIdx: 0, date: new Date("2025-12-01T10:00:00"), method: "credit", ref: "VISA-4242" },
+    { patientIdx: 5, serviceIdx: 4, date: new Date("2025-12-02T14:00:00"), method: "credit", ref: "AMEX-7711" },
+    { patientIdx: 7, serviceIdx: 3, date: new Date("2025-12-03T11:00:00"), method: "cash", ref: "" },
+    { patientIdx: 1, serviceIdx: 1, date: new Date("2025-12-04T09:30:00"), method: "credit", ref: "MC-5544" },
+    { patientIdx: 10, serviceIdx: 5, date: new Date("2025-12-05T15:00:00"), method: "credit", ref: "VISA-8866" },
+    // Week 2
+    { patientIdx: 4, serviceIdx: 0, date: new Date("2025-12-08T10:00:00"), method: "debit", ref: "DBT-3301" },
+    { patientIdx: 0, serviceIdx: 4, date: new Date("2025-12-09T14:00:00"), method: "credit", ref: "VISA-4242" },
+    { patientIdx: 3, serviceIdx: 7, date: new Date("2025-12-10T11:00:00"), method: "cash", ref: "" },
+    { patientIdx: 9, serviceIdx: 6, date: new Date("2025-12-11T09:00:00"), method: "credit", ref: "AMEX-2200" },
+    { patientIdx: 6, serviceIdx: 3, date: new Date("2025-12-12T16:00:00"), method: "credit", ref: "MC-9933" },
+    { patientIdx: 8, serviceIdx: 5, date: new Date("2025-12-12T10:00:00"), method: "credit", ref: "VISA-1177" },
+    // Week 3 (holiday rush)
+    { patientIdx: 11, serviceIdx: 4, date: new Date("2025-12-15T09:00:00"), method: "credit", ref: "VISA-6688" },
+    { patientIdx: 2, serviceIdx: 5, date: new Date("2025-12-16T13:00:00"), method: "credit", ref: "AMEX-3310" },
+    { patientIdx: 0, serviceIdx: 3, date: new Date("2025-12-17T10:30:00"), method: "debit", ref: "DBT-7702" },
+    { patientIdx: 7, serviceIdx: 0, date: new Date("2025-12-17T14:00:00"), method: "cash", ref: "" },
+    { patientIdx: 4, serviceIdx: 1, date: new Date("2025-12-18T11:00:00"), method: "credit", ref: "MC-4466" },
+    { patientIdx: 5, serviceIdx: 7, date: new Date("2025-12-19T15:00:00"), method: "credit", ref: "VISA-2233" },
+    { patientIdx: 1, serviceIdx: 4, date: new Date("2025-12-19T09:30:00"), method: "credit", ref: "AMEX-5599" },
+    // Week 4
+    { patientIdx: 3, serviceIdx: 2, date: new Date("2025-12-22T10:00:00"), method: "credit", ref: "VISA-1122" },
+    { patientIdx: 10, serviceIdx: 0, date: new Date("2025-12-23T14:00:00"), method: "cash", ref: "" },
+    { patientIdx: 9, serviceIdx: 3, date: new Date("2025-12-23T11:00:00"), method: "credit", ref: "MC-8877" },
+
+    // --- January 2026 ---
+    // Week 1
+    { patientIdx: 0, serviceIdx: 0, date: new Date("2026-01-05T10:00:00"), method: "credit", ref: "VISA-4242" },
+    { patientIdx: 2, serviceIdx: 3, date: new Date("2026-01-06T14:00:00"), method: "credit", ref: "AMEX-3310" },
+    { patientIdx: 4, serviceIdx: 7, date: new Date("2026-01-07T11:00:00"), method: "debit", ref: "DBT-1102" },
+    { patientIdx: 6, serviceIdx: 1, date: new Date("2026-01-07T09:00:00"), method: "cash", ref: "" },
+    // Week 2
+    { patientIdx: 1, serviceIdx: 5, date: new Date("2026-01-12T10:30:00"), method: "credit", ref: "VISA-9944" },
+    { patientIdx: 5, serviceIdx: 4, date: new Date("2026-01-13T14:00:00"), method: "credit", ref: "MC-6611" },
+    { patientIdx: 8, serviceIdx: 0, date: new Date("2026-01-14T09:00:00"), method: "credit", ref: "AMEX-2288" },
+    { patientIdx: 11, serviceIdx: 2, date: new Date("2026-01-14T15:00:00"), method: "debit", ref: "DBT-3303" },
+    { patientIdx: 3, serviceIdx: 3, date: new Date("2026-01-15T11:00:00"), method: "credit", ref: "VISA-7766" },
+    // Week 3
+    { patientIdx: 7, serviceIdx: 5, date: new Date("2026-01-19T10:00:00"), method: "credit", ref: "MC-4400" },
+    { patientIdx: 0, serviceIdx: 1, date: new Date("2026-01-20T14:00:00"), method: "cash", ref: "" },
+    { patientIdx: 9, serviceIdx: 4, date: new Date("2026-01-21T09:30:00"), method: "credit", ref: "VISA-5533" },
+    { patientIdx: 10, serviceIdx: 7, date: new Date("2026-01-22T13:00:00"), method: "credit", ref: "AMEX-1199" },
+    { patientIdx: 4, serviceIdx: 0, date: new Date("2026-01-22T16:00:00"), method: "debit", ref: "DBT-6604" },
+    // Week 4
+    { patientIdx: 2, serviceIdx: 5, date: new Date("2026-01-26T10:00:00"), method: "credit", ref: "VISA-4242" },
+    { patientIdx: 6, serviceIdx: 3, date: new Date("2026-01-27T14:00:00"), method: "credit", ref: "MC-8822" },
+    { patientIdx: 1, serviceIdx: 6, date: new Date("2026-01-28T11:00:00"), method: "cash", ref: "" },
+    { patientIdx: 5, serviceIdx: 0, date: new Date("2026-01-29T09:00:00"), method: "credit", ref: "AMEX-3377" },
+  ];
+
+  let invoiceCounter = 3; // Continue from INV-2025-0002
+  for (const sale of salesData) {
+    const patient = patients[sale.patientIdx];
+    const service = services[sale.serviceIdx];
+    const invYear = sale.date.getFullYear();
+    const invNum = `INV-${invYear}-${String(invoiceCounter).padStart(4, "0")}`;
+    invoiceCounter++;
+
+    await prisma.invoice.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patient.id,
+        invoiceNumber: invNum,
+        status: "Paid",
+        subtotal: service.price,
+        discountAmount: 0,
+        taxAmount: 0,
+        total: service.price,
+        paidAt: sale.date,
+        createdAt: sale.date,
+        items: {
+          create: [
+            {
+              clinicId: clinic.id,
+              serviceId: service.id,
+              description: service.name,
+              quantity: 1,
+              unitPrice: service.price,
+              total: service.price,
+            },
+          ],
+        },
+        payments: {
+          create: [
+            {
+              clinicId: clinic.id,
+              amount: service.price,
+              paymentMethod: sale.method,
+              reference: sale.ref || null,
+              createdAt: sale.date,
+            },
+          ],
+        },
+      },
+    });
+  }
+  console.log(`Created ${salesData.length} additional invoices with payments (Nov 2025 – Jan 2026)`);
+
+  // ===========================================
   // PATIENT MEMBERSHIPS
   // ===========================================
   await Promise.all([
@@ -1035,6 +1165,76 @@ By signing below, I confirm my consent to proceed with treatment.`,
         nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 3),
       },
     }),
+    // Additional members using patients 5-11
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[5].id,
+        planId: membershipPlans[0].id, // Silver
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 2, 14),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 14),
+      },
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[6].id,
+        planId: membershipPlans[1].id, // Gold
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 1, 20),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 20),
+      },
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[7].id,
+        planId: membershipPlans[2].id, // Platinum
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 3, 1),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 1),
+      },
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[8].id,
+        planId: membershipPlans[0].id, // Silver
+        status: "Paused",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 4, 5),
+      },
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[9].id,
+        planId: membershipPlans[1].id, // Gold
+        status: "Cancelled",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 5, 10),
+        cancelledAt: new Date(today.getFullYear(), today.getMonth() - 1, 10),
+      },
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[10].id,
+        planId: membershipPlans[2].id, // Platinum
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 1, 22),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 22),
+      },
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[11].id,
+        planId: membershipPlans[0].id, // Silver
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 2, 28),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 28),
+      },
+    }),
   ]);
   console.log("Created patient memberships");
 
@@ -1124,7 +1324,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log("- 3 Rooms");
   console.log("- 6 Users (Owner, MedicalDirector, 2 Providers, FrontDesk, Billing)");
   console.log("- 10 Services");
-  console.log("- 5 Patients");
+  console.log("- 12 Patients");
   console.log("- 3 Consent Templates");
   console.log("- 3 Chart Templates (Neurotoxin, Dermal Filler, IV Drip)");
   console.log("- 3 Membership Plans");
