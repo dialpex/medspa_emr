@@ -26,13 +26,14 @@ type NavItem = {
   href: string;
   icon: React.ReactNode;
   roles?: Role[];
+  badge?: number;
 };
 
 const navItems: NavItem[] = [
   { label: "Calendar", href: "/calendar", icon: <Calendar className="size-4" /> },
   { label: "Patients", href: "/patients", icon: <Users className="size-4" /> },
   { label: "Sales", href: "/sales", icon: <Tag className="size-4" />, roles: ["Owner", "Admin", "Billing"] },
-  { label: "Inbox", href: "/inbox", icon: <Bell className="size-4" /> },
+  { label: "Inbox", href: "/inbox", icon: <Bell className="size-4" />, badge: 3 },
   { label: "Reports", href: "/reports", icon: <BarChart3 className="size-4" />, roles: ["Owner", "Admin", "Billing", "MedicalDirector"] },
   { label: "AI Marketing", href: "/marketing", icon: <Sparkles className="size-4" /> },
   { label: "Settings", href: "/settings", icon: <Settings className="size-4" /> },
@@ -82,7 +83,7 @@ export function NavBar({ user }: { user: { name: string; role: Role } }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                className={`relative flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all ${
                   isActive(item.href)
                     ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md"
                     : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
@@ -90,6 +91,11 @@ export function NavBar({ user }: { user: { name: string; role: Role } }) {
               >
                 {item.icon}
                 {item.label}
+                {item.badge != null && item.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+                    {item.badge > 99 ? "99+" : item.badge}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>

@@ -278,7 +278,7 @@ export function ChartEditor({
   const isSigned = chart.status === "MDSigned";
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

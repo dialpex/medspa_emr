@@ -11,7 +11,10 @@ export type FieldType =
   | "photo-single"
   | "json-areas"
   | "json-products"
-  | "heading";
+  | "heading"
+  | "first-name"
+  | "last-name"
+  | "logo";
 
 export interface TemplateFieldConfig {
   key: string;
