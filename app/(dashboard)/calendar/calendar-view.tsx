@@ -106,13 +106,15 @@ function TimeGridEvent({ calendarEvent }: { calendarEvent: Record<string, unknow
           )}
         </div>
       ) : (
-        // Full: time on first line, name bold, service below
+        // Full: time + service on first line, name bold below
         <>
-          <div style={{ opacity: 0.8, fontSize: "11px" }}>{timeStr}</div>
-          <div style={{ fontWeight: 600 }}>{patientName}</div>
-          {serviceName && (
-            <div style={{ opacity: 0.8, fontSize: "11px" }}>{serviceName}</div>
-          )}
+          <div style={{ display: "flex", gap: "6px", alignItems: "baseline", fontSize: "11px", overflow: "hidden", whiteSpace: "nowrap" }}>
+            <span style={{ opacity: 0.8, flexShrink: 0 }}>{timeStr}</span>
+            {serviceName && (
+              <span style={{ opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis" }}>{serviceName}</span>
+            )}
+          </div>
+          <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{patientName}</div>
         </>
       )}
     </div>

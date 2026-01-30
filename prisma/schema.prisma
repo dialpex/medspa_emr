@@ -22,6 +22,18 @@ model Clinic {
   phone     String?
   email     String?
   timezone  String   @default("America/New_York")
+  logoUrl   String?
+  locationName String?
+  externalId   String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  zipCode      String?
+  country      String   @default("US")
+  website      String?
+  locationHours    String?  // JSON: { mon: { enabled, start, end }, ... }
+  socialAccounts   String?  // JSON: { yelp, facebook, instagram, ... }
+  calendarSettings String?  // JSON: { timeInterval, startTime, endTime, colorUsage, firstDayOfWeek }
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -37,9 +49,8 @@ model Clinic {
   invoices          Invoice[]
   invoiceItems      InvoiceItem[]
   payments          Payment[]
-  memberships       MembershipPlan[]
-  membershipCredits MembershipCredit[]
-  creditLedgers     CreditLedger[]
+  memberships          MembershipPlan[]
+  patientMemberships   PatientMembership[]
   auditLogs         AuditLog[]
   rooms             Room[]
   chartTemplates    ChartTemplate[]
@@ -119,7 +130,7 @@ model Patient {
   photos           Photo[]
   consents         PatientConsent[]
   invoices         Invoice[]
-  membershipCredits MembershipCredit[]
+  patientMemberships PatientMembership[]
 
   @@index([clinicId])
   @@index([lastName, firstName])
@@ -203,11 +214,25 @@ model Service {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  clinic       Clinic        @relation(fields: [clinicId], references: [id])
-  appointments Appointment[]
-  invoiceItems InvoiceItem[]
+  clinic              Clinic                  @relation(fields: [clinicId], references: [id])
+  appointments        Appointment[]
+  invoiceItems        InvoiceItem[]
+  serviceTemplates    ServiceTemplate[]
 
   @@index([clinicId])
+}
+
+model ServiceTemplate {
+  id         String @id @default(cuid())
+  serviceId  String
+  templateId String
+
+  service  Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  template ChartTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, templateId])
+  @@index([serviceId])
+  @@index([templateId])
 }
 
 // ===========================================
@@ -234,8 +259,9 @@ model ChartTemplate {
   updatedAt    DateTime @updatedAt
   deletedAt    DateTime?
 
-  clinic Clinic @relation(fields: [clinicId], references: [id])
-  charts Chart[]
+  clinic           Clinic            @relation(fields: [clinicId], references: [id])
+  charts           Chart[]
+  serviceTemplates ServiceTemplate[]
   @@index([clinicId])
 }
 
@@ -449,58 +475,40 @@ model MembershipPlan {
   clinicId      String
   name          String
   description   String?
-  price         Float
-  credits       Int      // Number of credits included
-  validityDays  Int      @default(365) // How long credits are valid
+  price         Float    // Dollar amount charged per cycle
+  billingCycle  String   @default("Monthly") // Monthly or Weekly
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   // Relations
-  clinic            Clinic             @relation(fields: [clinicId], references: [id])
-  membershipCredits MembershipCredit[]
+  clinic             Clinic                  @relation(fields: [clinicId], references: [id])
+  patientMemberships PatientMembership[]
 
   @@index([clinicId])
 }
 
-model MembershipCredit {
-  id           String    @id @default(cuid())
-  clinicId     String
-  patientId    String
-  planId       String
-  totalCredits Int
-  usedCredits  Int       @default(0)
-  expiresAt    DateTime
-  purchasedAt  DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+
+model PatientMembership {
+  id        String   @id @default(cuid())
+  clinicId  String
+  patientId String
+  planId    String
+  status    String   @default("Active") // Active, Paused, Cancelled
+  startDate DateTime @default(now())
+  nextBillDate DateTime?
+  cancelledAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   clinic  Clinic         @relation(fields: [clinicId], references: [id])
   patient Patient        @relation(fields: [patientId], references: [id])
   plan    MembershipPlan @relation(fields: [planId], references: [id])
-  ledger  CreditLedger[]
 
   @@index([clinicId])
   @@index([patientId])
-  @@index([expiresAt])
-}
-
-model CreditLedger {
-  id                   String           @id @default(cuid())
-  clinicId             String
-  membershipCreditId   String
-  change               Int              // Positive for additions, negative for usage
-  balance              Int              // Running balance after this transaction
-  description          String?
-  createdAt            DateTime         @default(now())
-
-  // Relations
-  clinic           Clinic           @relation(fields: [clinicId], references: [id])
-  membershipCredit MembershipCredit @relation(fields: [membershipCreditId], references: [id], onDelete: Cascade)
-
-  @@index([clinicId])
-  @@index([membershipCreditId])
+  @@index([status])
 }
 
 // ===========================================

@@ -310,6 +310,90 @@ async function main() {
         tags: "VIP,Regular,Membership",
       },
     }),
+    prisma.patient.create({
+      data: {
+        clinicId: clinic.id,
+        firstName: "Sarah",
+        lastName: "Kim",
+        email: "sarah.kim@email.com",
+        phone: "(555) 111-2233",
+        dateOfBirth: new Date("1993-03-22"),
+        gender: "Female",
+        tags: "Regular",
+      },
+    }),
+    prisma.patient.create({
+      data: {
+        clinicId: clinic.id,
+        firstName: "Robert",
+        lastName: "Davis",
+        email: "r.davis@email.com",
+        phone: "(555) 222-3344",
+        dateOfBirth: new Date("1980-07-11"),
+        gender: "Male",
+        tags: "Membership",
+      },
+    }),
+    prisma.patient.create({
+      data: {
+        clinicId: clinic.id,
+        firstName: "Emily",
+        lastName: "Nguyen",
+        email: "emily.nguyen@email.com",
+        phone: "(555) 333-4455",
+        dateOfBirth: new Date("1988-12-05"),
+        gender: "Female",
+        tags: "VIP,Membership",
+      },
+    }),
+    prisma.patient.create({
+      data: {
+        clinicId: clinic.id,
+        firstName: "James",
+        lastName: "Wilson",
+        email: "j.wilson@email.com",
+        phone: "(555) 444-5566",
+        dateOfBirth: new Date("1972-01-30"),
+        gender: "Male",
+        tags: "Regular",
+      },
+    }),
+    prisma.patient.create({
+      data: {
+        clinicId: clinic.id,
+        firstName: "Maria",
+        lastName: "Garcia",
+        email: "maria.g@email.com",
+        phone: "(555) 555-6677",
+        dateOfBirth: new Date("1995-06-18"),
+        gender: "Female",
+        tags: "Membership",
+      },
+    }),
+    prisma.patient.create({
+      data: {
+        clinicId: clinic.id,
+        firstName: "Kevin",
+        lastName: "Brown",
+        email: "kevin.b@email.com",
+        phone: "(555) 666-7788",
+        dateOfBirth: new Date("1985-10-25"),
+        gender: "Male",
+        tags: "Regular,Membership",
+      },
+    }),
+    prisma.patient.create({
+      data: {
+        clinicId: clinic.id,
+        firstName: "Rachel",
+        lastName: "Patel",
+        email: "rachel.p@email.com",
+        phone: "(555) 777-8899",
+        dateOfBirth: new Date("1990-04-08"),
+        gender: "Female",
+        tags: "VIP,Membership",
+      },
+    }),
   ]);
   console.log(`Created ${patients.length} patients`);
 
@@ -502,31 +586,28 @@ By signing below, I confirm my consent to proceed with treatment.`,
     prisma.membershipPlan.create({
       data: {
         clinicId: clinic.id,
-        name: "Bronze Membership",
-        description: "Basic membership with 10 credits per year",
-        price: 500,
-        credits: 10,
-        validityDays: 365,
+        name: "Silver",
+        description: "Essential treatments and basic skincare",
+        price: 50,
+        billingCycle: "Monthly",
       },
     }),
     prisma.membershipPlan.create({
       data: {
         clinicId: clinic.id,
-        name: "Silver Membership",
-        description: "Standard membership with 25 credits per year",
-        price: 1000,
-        credits: 25,
-        validityDays: 365,
+        name: "Gold",
+        description: "Advanced treatments with priority booking",
+        price: 100,
+        billingCycle: "Monthly",
       },
     }),
     prisma.membershipPlan.create({
       data: {
         clinicId: clinic.id,
-        name: "Gold Membership",
-        description: "Premium membership with 50 credits per year",
-        price: 1800,
-        credits: 50,
-        validityDays: 365,
+        name: "Platinum",
+        description: "All-inclusive premium care with VIP perks",
+        price: 200,
+        billingCycle: "Monthly",
       },
     }),
   ]);
@@ -859,74 +940,103 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log("Created 2 invoices");
 
   // ===========================================
-  // MEMBERSHIP CREDITS
+  // PATIENT MEMBERSHIPS
   // ===========================================
-  const membershipCredit = await prisma.membershipCredit.create({
-    data: {
-      clinicId: clinic.id,
-      patientId: patients[2].id,
-      planId: membershipPlans[1].id, // Silver
-      totalCredits: 25,
-      usedCredits: 5,
-      expiresAt: new Date(today.getFullYear() + 1, today.getMonth(), today.getDate()),
-      ledger: {
-        create: [
-          {
-            clinicId: clinic.id,
-            change: 25,
-            balance: 25,
-            description: "Initial membership purchase",
-          },
-          {
-            clinicId: clinic.id,
-            change: -3,
-            balance: 22,
-            description: "Botox treatment credit redemption",
-          },
-          {
-            clinicId: clinic.id,
-            change: -2,
-            balance: 20,
-            description: "Chemical peel credit redemption",
-          },
-        ],
+  await Promise.all([
+    // Silver members
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[0].id,
+        planId: membershipPlans[0].id,
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 4, 10),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 10),
       },
-    },
-  });
-
-  const membershipCredit2 = await prisma.membershipCredit.create({
-    data: {
-      clinicId: clinic.id,
-      patientId: patients[4].id,
-      planId: membershipPlans[2].id, // Gold
-      totalCredits: 50,
-      usedCredits: 12,
-      expiresAt: new Date(today.getFullYear() + 1, today.getMonth(), today.getDate()),
-      ledger: {
-        create: [
-          {
-            clinicId: clinic.id,
-            change: 50,
-            balance: 50,
-            description: "Initial membership purchase",
-          },
-          {
-            clinicId: clinic.id,
-            change: -8,
-            balance: 42,
-            description: "Sculptra session 1 credit redemption",
-          },
-          {
-            clinicId: clinic.id,
-            change: -4,
-            balance: 38,
-            description: "Botox full face credit redemption",
-          },
-        ],
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[1].id,
+        planId: membershipPlans[0].id,
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 3, 5),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 5),
       },
-    },
-  });
-  console.log("Created 2 membership credits with ledger entries");
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[4].id,
+        planId: membershipPlans[0].id,
+        status: "Cancelled",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 6, 1),
+        cancelledAt: new Date(today.getFullYear(), today.getMonth() - 1, 15),
+      },
+    }),
+    // Gold members
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[2].id,
+        planId: membershipPlans[1].id,
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 2, 1),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 1),
+      },
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[3].id,
+        planId: membershipPlans[1].id,
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 5, 20),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 20),
+      },
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[0].id,
+        planId: membershipPlans[1].id,
+        status: "Paused",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 3, 12),
+      },
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[4].id,
+        planId: membershipPlans[1].id,
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 1, 8),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 8),
+      },
+    }),
+    // Platinum members
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[4].id,
+        planId: membershipPlans[2].id,
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 1, 15),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth(), 15),
+      },
+    }),
+    prisma.patientMembership.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[1].id,
+        planId: membershipPlans[2].id,
+        status: "Active",
+        startDate: new Date(today.getFullYear(), today.getMonth() - 2, 3),
+        nextBillDate: new Date(today.getFullYear(), today.getMonth() + 1, 3),
+      },
+    }),
+  ]);
+  console.log("Created patient memberships");
 
   // ===========================================
   // AUDIT LOGS
@@ -1022,7 +1132,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log("- 4 Charts (1 MDSigned, 2 NeedsSignOff, 1 Draft)");
   console.log("- 2 Patient Consents");
   console.log("- 2 Invoices");
-  console.log("- 2 Membership Credits with Ledger");
+  console.log("- 2 Patient Memberships");
   console.log("- 6 Audit Log Entries");
 }
 

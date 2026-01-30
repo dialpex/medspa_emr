@@ -6,6 +6,7 @@ import {
   enforceTenantIsolation,
   AuthorizationError,
 } from "@/lib/rbac";
+import { revalidatePath } from "next/cache";
 import type { TemplateFieldConfig } from "@/lib/types/charts";
 
 export interface TemplateInput {
@@ -71,6 +72,7 @@ export async function createTemplate(input: TemplateInput) {
       },
     });
 
+    revalidatePath("/settings/templates");
     return { success: true as const, data: template };
   } catch (error) {
     if (error instanceof AuthorizationError) {
@@ -102,6 +104,8 @@ export async function updateTemplate(id: string, input: Partial<TemplateInput>) 
       },
     });
 
+    revalidatePath("/settings/templates");
+    revalidatePath(`/settings/templates/${id}`);
     return { success: true as const, data: template };
   } catch (error) {
     if (error instanceof AuthorizationError) {

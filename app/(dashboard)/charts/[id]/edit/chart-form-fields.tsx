@@ -484,7 +484,7 @@ export function ChartFormFields({
   patientId,
 }: ChartFormFieldsProps) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 min-w-0 overflow-hidden">
       {fields.map((field) => {
         const val = values[field.key] ?? field.defaultValue ?? "";
 
@@ -498,19 +498,19 @@ export function ChartFormFields({
         }
 
         return (
-          <div key={field.key}>
+          <div key={field.key} className="min-w-0">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
             </label>
 
-            {field.type === "text" && (
+            {(field.type === "text" || field.type === "first-name" || field.type === "last-name") && (
               <input
                 type="text"
                 value={val}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 disabled={disabled}
-                placeholder={field.placeholder}
+                placeholder={field.placeholder || (field.type === "first-name" ? "First Name" : field.type === "last-name" ? "Last Name" : undefined)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
               />
             )}
@@ -522,7 +522,7 @@ export function ChartFormFields({
                 disabled={disabled}
                 placeholder={field.placeholder}
                 rows={3}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50 break-words"
               />
             )}
 
@@ -618,6 +618,17 @@ export function ChartFormFields({
             )}
 
             {field.type === "photo-single" && (
+              <PhotoSingleField
+                fieldKey={field.key}
+                value={val}
+                onChange={(v) => onChange(field.key, v)}
+                disabled={disabled}
+                chartId={chartId}
+                patientId={patientId}
+              />
+            )}
+
+            {field.type === "logo" && (
               <PhotoSingleField
                 fieldKey={field.key}
                 value={val}

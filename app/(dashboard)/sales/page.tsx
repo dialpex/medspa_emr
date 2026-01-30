@@ -1,20 +1,58 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getInvoices } from "@/lib/actions/invoices";
+import { getPayments } from "@/lib/actions/payments";
+import { getMembershipPlans, getMembershipData } from "@/lib/actions/memberships";
+import { getServicesForClinic } from "@/lib/actions/services";
+import { SalesSidebar } from "./sales-sidebar";
+import { InvoiceListView } from "./invoice-list-view";
+import { PaymentsView } from "./payments-view";
+import { MembershipsView } from "./memberships-view";
+import { GiftCardsView } from "./gift-cards-view";
 
 const ALLOWED_ROLES = ["Owner", "Admin", "Billing"];
 
-export default async function SalesPage() {
+type Props = {
+  searchParams: Promise<{ section?: string }>;
+};
+
+export default async function SalesPage({ searchParams }: Props) {
   const session = await auth();
 
   if (!session?.user || !ALLOWED_ROLES.includes(session.user.role)) {
     redirect("/calendar");
   }
 
+  const params = await searchParams;
+  const section = params.section || "invoices";
+
+  let content: React.ReactNode = null;
+
+  if (section === "invoices") {
+    const [invoices, services] = await Promise.all([
+      getInvoices(),
+      getServicesForClinic(),
+    ]);
+    const serviceOptions = services.map((s) => ({ id: s.id, name: s.name, price: s.price }));
+    content = <InvoiceListView initialInvoices={invoices} services={serviceOptions} />;
+  } else if (section === "payments") {
+    const payments = await getPayments();
+    content = <PaymentsView payments={payments} />;
+  } else if (section === "memberships") {
+    const [plans, data] = await Promise.all([
+      getMembershipPlans(),
+      getMembershipData(),
+    ]);
+    content = <MembershipsView plans={plans} membershipData={data} />;
+  } else if (section === "gift-cards") {
+    content = <GiftCardsView />;
+  }
+
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Sales</h1>
-      <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500">
-        Sales information coming soon...
+    <div className="flex h-[calc(100vh-64px)]">
+      <SalesSidebar />
+      <div className="flex-1 overflow-y-auto p-6">
+        {content}
       </div>
     </div>
   );
