@@ -19,6 +19,7 @@ export type LocationData = {
   phone: string;
   website: string;
   logoUrl: string;
+  defaultTaxRate: number;
   locationHours: Record<string, { enabled: boolean; start: string; end: string }>;
   socialAccounts: Record<string, string>;
   calendarSettings: {
@@ -56,6 +57,7 @@ export async function getLocationData(): Promise<LocationData> {
     phone: clinic.phone ?? "",
     website: clinic.website ?? "",
     logoUrl: clinic.logoUrl ?? "",
+    defaultTaxRate: clinic.defaultTaxRate ?? 0,
     locationHours: clinic.locationHours ? JSON.parse(clinic.locationHours) : defaultHours,
     socialAccounts: clinic.socialAccounts ? JSON.parse(clinic.socialAccounts) : {},
     calendarSettings: clinic.calendarSettings
@@ -83,6 +85,7 @@ export async function updateLocationData(data: LocationData) {
       phone: data.phone || null,
       website: data.website || null,
       logoUrl: data.logoUrl || null,
+      defaultTaxRate: data.defaultTaxRate || null,
       locationHours: JSON.stringify(data.locationHours),
       socialAccounts: JSON.stringify(data.socialAccounts),
       calendarSettings: JSON.stringify(data.calendarSettings),

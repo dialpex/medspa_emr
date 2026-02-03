@@ -12,6 +12,7 @@ import {
   deleteInvoice,
   type InvoiceListItem,
   type InvoiceDetail,
+  type ClinicInfo,
 } from "@/lib/actions/invoices";
 
 type ServiceOption = { id: string; name: string; price: number };
@@ -28,9 +29,10 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 type Props = {
   initialInvoices: InvoiceListItem[];
   services: ServiceOption[];
+  clinicInfo: ClinicInfo;
 };
 
-export function InvoiceListView({ initialInvoices, services }: Props) {
+export function InvoiceListView({ initialInvoices, services, clinicInfo }: Props) {
   const [invoices, setInvoices] = useState(initialInvoices);
   const [modalInvoice, setModalInvoice] = useState<InvoiceDetail | null | "new">(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
@@ -171,6 +173,7 @@ export function InvoiceListView({ initialInvoices, services }: Props) {
         <InvoiceModal
           invoice={modalInvoice === "new" ? null : modalInvoice}
           services={services}
+          clinicInfo={clinicInfo}
           onClose={handleCloseModal}
         />
       )}

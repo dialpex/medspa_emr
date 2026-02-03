@@ -159,6 +159,9 @@ export function LocationForm({ initialData }: { initialData: LocationData }) {
           <Field label="Website" className="sm:col-span-2">
             <input className={inputCls} value={data.website} onChange={(e) => set("website", e.target.value)} placeholder="https://" />
           </Field>
+          <Field label="Default Tax Rate (%)">
+            <input className={inputCls} type="number" min={0} step={0.1} value={data.defaultTaxRate} onChange={(e) => set("defaultTaxRate", parseFloat(e.target.value) || 0)} placeholder="e.g. 6" />
+          </Field>
         </div>
       </Section>
 

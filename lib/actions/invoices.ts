@@ -127,12 +127,23 @@ export async function getInvoices(filters?: InvoiceFilters): Promise<InvoiceList
   if (filters?.status) where.status = filters.status;
   if (filters?.invoiceNumber) where.invoiceNumber = { contains: filters.invoiceNumber };
   if (filters?.search) {
-    where.patient = {
-      OR: [
-        { firstName: { contains: filters.search } },
-        { lastName: { contains: filters.search } },
-      ],
-    };
+    const q = filters.search.trim();
+    const parts = q.split(/\s+/);
+    if (parts.length >= 2) {
+      where.patient = {
+        AND: [
+          { firstName: { contains: parts[0] } },
+          { lastName: { contains: parts.slice(1).join(" ") } },
+        ],
+      };
+    } else {
+      where.patient = {
+        OR: [
+          { firstName: { contains: q } },
+          { lastName: { contains: q } },
+        ],
+      };
+    }
   }
   if (filters?.dateFrom || filters?.dateTo) {
     where.createdAt = {};
@@ -333,15 +344,38 @@ export async function quickCreatePatient(input: { firstName: string; lastName: s
 export async function searchPatients(query: string) {
   const user = await requirePermission("patients", "view");
   if (!query || query.length < 2) return [];
-  return prisma.patient.findMany({
-    where: {
-      clinicId: user.clinicId,
-      OR: [
-        { firstName: { contains: query } },
-        { lastName: { contains: query } },
-      ],
-    },
-    select: { id: true, firstName: true, lastName: true, email: true, phone: true, tags: true },
-    take: 10,
+  const q = query.trim();
+  // Use raw query for case-insensitive search on SQLite
+  const patients = await prisma.$queryRaw<
+    { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; tags: string | null }[]
+  >`
+    SELECT id, firstName, lastName, email, phone, tags
+    FROM Patient
+    WHERE clinicId = ${user.clinicId}
+      AND (firstName LIKE ${'%' + q + '%'} OR lastName LIKE ${'%' + q + '%'} OR (firstName || ' ' || lastName) LIKE ${'%' + q + '%'})
+    LIMIT 10
+  `;
+  return patients;
+}
+
+export type ClinicInfo = {
+  name: string;
+  logoUrl: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zipCode: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  defaultTaxRate: number | null;
+};
+
+export async function getClinicInfo(): Promise<ClinicInfo> {
+  const user = await requirePermission("invoices", "view");
+  const clinic = await prisma.clinic.findUniqueOrThrow({
+    where: { id: user.clinicId },
+    select: { name: true, logoUrl: true, address: true, city: true, state: true, zipCode: true, phone: true, email: true, website: true, defaultTaxRate: true },
   });
+  return clinic;
 }

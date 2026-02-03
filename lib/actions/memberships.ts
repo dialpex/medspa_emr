@@ -9,7 +9,6 @@ export type MembershipPlanItem = {
   name: string;
   description: string | null;
   price: number;
-  billingCycle: string;
   isActive: boolean;
 };
 
@@ -18,7 +17,6 @@ export type MembershipDataItem = {
   name: string;
   description: string | null;
   price: number;
-  billingCycle: string;
   isActive: boolean;
   activeMembers: number;
   pausedMembers: number;
@@ -43,7 +41,6 @@ export type MembershipPlanInput = {
   name: string;
   description?: string;
   price: number;
-  billingCycle?: string;
 };
 
 export async function getMembershipPlans(): Promise<MembershipPlanItem[]> {
@@ -72,8 +69,7 @@ export async function getMembershipData(): Promise<MembershipDataItem[]> {
     const paused = plan.patientMemberships.filter((m) => m.status === "Paused").length;
     const cancelled = plan.patientMemberships.filter((m) => m.status === "Cancelled").length;
     const total = plan.patientMemberships.length;
-    const multiplier = plan.billingCycle === "Weekly" ? 4.33 : 1;
-    const mrr = active * plan.price * multiplier;
+    const mrr = active * plan.price;
     const churnRate = total > 0 ? Math.round((cancelled / total) * 100) : 0;
 
     return {
@@ -81,7 +77,6 @@ export async function getMembershipData(): Promise<MembershipDataItem[]> {
       name: plan.name,
       description: plan.description,
       price: plan.price,
-      billingCycle: plan.billingCycle,
       isActive: plan.isActive,
       activeMembers: active,
       pausedMembers: paused,
@@ -103,7 +98,6 @@ export async function createMembershipPlan(input: MembershipPlanInput) {
         name: input.name,
         description: input.description || null,
         price: input.price,
-        billingCycle: input.billingCycle || "Monthly",
       },
     });
     revalidatePath("/sales");
@@ -123,7 +117,6 @@ export async function updateMembershipPlan(id: string, input: MembershipPlanInpu
         name: input.name,
         description: input.description || null,
         price: input.price,
-        billingCycle: input.billingCycle || "Monthly",
       },
     });
     revalidatePath("/sales");
@@ -168,11 +161,7 @@ export async function assignMembershipToPatient(input: { patientId: string; plan
 
     const now = new Date();
     const nextBill = new Date(now);
-    if (plan.billingCycle === "Weekly") {
-      nextBill.setDate(nextBill.getDate() + 7);
-    } else {
-      nextBill.setMonth(nextBill.getMonth() + 1);
-    }
+    nextBill.setMonth(nextBill.getMonth() + 1);
 
     await prisma.patientMembership.create({
       data: {

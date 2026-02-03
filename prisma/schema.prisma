@@ -34,6 +34,7 @@ model Clinic {
   locationHours    String?  // JSON: { mon: { enabled, start, end }, ... }
   socialAccounts   String?  // JSON: { yelp, facebook, instagram, ... }
   calendarSettings String?  // JSON: { timeInterval, startTime, endTime, colorUsage, firstDayOfWeek }
+  defaultTaxRate   Float?   // Default tax rate percentage for invoices
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -476,7 +477,7 @@ model MembershipPlan {
   name          String
   description   String?
   price         Float    // Dollar amount charged per cycle
-  billingCycle  String   @default("Monthly") // Monthly or Weekly
+  billingCycle  String   @default("Monthly") // Always Monthly
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

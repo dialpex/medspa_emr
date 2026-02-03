@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
-import { DollarSign, CalendarIcon, TableIcon, BarChart3Icon } from "lucide-react";
+import {
+  DollarSign,
+  CalendarIcon,
+  TableIcon,
+  BarChart3Icon,
+  TrendingUpIcon,
+  TrendingDownIcon,
+  ArrowRightIcon,
+  ReceiptTextIcon,
+} from "lucide-react";
 import { getPayments, type PaymentListItem } from "@/lib/actions/payments";
 
 type Props = { payments: PaymentListItem[] };
@@ -14,7 +23,8 @@ type MonthData = {
   shortLabel: string;
   total: number;
   count: number;
-  weeks: { label: string; total: number }[];
+  avgPerTransaction: number;
+  weeks: { label: string; total: number; count: number }[];
 };
 
 function getWeekOfMonth(date: Date): number {
@@ -31,11 +41,15 @@ function getWeeksInMonth(year: number, month: number): number {
   return Math.ceil((lastDay.getDate() + firstDayOfWeek) / 7);
 }
 
-function formatCurrency(amount: number): string {
-  if (amount >= 1000) {
-    return `$${(amount / 1000).toFixed(amount % 1000 === 0 ? 0 : 1)}K`;
-  }
+function formatCompact(amount: number): string {
+  if (amount >= 10000) return `$${(amount / 1000).toFixed(0)}K`;
+  if (amount >= 1000) return `$${(amount / 1000).toFixed(1)}K`;
   return `$${amount.toFixed(0)}`;
+}
+
+function pctChange(current: number, previous: number): number | null {
+  if (previous === 0) return current > 0 ? 100 : null;
+  return Math.round(((current - previous) / previous) * 100);
 }
 
 export function PaymentsView({ payments: initialPayments }: Props) {
@@ -91,9 +105,11 @@ export function PaymentsView({ payments: initialPayments }: Props) {
           shortLabel: d.toLocaleDateString("en-US", { month: "short" }),
           total: 0,
           count: 0,
+          avgPerTransaction: 0,
           weeks: Array.from({ length: numWeeks }, (_, i) => ({
             label: `Week ${i + 1}`,
             total: 0,
+            count: 0,
           })),
         });
       }
@@ -105,7 +121,12 @@ export function PaymentsView({ payments: initialPayments }: Props) {
       const weekIdx = getWeekOfMonth(d) - 1;
       if (weekIdx >= 0 && weekIdx < entry.weeks.length) {
         entry.weeks[weekIdx].total += p.amount;
+        entry.weeks[weekIdx].count += 1;
       }
+    }
+
+    for (const entry of map.values()) {
+      entry.avgPerTransaction = entry.count > 0 ? entry.total / entry.count : 0;
     }
 
     return Array.from(map.values()).sort((a, b) => b.key.localeCompare(a.key));
@@ -115,8 +136,17 @@ export function PaymentsView({ payments: initialPayments }: Props) {
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const currentMonthData = monthlyData.find((m) => m.key === currentMonthKey);
   const currentMonthTotal = currentMonthData?.total ?? 0;
+  const currentMonthCount = currentMonthData?.count ?? 0;
+  const currentMonthAvg = currentMonthData?.avgPerTransaction ?? 0;
 
-  // For the overview bar chart, show last 12 months
+  // Previous month for comparison
+  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonthKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+  const prevMonthData = monthlyData.find((m) => m.key === prevMonthKey);
+  const prevMonthTotal = prevMonthData?.total ?? 0;
+  const revenueChange = pctChange(currentMonthTotal, prevMonthTotal);
+
+  // For the overview chart, show last 12 months
   const overviewMonths = useMemo(() => {
     const months: { key: string; label: string; total: number; isCurrent: boolean; isPast: boolean }[] = [];
     for (let i = 11; i >= 0; i--) {
@@ -146,20 +176,42 @@ export function PaymentsView({ payments: initialPayments }: Props) {
     return Array.from(set).sort();
   }, [initialPayments]);
 
-  // Y-axis ticks for overview chart
-  const overviewTicks = useMemo(() => {
-    const steps = 4;
-    const rawStep = overviewMax / steps;
-    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
-    const niceStep = Math.ceil(rawStep / magnitude) * magnitude;
-    const ticks: number[] = [];
-    for (let i = 0; i <= steps; i++) {
-      ticks.push(i * niceStep);
-    }
-    return ticks;
-  }, [overviewMax]);
+  // SVG area chart points
+  const chartPoints = useMemo(() => {
+    const padding = 0;
+    const w = 100;
+    const h = 100;
+    return overviewMonths.map((m, i) => ({
+      x: padding + (i / (overviewMonths.length - 1)) * (w - padding * 2),
+      y: h - (overviewMax > 0 ? (m.total / overviewMax) * (h - 10) : 0) - 5,
+      ...m,
+    }));
+  }, [overviewMonths, overviewMax]);
 
-  const overviewChartMax = overviewTicks[overviewTicks.length - 1] || 1;
+  const areaPath = useMemo(() => {
+    if (chartPoints.length === 0) return "";
+    const line = chartPoints.map((p, i) => {
+      if (i === 0) return `M ${p.x} ${p.y}`;
+      const prev = chartPoints[i - 1];
+      const cpx1 = prev.x + (p.x - prev.x) * 0.4;
+      const cpx2 = prev.x + (p.x - prev.x) * 0.6;
+      return `C ${cpx1} ${prev.y}, ${cpx2} ${p.y}, ${p.x} ${p.y}`;
+    }).join(" ");
+    const last = chartPoints[chartPoints.length - 1];
+    const first = chartPoints[0];
+    return `${line} L ${last.x} 100 L ${first.x} 100 Z`;
+  }, [chartPoints]);
+
+  const linePath = useMemo(() => {
+    if (chartPoints.length === 0) return "";
+    return chartPoints.map((p, i) => {
+      if (i === 0) return `M ${p.x} ${p.y}`;
+      const prev = chartPoints[i - 1];
+      const cpx1 = prev.x + (p.x - prev.x) * 0.4;
+      const cpx2 = prev.x + (p.x - prev.x) * 0.6;
+      return `C ${cpx1} ${prev.y}, ${cpx2} ${p.y}, ${p.x} ${p.y}`;
+    }).join(" ");
+  }, [chartPoints]);
 
   return (
     <div>
@@ -295,127 +347,210 @@ export function PaymentsView({ payments: initialPayments }: Props) {
       {/* Monthly Breakdown View */}
       {viewMode === "monthly" && (
         <div className="space-y-6">
-          {/* Hero earnings section */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 pb-2">
-            <p className="text-sm font-medium text-gray-500 mb-1">Earnings</p>
-            <p className="text-3xl font-bold text-gray-900 mb-1">
-              You&apos;ve made{" "}
-              <span className="text-purple-600">
-                ${currentMonthTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>{" "}
-              this month
-            </p>
-
-            {/* Monthly bar chart */}
-            <div className="mt-8">
-              <div className="relative h-48">
-                {/* Y-axis grid lines and labels */}
-                {overviewTicks.map((tick) => (
-                  <div
-                    key={tick}
-                    className="absolute left-0 right-0 flex items-center"
-                    style={{ bottom: `${(tick / overviewChartMax) * 100}%` }}
-                  >
-                    <span className="text-xs text-gray-400 w-10 text-right mr-3 -translate-y-1/2">
-                      {formatCurrency(tick)}
-                    </span>
-                    <div className="flex-1 border-t border-gray-100" />
-                  </div>
-                ))}
-
-                {/* Bars */}
-                <div className="absolute left-14 right-0 bottom-0 top-0 flex items-end gap-1">
-                  {overviewMonths.map((m) => {
-                    const height = overviewChartMax > 0 ? (m.total / overviewChartMax) * 100 : 0;
-                    const isPast = m.isPast;
-                    const isCurrent = m.isCurrent;
-
-                    return (
-                      <div key={m.key} className="flex-1 flex flex-col items-center">
-                        <div className="w-full relative" style={{ height: "192px" }}>
-                          <div
-                            className={`absolute bottom-0 left-1 right-1 rounded-t transition-all ${
-                              isPast || isCurrent
-                                ? "bg-purple-500"
-                                : "border-2 border-gray-200 bg-white"
-                            }`}
-                            style={{ height: `${Math.max(height, 1)}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+          {/* KPI summary row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-gray-500">Gross Revenue</span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50">
+                  <DollarSign className="size-4 text-purple-600" />
                 </div>
               </div>
+              <p className="text-2xl font-bold text-gray-900">
+                ${currentMonthTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              {revenueChange !== null && (
+                <div className="flex items-center gap-1 mt-1">
+                  {revenueChange >= 0 ? (
+                    <TrendingUpIcon className="size-3.5 text-emerald-500" />
+                  ) : (
+                    <TrendingDownIcon className="size-3.5 text-red-500" />
+                  )}
+                  <span className={`text-xs font-medium ${revenueChange >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                    {revenueChange >= 0 ? "+" : ""}{revenueChange}%
+                  </span>
+                  <span className="text-xs text-gray-400">vs last month</span>
+                </div>
+              )}
+            </div>
 
-              {/* Month labels */}
-              <div className="flex ml-14 mt-2 gap-1">
-                {overviewMonths.map((m) => (
-                  <div key={m.key} className="flex-1 text-center">
-                    {m.isCurrent ? (
-                      <span className="inline-flex items-center justify-center rounded-full bg-gray-900 px-2 py-0.5 text-xs font-medium text-white">
-                        {m.label}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-500">{m.label}</span>
-                    )}
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-gray-500">Transactions</span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50">
+                  <ReceiptTextIcon className="size-4 text-blue-600" />
+                </div>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{currentMonthCount}</p>
+              <p className="text-xs text-gray-400 mt-1">
+                {prevMonthData ? `${prevMonthData.count} last month` : "No prior data"}
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-gray-500">Avg per Transaction</span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50">
+                  <ArrowRightIcon className="size-4 text-amber-600" />
+                </div>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">
+                ${currentMonthAvg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              {prevMonthData && prevMonthData.avgPerTransaction > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  ${prevMonthData.avgPerTransaction.toFixed(2)} last month
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Revenue trend — area chart */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Revenue Trend — Last 12 Months</h3>
+            <div className="relative h-48">
+              <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                className="w-full h-full"
+              >
+                <defs>
+                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="rgb(147, 51, 234)" stopOpacity="0.2" />
+                    <stop offset="100%" stopColor="rgb(147, 51, 234)" stopOpacity="0.02" />
+                  </linearGradient>
+                </defs>
+                {/* Grid lines */}
+                {[0, 25, 50, 75].map((y) => (
+                  <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="#f3f4f6" strokeWidth="0.3" />
+                ))}
+                {/* Area fill */}
+                <path d={areaPath} fill="url(#areaGrad)" />
+                {/* Line */}
+                <path d={linePath} fill="none" stroke="rgb(147, 51, 234)" strokeWidth="0.6" strokeLinecap="round" strokeLinejoin="round" />
+                {/* Dots */}
+                {chartPoints.map((p) => (
+                  <circle
+                    key={p.key}
+                    cx={p.x}
+                    cy={p.y}
+                    r={p.isCurrent ? "1.2" : "0.7"}
+                    fill={p.isCurrent ? "rgb(147, 51, 234)" : "white"}
+                    stroke="rgb(147, 51, 234)"
+                    strokeWidth="0.4"
+                  />
+                ))}
+              </svg>
+              {/* Hover value labels positioned above dots */}
+              <div className="absolute inset-0 flex">
+                {chartPoints.map((p) => (
+                  <div key={p.key} className="flex-1 group relative">
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
+                      <div className="bg-gray-900 text-white text-[10px] font-medium px-2 py-1 rounded whitespace-nowrap">
+                        {p.label}: {formatCompact(p.total)}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
+            {/* Month labels */}
+            <div className="flex mt-2">
+              {overviewMonths.map((m) => (
+                <div key={m.key} className="flex-1 text-center">
+                  <span className={`text-[10px] ${m.isCurrent ? "font-semibold text-purple-600" : "text-gray-400"}`}>
+                    {m.label}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Monthly cards with weekly breakdown */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {monthlyData.map((m) => {
-              const weekMax = Math.max(...m.weeks.map((w) => w.total), 1);
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Monthly Breakdown</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {monthlyData.map((m, mIdx) => {
+                const weekMax = Math.max(...m.weeks.map((w) => w.total), 1);
+                const prevMonth = monthlyData[mIdx + 1];
+                const monthChange = prevMonth ? pctChange(m.total, prevMonth.total) : null;
+                const isCurrent = m.key === currentMonthKey;
 
-              return (
-                <div
-                  key={m.key}
-                  className="bg-white rounded-xl border border-gray-200 p-5"
-                >
-                  <div className="flex items-baseline justify-between mb-1">
-                    <h3 className="font-semibold text-gray-900">{m.label}</h3>
-                    {m.key === currentMonthKey && (
-                      <span className="text-xs font-medium text-purple-600 bg-purple-50 rounded-full px-2 py-0.5">
-                        Current
+                return (
+                  <div
+                    key={m.key}
+                    className={`rounded-xl border p-5 transition-all ${
+                      isCurrent
+                        ? "bg-purple-50/50 border-purple-200"
+                        : "bg-white border-gray-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className={`text-sm font-semibold ${isCurrent ? "text-purple-900" : "text-gray-700"}`}>
+                        {m.label}
+                      </h4>
+                      {monthChange !== null && (
+                        <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium rounded-full px-1.5 py-0.5 ${
+                          monthChange >= 0
+                            ? "bg-emerald-50 text-emerald-600"
+                            : "bg-red-50 text-red-600"
+                        }`}>
+                          {monthChange >= 0 ? (
+                            <TrendingUpIcon className="size-2.5" />
+                          ) : (
+                            <TrendingDownIcon className="size-2.5" />
+                          )}
+                          {monthChange >= 0 ? "+" : ""}{monthChange}%
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-baseline gap-3 mb-1">
+                      <span className={`text-xl font-bold ${isCurrent ? "text-purple-900" : "text-gray-900"}`}>
+                        ${m.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
-                    )}
-                  </div>
-                  <p className="text-2xl font-bold text-gray-900 mb-1">
-                    ${m.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-xs text-gray-500 mb-4">
-                    {m.count} payment{m.count !== 1 ? "s" : ""}
-                  </p>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-gray-400 mb-4">
+                      <span>{m.count} payment{m.count !== 1 ? "s" : ""}</span>
+                      <span className="text-gray-200">|</span>
+                      <span>${m.avgPerTransaction.toFixed(0)} avg</span>
+                    </div>
 
-                  {/* Weekly bar chart */}
-                  <div className="flex items-end gap-2 h-20">
-                    {m.weeks.map((w, i) => {
-                      const height = weekMax > 0 ? (w.total / weekMax) * 100 : 0;
-                      return (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                          <div className="w-full relative h-16">
-                            <div
-                              className={`absolute bottom-0 left-0 right-0 rounded-t transition-all ${
-                                w.total > 0
-                                  ? m.key === currentMonthKey
-                                    ? "bg-purple-500"
-                                    : "bg-purple-300"
-                                  : "bg-gray-100"
-                              }`}
-                              style={{ height: `${Math.max(height, 4)}%` }}
-                            />
+                    {/* Weekly bar chart */}
+                    <div className="flex items-end gap-1.5 h-16">
+                      {m.weeks.map((w, i) => {
+                        const height = weekMax > 0 ? (w.total / weekMax) * 100 : 0;
+                        return (
+                          <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
+                            <div className="w-full relative h-12">
+                              <div
+                                className={`absolute bottom-0 left-0 right-0 rounded transition-all ${
+                                  w.total > 0
+                                    ? isCurrent
+                                      ? "bg-gradient-to-t from-purple-600 to-purple-400"
+                                      : "bg-gradient-to-t from-gray-300 to-gray-200"
+                                    : "bg-gray-100"
+                                }`}
+                                style={{ height: `${Math.max(height, 6)}%` }}
+                              />
+                            </div>
+                            <span className="text-[9px] text-gray-400 font-medium">W{i + 1}</span>
+                            {/* Tooltip */}
+                            {w.total > 0 && (
+                              <div className="absolute -top-7 left-1/2 -translate-x-1/2 hidden group-hover:block z-10">
+                                <div className="bg-gray-900 text-white text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap">
+                                  ${w.total.toFixed(0)}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <span className="text-[10px] text-gray-400">W{i + 1}</span>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           {monthlyData.length === 0 && (

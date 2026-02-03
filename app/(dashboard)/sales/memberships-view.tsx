@@ -30,7 +30,6 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
   const [planName, setPlanName] = useState("");
   const [planDesc, setPlanDesc] = useState("");
   const [planPrice, setPlanPrice] = useState(0);
-  const [planCycle, setPlanCycle] = useState("Monthly");
 
   // Assign form state
   const [assignPlanId, setAssignPlanId] = useState("");
@@ -49,13 +48,11 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
       setPlanName(plan.name);
       setPlanDesc(plan.description ?? "");
       setPlanPrice(plan.price);
-      setPlanCycle(plan.billingCycle);
     } else {
       setEditingPlan(null);
       setPlanName("");
       setPlanDesc("");
       setPlanPrice(0);
-      setPlanCycle("Monthly");
     }
     setShowPlanForm(true);
   }
@@ -64,7 +61,7 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
     if (!planName.trim() || planPrice <= 0) { setError("Name and price are required"); return; }
     setError(null);
     startTransition(async () => {
-      const input = { name: planName, description: planDesc || undefined, price: planPrice, billingCycle: planCycle };
+      const input = { name: planName, description: planDesc || undefined, price: planPrice };
       const result = editingPlan
         ? await updateMembershipPlan(editingPlan.id, input)
         : await createMembershipPlan(input);
@@ -141,21 +138,14 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
 
         {showPlanForm && (
           <div className="bg-white border rounded-lg p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
                 <input value={planName} onChange={(e) => setPlanName(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Price ($)</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Price ($/mo)</label>
                 <input type="number" min={0} step={0.01} value={planPrice} onChange={(e) => setPlanPrice(parseFloat(e.target.value) || 0)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Billing Cycle</label>
-                <select value={planCycle} onChange={(e) => setPlanCycle(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
-                  <option value="Monthly">Monthly</option>
-                  <option value="Weekly">Weekly</option>
-                </select>
               </div>
             </div>
             <div>
@@ -179,7 +169,7 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
                 <select value={assignPlanId} onChange={(e) => setAssignPlanId(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
                   <option value="">Select plan...</option>
                   {plans.filter((p) => p.isActive).map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} (${p.price.toFixed(2)}/{p.billingCycle === "Weekly" ? "wk" : "mo"})</option>
+                    <option key={p.id} value={p.id}>{p.name} (${p.price.toFixed(2)}/mo)</option>
                   ))}
                 </select>
               </div>
@@ -231,8 +221,7 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
               <thead className="bg-gray-50 border-b">
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Membership</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Type</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Price</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Price/mo</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Active Patients</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Paused</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">MRR</th>
@@ -247,14 +236,6 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900">{d.name}</div>
                       {d.description && <div className="text-xs text-gray-500">{d.description}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={cn(
-                        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                        d.billingCycle === "Weekly" ? "bg-blue-50 text-blue-700" : "bg-indigo-50 text-indigo-700"
-                      )}>
-                        {d.billingCycle}
-                      </span>
                     </td>
                     <td className="px-4 py-3 text-right font-medium">${d.price.toFixed(2)}</td>
                     <td className="px-4 py-3 text-right font-medium text-green-700">{d.activeMembers}</td>
@@ -280,19 +261,6 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="bg-gray-50 border-t">
-                <tr className="font-semibold">
-                  <td className="px-4 py-3 text-gray-700">Totals</td>
-                  <td />
-                  <td />
-                  <td className="px-4 py-3 text-right text-green-700">{totalActive}</td>
-                  <td className="px-4 py-3 text-right text-yellow-600">{membershipData.reduce((s, d) => s + d.pausedMembers, 0)}</td>
-                  <td className="px-4 py-3 text-right font-bold">${totalMRR.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
-                  <td />
-                  <td />
-                  <td />
-                </tr>
-              </tfoot>
             </table>
           )}
         </div>

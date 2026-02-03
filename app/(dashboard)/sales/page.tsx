@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getInvoices } from "@/lib/actions/invoices";
+import { getInvoices, getClinicInfo } from "@/lib/actions/invoices";
 import { getPayments } from "@/lib/actions/payments";
 import { getMembershipPlans, getMembershipData } from "@/lib/actions/memberships";
 import { getServicesForClinic } from "@/lib/actions/services";
@@ -29,12 +29,13 @@ export default async function SalesPage({ searchParams }: Props) {
   let content: React.ReactNode = null;
 
   if (section === "invoices") {
-    const [invoices, services] = await Promise.all([
+    const [invoices, services, clinicInfo] = await Promise.all([
       getInvoices(),
       getServicesForClinic(),
+      getClinicInfo(),
     ]);
     const serviceOptions = services.map((s) => ({ id: s.id, name: s.name, price: s.price }));
-    content = <InvoiceListView initialInvoices={invoices} services={serviceOptions} />;
+    content = <InvoiceListView initialInvoices={invoices} services={serviceOptions} clinicInfo={clinicInfo} />;
   } else if (section === "payments") {
     const payments = await getPayments();
     content = <PaymentsView payments={payments} />;

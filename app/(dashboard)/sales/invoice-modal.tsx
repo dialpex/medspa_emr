@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition, useCallback } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus, Trash2, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   createInvoice,
@@ -12,13 +12,16 @@ import {
   type InvoiceDetail,
   type InvoiceItemInput,
   type PaymentInput,
+  type ClinicInfo,
 } from "@/lib/actions/invoices";
+import { InvoicePreview } from "./invoice-preview";
 
 type ServiceOption = { id: string; name: string; price: number };
 
 type Props = {
   invoice: InvoiceDetail | null;
   services: ServiceOption[];
+  clinicInfo: ClinicInfo;
   onClose: () => void;
 };
 
@@ -33,9 +36,10 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 
 const PAYMENT_METHODS = ["Cash", "Credit Card", "Debit Card", "Check", "Bank Transfer", "Other"];
 
-export function InvoiceModal({ invoice, services, onClose }: Props) {
+export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   // Patient
   const [patientId, setPatientId] = useState(invoice?.patientId ?? "");
@@ -70,8 +74,9 @@ export function InvoiceModal({ invoice, services, onClose }: Props) {
   const [discountValue, setDiscountValue] = useState(
     invoice?.discountPercent != null ? invoice.discountPercent : invoice?.discountAmount ?? 0
   );
-  const [taxEnabled, setTaxEnabled] = useState((invoice?.taxRate ?? 0) > 0);
-  const [taxRate, setTaxRate] = useState(invoice?.taxRate ?? 0);
+  const clinicTaxRate = clinicInfo.defaultTaxRate ?? 0;
+  const [taxEnabled, setTaxEnabled] = useState((invoice?.taxRate ?? clinicTaxRate) > 0);
+  const [taxRate, setTaxRate] = useState(invoice?.taxRate ?? clinicTaxRate);
 
   // Payment recording
   const [payAmount, setPayAmount] = useState(0);
@@ -327,7 +332,7 @@ export function InvoiceModal({ invoice, services, onClose }: Props) {
                         <input
                           type="number"
                           min={0}
-                          step={0.01}
+                          step={1}
                           value={item.unitPrice}
                           onChange={(e) => updateItem(item.key, "unitPrice", parseFloat(e.target.value) || 0)}
                           className="w-full text-right border-0 p-0 text-sm focus:ring-0"
@@ -460,15 +465,24 @@ export function InvoiceModal({ invoice, services, onClose }: Props) {
                 <div className="flex items-end gap-3 pt-2">
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Amount</label>
-                    <input
-                      type="number"
-                      min={0.01}
-                      step={0.01}
-                      max={balance}
-                      value={payAmount}
-                      onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
-                      className="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0.01}
+                        step={0.01}
+                        max={balance}
+                        value={payAmount}
+                        onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
+                        className="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPayAmount(balance)}
+                        className="rounded-lg border border-purple-300 bg-purple-50 px-3 py-2 text-xs font-medium text-purple-700 hover:bg-purple-100 whitespace-nowrap"
+                      >
+                        Pay in Full
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Method</label>
@@ -511,6 +525,12 @@ export function InvoiceModal({ invoice, services, onClose }: Props) {
           >
             {isPending ? "Saving..." : invoice ? "Update Invoice" : "Create Invoice"}
           </button>
+          <button
+            onClick={() => setShowPreview(true)}
+            className="flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          >
+            <Eye className="size-4" /> Preview
+          </button>
           {!invoice && (
             <button
               onClick={() => {
@@ -540,6 +560,24 @@ export function InvoiceModal({ invoice, services, onClose }: Props) {
           )}
         </div>
       </div>
+
+      {/* Invoice Preview */}
+      {showPreview && (
+        <InvoicePreview
+          clinic={clinicInfo}
+          invoiceNumber={invoice?.invoiceNumber ?? "DRAFT"}
+          date={invoice ? new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" }) : new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" })}
+          patientName={patientName}
+          patientEmail={patientEmail}
+          patientPhone={patientPhone}
+          items={items.map((i) => ({ description: i.description, quantity: i.quantity, unitPrice: i.unitPrice }))}
+          subtotal={subtotal}
+          discountAmount={discountAmount}
+          taxAmount={taxAmount}
+          total={total}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
     </div>
   );
 }
