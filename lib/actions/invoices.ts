@@ -123,7 +123,7 @@ function calculateTotals(items: InvoiceItemInput[], discountAmount: number, disc
 export async function getInvoices(filters?: InvoiceFilters): Promise<InvoiceListItem[]> {
   const user = await requirePermission("invoices", "view");
 
-  const where: Record<string, unknown> = { clinicId: user.clinicId };
+  const where: Record<string, unknown> = { clinicId: user.clinicId, deletedAt: null };
   if (filters?.status) where.status = filters.status;
   if (filters?.invoiceNumber) where.invoiceNumber = { contains: filters.invoiceNumber };
   if (filters?.search) {
@@ -164,14 +164,29 @@ export async function getInvoices(filters?: InvoiceFilters): Promise<InvoiceList
 export async function getInvoice(id: string): Promise<InvoiceDetail | null> {
   const user = await requirePermission("invoices", "view");
 
-  return prisma.invoice.findFirst({
-    where: { id, clinicId: user.clinicId },
+  const invoice = await prisma.invoice.findFirst({
+    where: { id, clinicId: user.clinicId, deletedAt: null },
     include: {
       patient: { select: { id: true, firstName: true, lastName: true } },
-      items: { select: { id: true, serviceId: true, description: true, quantity: true, unitPrice: true, total: true } },
-      payments: { select: { id: true, amount: true, paymentMethod: true, reference: true, notes: true, createdAt: true }, orderBy: { createdAt: "desc" } },
+      items: { where: { deletedAt: null }, select: { id: true, serviceId: true, description: true, quantity: true, unitPrice: true, total: true } },
+      payments: { where: { deletedAt: null }, select: { id: true, amount: true, paymentMethod: true, reference: true, notes: true, createdAt: true }, orderBy: { createdAt: "desc" } },
     },
   });
+
+  if (invoice) {
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "InvoiceView",
+        entityType: "Invoice",
+        entityId: invoice.id,
+        details: JSON.stringify({ invoiceNumber: invoice.invoiceNumber }),
+      },
+    });
+  }
+
+  return invoice;
 }
 
 export async function createInvoice(input: InvoiceInput) {
@@ -204,6 +219,17 @@ export async function createInvoice(input: InvoiceInput) {
       },
     });
 
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "InvoiceCreate",
+        entityType: "Invoice",
+        entityId: invoice.id,
+        details: JSON.stringify({ patientId: input.patientId, invoiceNumber, total: totals.total }),
+      },
+    });
+
     revalidatePath("/sales");
     return { success: true as const, data: invoice };
   } catch (error) {
@@ -215,10 +241,19 @@ export async function createInvoice(input: InvoiceInput) {
 export async function updateInvoice(id: string, input: InvoiceInput) {
   try {
     const user = await requirePermission("invoices", "edit");
+
+    const existing = await prisma.invoice.findFirst({
+      where: { id, clinicId: user.clinicId, deletedAt: null },
+    });
+    if (!existing) return { success: false as const, error: "Invoice not found" };
+
     const totals = calculateTotals(input.items, input.discountAmount ?? 0, input.discountPercent ?? null, input.taxRate ?? null);
 
-    // Delete existing items and recreate
-    await prisma.invoiceItem.deleteMany({ where: { invoiceId: id, clinicId: user.clinicId } });
+    // Soft delete existing items and recreate
+    await prisma.invoiceItem.updateMany({
+      where: { invoiceId: id, clinicId: user.clinicId },
+      data: { deletedAt: new Date() },
+    });
 
     const invoice = await prisma.invoice.update({
       where: { id },
@@ -243,6 +278,17 @@ export async function updateInvoice(id: string, input: InvoiceInput) {
       },
     });
 
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "InvoiceUpdate",
+        entityType: "Invoice",
+        entityId: invoice.id,
+        details: JSON.stringify({ invoiceNumber: existing.invoiceNumber, total: totals.total }),
+      },
+    });
+
     revalidatePath("/sales");
     return { success: true as const, data: invoice };
   } catch (error) {
@@ -254,10 +300,28 @@ export async function updateInvoice(id: string, input: InvoiceInput) {
 export async function updateInvoiceStatus(id: string, status: string) {
   try {
     const user = await requirePermission("invoices", "edit");
+
+    const existing = await prisma.invoice.findFirst({
+      where: { id, clinicId: user.clinicId, deletedAt: null },
+    });
+    if (!existing) return { success: false as const, error: "Invoice not found" };
+
     await prisma.invoice.update({
       where: { id },
       data: { status: status as "Draft" | "Sent" | "Void" | "Refunded" },
     });
+
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "InvoiceUpdate",
+        entityType: "Invoice",
+        entityId: id,
+        details: JSON.stringify({ previousStatus: existing.status, newStatus: status }),
+      },
+    });
+
     revalidatePath("/sales");
     return { success: true as const };
   } catch (error) {
@@ -269,7 +333,39 @@ export async function updateInvoiceStatus(id: string, status: string) {
 export async function deleteInvoice(id: string) {
   try {
     const user = await requirePermission("invoices", "delete");
-    await prisma.invoice.delete({ where: { id } });
+
+    const existing = await prisma.invoice.findFirst({
+      where: { id, clinicId: user.clinicId, deletedAt: null },
+    });
+    if (!existing) return { success: false as const, error: "Invoice not found" };
+
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.invoice.update({
+        where: { id },
+        data: { deletedAt: now },
+      }),
+      prisma.invoiceItem.updateMany({
+        where: { invoiceId: id },
+        data: { deletedAt: now },
+      }),
+      prisma.payment.updateMany({
+        where: { invoiceId: id },
+        data: { deletedAt: now },
+      }),
+    ]);
+
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "InvoiceDelete",
+        entityType: "Invoice",
+        entityId: id,
+        details: JSON.stringify({ invoiceNumber: existing.invoiceNumber, total: existing.total }),
+      },
+    });
+
     revalidatePath("/sales");
     return { success: true as const };
   } catch (error) {
@@ -283,12 +379,12 @@ export async function recordPayment(input: PaymentInput) {
     const user = await requirePermission("invoices", "edit");
 
     const invoice = await prisma.invoice.findFirst({
-      where: { id: input.invoiceId, clinicId: user.clinicId },
-      include: { payments: { select: { amount: true } } },
+      where: { id: input.invoiceId, clinicId: user.clinicId, deletedAt: null },
+      include: { payments: { where: { deletedAt: null }, select: { amount: true } } },
     });
     if (!invoice) return { success: false as const, error: "Invoice not found" };
 
-    await prisma.payment.create({
+    const payment = await prisma.payment.create({
       data: {
         clinicId: user.clinicId,
         invoiceId: input.invoiceId,
@@ -296,6 +392,17 @@ export async function recordPayment(input: PaymentInput) {
         paymentMethod: input.paymentMethod,
         reference: input.reference || null,
         notes: input.notes || null,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "PaymentCreate",
+        entityType: "Payment",
+        entityId: payment.id,
+        details: JSON.stringify({ invoiceId: input.invoiceId, amount: input.amount, paymentMethod: input.paymentMethod }),
       },
     });
 
@@ -352,6 +459,7 @@ export async function searchPatients(query: string) {
     SELECT id, firstName, lastName, email, phone, tags
     FROM Patient
     WHERE clinicId = ${user.clinicId}
+      AND deletedAt IS NULL
       AND (firstName LIKE ${'%' + q + '%'} OR lastName LIKE ${'%' + q + '%'} OR (firstName || ' ' || lastName) LIKE ${'%' + q + '%'})
     LIMIT 10
   `;

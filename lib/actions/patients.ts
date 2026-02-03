@@ -267,7 +267,7 @@ export async function getPatientTimeline(patientId: string): Promise<PatientTime
       },
     }),
     prisma.invoice.findMany({
-      where: { patientId },
+      where: { patientId, clinicId: user.clinicId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,

@@ -3,7 +3,6 @@
 import { prisma } from "@/lib/prisma";
 import {
   requirePermission,
-  enforceTenantIsolation,
   AuthorizationError,
 } from "@/lib/rbac";
 
@@ -59,13 +58,25 @@ export async function updatePhotoAnnotations(id: string, annotations: string) {
   try {
     const user = await requirePermission("photos", "edit");
 
-    const photo = await prisma.photo.findUnique({ where: { id } });
+    const photo = await prisma.photo.findFirst({
+      where: { id, clinicId: user.clinicId, deletedAt: null },
+    });
     if (!photo) return { success: false as const, error: "Photo not found" };
-    enforceTenantIsolation(user, photo.clinicId);
 
     await prisma.photo.update({
       where: { id },
       data: { annotations },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "PhotoAnnotationUpdate",
+        entityType: "Photo",
+        entityId: id,
+        details: JSON.stringify({ patientId: photo.patientId }),
+      },
     });
 
     return { success: true as const };
@@ -81,13 +92,25 @@ export async function deletePhoto(id: string) {
   try {
     const user = await requirePermission("photos", "delete");
 
-    const photo = await prisma.photo.findUnique({ where: { id } });
+    const photo = await prisma.photo.findFirst({
+      where: { id, clinicId: user.clinicId, deletedAt: null },
+    });
     if (!photo) return { success: false as const, error: "Photo not found" };
-    enforceTenantIsolation(user, photo.clinicId);
 
     await prisma.photo.update({
       where: { id },
       data: { deletedAt: new Date() },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "PhotoDelete",
+        entityType: "Photo",
+        entityId: id,
+        details: JSON.stringify({ patientId: photo.patientId, filename: photo.filename }),
+      },
     });
 
     return { success: true as const };
@@ -102,12 +125,28 @@ export async function deletePhoto(id: string) {
 export async function getPhotosForChart(chartId: string) {
   const user = await requirePermission("photos", "view");
 
-  const chart = await prisma.chart.findUnique({ where: { id: chartId } });
+  const chart = await prisma.chart.findFirst({
+    where: { id: chartId, clinicId: user.clinicId, deletedAt: null },
+  });
   if (!chart) return [];
-  enforceTenantIsolation(user, chart.clinicId);
 
-  return prisma.photo.findMany({
+  const photos = await prisma.photo.findMany({
     where: { chartId, deletedAt: null },
     orderBy: { createdAt: "asc" },
   });
+
+  if (photos.length > 0) {
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "PhotoView",
+        entityType: "Chart",
+        entityId: chartId,
+        details: JSON.stringify({ photoCount: photos.length }),
+      },
+    });
+  }
+
+  return photos;
 }
