@@ -26,7 +26,7 @@ export type PaymentFilters = {
 export async function getPayments(filters?: PaymentFilters): Promise<PaymentListItem[]> {
   const user = await requirePermission("invoices", "view");
 
-  const where: Record<string, unknown> = { clinicId: user.clinicId };
+  const where: Record<string, unknown> = { clinicId: user.clinicId, deletedAt: null, invoice: { deletedAt: null } };
 
   if (filters?.method) where.paymentMethod = filters.method;
   if (filters?.dateFrom || filters?.dateTo) {

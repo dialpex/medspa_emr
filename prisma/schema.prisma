@@ -417,6 +417,7 @@ model Invoice {
   paidAt        DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
 
   // Relations
   clinic      Clinic       @relation(fields: [clinicId], references: [id])
@@ -439,6 +440,7 @@ model InvoiceItem {
   quantity    Int     @default(1)
   unitPrice   Float
   total       Float
+  deletedAt   DateTime?
 
   // Relations
   clinic  Clinic   @relation(fields: [clinicId], references: [id])
@@ -458,6 +460,7 @@ model Payment {
   reference     String?  // External reference number
   notes         String?
   createdAt     DateTime @default(now())
+  deletedAt     DateTime?
 
   // Relations
   clinic  Clinic  @relation(fields: [clinicId], references: [id])
@@ -523,11 +526,18 @@ enum AuditAction {
   ChartSign
   PhotoView
   PhotoUpload
+  PhotoAnnotationUpdate
+  PhotoDelete
   ConsentView
   ConsentSign
   PatientView
   PatientCreate
   PatientUpdate
+  InvoiceView
+  InvoiceCreate
+  InvoiceUpdate
+  InvoiceDelete
+  PaymentCreate
   Login
   Logout
 }
