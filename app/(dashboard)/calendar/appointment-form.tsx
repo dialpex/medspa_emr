@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { XIcon, SearchIcon, TrashIcon, Loader2Icon } from "lucide-react";
+import { XIcon, SearchIcon, TrashIcon, Loader2Icon, PlusIcon } from "lucide-react";
 import type { AppointmentStatus } from "@prisma/client";
 import {
   createAppointment,
@@ -10,6 +10,7 @@ import {
   updateAppointmentStatus,
   deleteAppointment,
   searchPatients,
+  quickCreatePatient,
   type CalendarAppointment,
   type Provider,
   type Room,
@@ -65,6 +66,11 @@ export function AppointmentForm({
   const [status, setStatus] = useState<AppointmentStatus>("Scheduled");
   const [error, setError] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showNewPatient, setShowNewPatient] = useState(false);
+  const [newFirst, setNewFirst] = useState("");
+  const [newLast, setNewLast] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
 
   // Reset form state whenever the modal opens with new data
   useEffect(() => {
@@ -74,6 +80,11 @@ export function AppointmentForm({
     setShowDeleteConfirm(false);
     setPatientSearch("");
     setSearchResults([]);
+    setShowNewPatient(false);
+    setNewFirst("");
+    setNewLast("");
+    setNewEmail("");
+    setNewPhone("");
 
     if (appointment) {
       // Editing mode - populate from appointment
@@ -313,7 +324,7 @@ export function AppointmentForm({
                 )}
 
                 {/* Search Results Dropdown */}
-                {searchResults.length > 0 && (
+                {patientSearch.length >= 2 && !showNewPatient && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                     {searchResults.map((patient) => (
                       <button
@@ -332,6 +343,117 @@ export function AppointmentForm({
                         )}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewPatient(true);
+                        setSearchResults([]);
+                      }}
+                      className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors border-t flex items-center gap-2 text-gray-700"
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                      <span>New Patient</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Inline New Patient Form */}
+                {showNewPatient && (
+                  <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="text-sm font-medium text-gray-700 mb-3">New Patient</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">First Name *</label>
+                        <input
+                          type="text"
+                          value={newFirst}
+                          onChange={(e) => setNewFirst(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                          placeholder="First name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Last Name *</label>
+                        <input
+                          type="text"
+                          value={newLast}
+                          onChange={(e) => setNewLast(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                          placeholder="Last name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Email</label>
+                        <input
+                          type="email"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                          placeholder="email@example.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Phone</label>
+                        <input
+                          type="tel"
+                          value={newPhone}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                            let formatted = "";
+                            if (digits.length > 6) formatted = `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+                            else if (digits.length > 3) formatted = `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+                            else if (digits.length > 0) formatted = `(${digits}`;
+                            else formatted = "";
+                            setNewPhone(formatted);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+                          placeholder="(555) 555-5555"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        type="button"
+                        disabled={isPending || !newFirst.trim() || !newLast.trim()}
+                        onClick={() => {
+                          startTransition(async () => {
+                            try {
+                              const patient = await quickCreatePatient({
+                                firstName: newFirst.trim(),
+                                lastName: newLast.trim(),
+                                email: newEmail.trim() || undefined,
+                                phone: newPhone.trim() || undefined,
+                              });
+                              setSelectedPatient(patient);
+                              setShowNewPatient(false);
+                              setPatientSearch("");
+                              setNewFirst("");
+                              setNewLast("");
+                              setNewEmail("");
+                              setNewPhone("");
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : "Failed to create patient");
+                            }
+                          });
+                        }}
+                        className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        {isPending ? "Creating..." : "Create Patient"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNewPatient(false);
+                          setNewFirst("");
+                          setNewLast("");
+                          setNewEmail("");
+                          setNewPhone("");
+                        }}
+                        className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

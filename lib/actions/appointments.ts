@@ -637,3 +637,35 @@ export async function getAppointmentPermissions(): Promise<{
     canDelete: hasPermission(user.role, "appointments", "delete"),
   };
 }
+
+/**
+ * Quick create a patient for inline appointment creation
+ */
+export async function quickCreatePatient(input: {
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phone?: string;
+}): Promise<PatientSearchResult> {
+  const user = await requirePermission("patients", "create");
+
+  const patient = await prisma.patient.create({
+    data: {
+      clinicId: user.clinicId,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email || null,
+      phone: input.phone || null,
+    },
+  });
+
+  revalidatePath("/patients");
+
+  return {
+    id: patient.id,
+    firstName: patient.firstName,
+    lastName: patient.lastName,
+    email: patient.email,
+    phone: patient.phone,
+  };
+}
