@@ -15,13 +15,17 @@ import {
   EditIcon,
   Loader2Icon,
   FileTextIcon,
+  SparklesIcon,
+  TagIcon,
 } from "lucide-react";
 import type { AppointmentStatus } from "@prisma/client";
 import {
   getAppointmentWithPatient,
   updateAppointmentStatus,
+  getPatientTransactionHistory,
   type AppointmentDetail,
   type CalendarAppointment,
+  type PatientTransaction,
   type Provider,
   type Room,
   type Service,
@@ -106,21 +110,30 @@ export function AppointmentPanel({
 }: AppointmentPanelProps) {
   const router = useRouter();
   const [detail, setDetail] = useState<AppointmentDetail | null>(null);
+  const [transactions, setTransactions] = useState<PatientTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [editFormOpen, setEditFormOpen] = useState(false);
 
   const isOpen = !!appointmentId;
 
-  // Fetch appointment detail
+  // Fetch appointment detail and transaction history
   useEffect(() => {
     if (!appointmentId) {
       setDetail(null);
+      setTransactions([]);
       return;
     }
     setLoading(true);
     getAppointmentWithPatient(appointmentId)
-      .then(setDetail)
+      .then((data) => {
+        setDetail(data);
+        if (data) {
+          getPatientTransactionHistory(data.patientId)
+            .then(setTransactions)
+            .catch(() => setTransactions([]));
+        }
+      })
       .catch(() => setDetail(null))
       .finally(() => setLoading(false));
   }, [appointmentId]);
@@ -318,6 +331,50 @@ export function AppointmentPanel({
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  {/* Purchase History */}
+                  <div className="p-4 space-y-3">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Purchase History
+                    </h3>
+                    {transactions.length === 0 ? (
+                      <p className="text-sm text-gray-400">No purchase history</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {transactions.map((tx) => (
+                          <div
+                            key={tx.id}
+                            className="flex items-center gap-3 py-1.5"
+                          >
+                            <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
+                              tx.isService
+                                ? "bg-purple-50 text-purple-500"
+                                : "bg-gray-100 text-gray-500"
+                            }`}>
+                              {tx.isService ? (
+                                <SparklesIcon className="h-3.5 w-3.5" />
+                              ) : (
+                                <TagIcon className="h-3.5 w-3.5" />
+                              )}
+                            </div>
+                            <span className="flex-1 text-sm text-gray-900 truncate">
+                              {tx.description}
+                            </span>
+                            <span className="text-xs text-gray-400 whitespace-nowrap">
+                              {new Date(tx.date).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })}
+                            </span>
+                            <span className="text-sm font-medium text-gray-900 tabular-nums w-16 text-right">
+                              ${tx.amount.toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : null}

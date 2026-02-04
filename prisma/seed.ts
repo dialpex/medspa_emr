@@ -1069,6 +1069,57 @@ By signing below, I confirm my consent to proceed with treatment.`,
   }
   console.log(`Created ${salesData.length} additional invoices with payments (Nov 2025 – Jan 2026)`);
 
+  // Product purchases (no serviceId — retail items)
+  const productSales = [
+    { patientIdx: 0, description: "SkinCeuticals C E Ferulic Serum", price: 182, date: new Date("2026-01-10T11:00:00"), method: "credit", ref: "VISA-4242" },
+    { patientIdx: 0, description: "EltaMD UV Clear Sunscreen SPF 46", price: 39, date: new Date("2026-01-10T11:00:00"), method: "credit", ref: "VISA-4242" },
+    { patientIdx: 2, description: "Revision Skincare Nectifirm", price: 98, date: new Date("2025-12-20T14:00:00"), method: "credit", ref: "AMEX-3310" },
+    { patientIdx: 4, description: "Alastin Regenerating Skin Nectar", price: 195, date: new Date("2026-01-08T10:00:00"), method: "debit", ref: "DBT-9901" },
+    { patientIdx: 1, description: "iS Clinical Active Serum", price: 138, date: new Date("2026-01-15T09:00:00"), method: "credit", ref: "VISA-9944" },
+  ];
+
+  for (const sale of productSales) {
+    const invNum = `INV-${String(invoiceCounter++).padStart(5, "0")}`;
+    await prisma.invoice.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[sale.patientIdx].id,
+        invoiceNumber: invNum,
+        status: "Paid",
+        subtotal: sale.price,
+        discountAmount: 0,
+        taxAmount: 0,
+        total: sale.price,
+        paidAt: sale.date,
+        createdAt: sale.date,
+        items: {
+          create: [
+            {
+              clinicId: clinic.id,
+              description: sale.description,
+              quantity: 1,
+              unitPrice: sale.price,
+              total: sale.price,
+              // No serviceId — this is a retail product
+            },
+          ],
+        },
+        payments: {
+          create: [
+            {
+              clinicId: clinic.id,
+              amount: sale.price,
+              paymentMethod: sale.method,
+              reference: sale.ref || null,
+              createdAt: sale.date,
+            },
+          ],
+        },
+      },
+    });
+  }
+  console.log(`Created ${productSales.length} product (retail) invoices`);
+
   // ===========================================
   // PATIENT MEMBERSHIPS
   // ===========================================

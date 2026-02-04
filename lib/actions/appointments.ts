@@ -639,6 +639,48 @@ export async function getAppointmentPermissions(): Promise<{
 }
 
 /**
+ * Get last 5 purchased items (services/products) for a patient
+ */
+export type PatientTransaction = {
+  id: string;
+  description: string;
+  date: Date;
+  amount: number;
+  isService: boolean;
+};
+
+export async function getPatientTransactionHistory(
+  patientId: string
+): Promise<PatientTransaction[]> {
+  const user = await requirePermission("invoices", "view");
+
+  const items = await prisma.invoiceItem.findMany({
+    where: {
+      deletedAt: null,
+      clinicId: user.clinicId,
+      invoice: {
+        patientId,
+        clinicId: user.clinicId,
+        deletedAt: null,
+      },
+    },
+    include: {
+      invoice: { select: { createdAt: true } },
+    },
+    orderBy: { invoice: { createdAt: "desc" } },
+    take: 5,
+  });
+
+  return items.map((item) => ({
+    id: item.id,
+    description: item.description,
+    date: item.invoice.createdAt,
+    amount: item.total,
+    isService: !!item.serviceId,
+  }));
+}
+
+/**
  * Quick create a patient for inline appointment creation
  */
 export async function quickCreatePatient(input: {
