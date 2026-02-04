@@ -289,9 +289,374 @@ export function AppointmentForm({
 
   const canSubmit = isEditing ? permissions.canEdit : permissions.canCreate;
 
+  // Shared input class
+  const inputClass = "w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent";
+  const labelClass = "block text-sm font-medium text-gray-700 mb-1";
+
+  // Appointment details fields (reused in both layouts)
+  const appointmentFields = (
+    <>
+      {/* Provider & Service */}
+      <div className={showNewPatient ? "grid grid-cols-2 gap-3" : "space-y-4"}>
+        <div>
+          <label className={labelClass}>Provider *</label>
+          <select
+            value={providerId}
+            onChange={(e) => setProviderId(e.target.value)}
+            className={inputClass}
+            disabled={!canSubmit}
+            required
+          >
+            <option value="">Select provider...</option>
+            {providers.map((provider) => (
+              <option key={provider.id} value={provider.id}>
+                {provider.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Service</label>
+          <select
+            value={serviceId}
+            onChange={(e) => setServiceId(e.target.value)}
+            className={inputClass}
+            disabled={!canSubmit}
+          >
+            <option value="">No service selected</option>
+            {services.map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.name} ({service.duration} min - ${service.price})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Room & Date */}
+      <div className={showNewPatient ? "grid grid-cols-2 gap-3" : "space-y-4"}>
+        {rooms.length > 0 && (
+          <div>
+            <label className={labelClass}>Room</label>
+            <select
+              value={roomId}
+              onChange={(e) => setRoomId(e.target.value)}
+              className={inputClass}
+              disabled={!canSubmit}
+            >
+              <option value="">No room assigned</option>
+              {rooms.map((room) => (
+                <option key={room.id} value={room.id}>
+                  {room.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div>
+          <label className={labelClass}>Date *</label>
+          <input
+            type="date"
+            value={startTime.split("T")[0] || ""}
+            onChange={(e) => {
+              const date = e.target.value;
+              const startTimePart = startTime.split("T")[1] || "09:00";
+              const endTimePart = endTime.split("T")[1] || "09:30";
+              setStartTime(`${date}T${startTimePart}`);
+              setEndTime(`${date}T${endTimePart}`);
+            }}
+            className={inputClass}
+            disabled={!canSubmit}
+            required
+          />
+        </div>
+      </div>
+
+      {/* Start/End Time */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelClass}>Start Time *</label>
+          <TimeSelect
+            value={startTime.split("T")[1] || ""}
+            onChange={(time) => {
+              const date = startTime.split("T")[0] || "";
+              setStartTime(`${date}T${time}`);
+            }}
+            disabled={!canSubmit}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>End Time *</label>
+          <TimeSelect
+            value={endTime.split("T")[1] || ""}
+            onChange={(time) => {
+              const date = endTime.split("T")[0] || "";
+              setEndTime(`${date}T${time}`);
+            }}
+            disabled={!canSubmit}
+          />
+        </div>
+      </div>
+
+      {/* Status (only for editing) */}
+      {isEditing && permissions.canEdit && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Status
+          </label>
+          <StatusSelector
+            value={status}
+            onChange={setStatus}
+            disabled={!permissions.canEdit}
+          />
+        </div>
+      )}
+
+      {/* Notes */}
+      <div>
+        <label className={labelClass}>Notes</label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={2}
+          className={`${inputClass} resize-none`}
+          disabled={!canSubmit}
+          placeholder="Optional notes..."
+        />
+      </div>
+    </>
+  );
+
+  // Patient search / new patient section
+  const patientSection = (
+    <div>
+      <label className={labelClass}>Patient *</label>
+      {selectedPatient ? (
+        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div>
+            <div className="font-medium">
+              {selectedPatient.firstName} {selectedPatient.lastName}
+            </div>
+            {(selectedPatient.email || selectedPatient.phone) && (
+              <div className="text-sm text-gray-500">
+                {selectedPatient.email || selectedPatient.phone}
+              </div>
+            )}
+          </div>
+          {canSubmit && (
+            <button
+              type="button"
+              onClick={() => setSelectedPatient(null)}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Change
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="relative">
+          {!showNewPatient && (
+            <>
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={patientSearch}
+                onChange={(e) => setPatientSearch(e.target.value)}
+                placeholder="Search by name, email, or phone..."
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                disabled={!canSubmit}
+              />
+              {isSearching && (
+                <Loader2Icon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+              )}
+
+              {/* Search Results Dropdown */}
+              {patientSearch.length >= 2 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {searchResults.map((patient) => (
+                    <button
+                      key={patient.id}
+                      type="button"
+                      onClick={() => selectPatient(patient)}
+                      className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="font-medium">
+                        {patient.firstName} {patient.lastName}
+                      </div>
+                      {(patient.email || patient.phone) && (
+                        <div className="text-sm text-gray-500">
+                          {patient.email || patient.phone}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const parts = patientSearch.trim().split(/\s+/);
+                      if (parts.length >= 2) {
+                        setNewFirst(parts[0]);
+                        setNewLast(parts.slice(1).join(" "));
+                      } else if (parts.length === 1) {
+                        setNewFirst(parts[0]);
+                      }
+                      setShowNewPatient(true);
+                      setSearchResults([]);
+                    }}
+                    className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors border-t flex items-center gap-2 text-gray-700"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    <span>New Patient</span>
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // New patient fields (rendered separately in two-column layout)
+  const newPatientFields = showNewPatient && !selectedPatient && (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium text-gray-700">New Patient</div>
+        <button
+          type="button"
+          onClick={() => {
+            setShowNewPatient(false);
+            setNewFirst("");
+            setNewLast("");
+            setNewEmail("");
+            setNewPhone("");
+          }}
+          className="text-xs text-gray-500 hover:text-gray-700"
+        >
+          Back to search
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">First Name *</label>
+          <input
+            type="text"
+            value={newFirst}
+            onChange={(e) => setNewFirst(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+            placeholder="First name"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Last Name *</label>
+          <input
+            type="text"
+            value={newLast}
+            onChange={(e) => setNewLast(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+            placeholder="Last name"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Email *</label>
+          <input
+            type="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+            placeholder="email@example.com"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Phone *</label>
+          <input
+            type="tel"
+            value={newPhone}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+              let formatted = "";
+              if (digits.length > 6) formatted = `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+              else if (digits.length > 3) formatted = `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+              else if (digits.length > 0) formatted = `(${digits}`;
+              else formatted = "";
+              setNewPhone(formatted);
+            }}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
+            placeholder="(555) 555-5555"
+            required
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  // Action buttons
+  const actionButtons = (
+    <div className="flex items-center justify-between pt-4 border-t">
+      {isEditing && permissions.canDelete ? (
+        showDeleteConfirm ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-red-600">Delete?</span>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isPending}
+              className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={isPending}
+              className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800"
+            >
+              No
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={isPending}
+            className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+          >
+            <TrashIcon className="h-4 w-4" />
+            Delete
+          </button>
+        )
+      ) : (
+        <div />
+      )}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={isPending}
+          className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        {canSubmit && (
+          <button
+            type="submit"
+            disabled={isPending}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50"
+          >
+            {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
+            {isEditing ? "Save Changes" : "Create Appointment"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto m-4">
+      <div className={`bg-white rounded-lg shadow-xl w-full m-4 max-h-[90vh] overflow-y-auto transition-all ${showNewPatient && !selectedPatient ? "max-w-3xl" : "max-w-lg"}`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-semibold">
@@ -306,383 +671,33 @@ export function AppointmentForm({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4">
           {error && (
-            <div className="p-3 text-sm text-red-600 bg-red-50 rounded-lg">
+            <div className="p-3 text-sm text-red-600 bg-red-50 rounded-lg mb-4">
               {error}
             </div>
           )}
 
-          {/* Patient Search */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Patient *
-            </label>
-            {selectedPatient ? (
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <div className="font-medium">
-                    {selectedPatient.firstName} {selectedPatient.lastName}
-                  </div>
-                  {(selectedPatient.email || selectedPatient.phone) && (
-                    <div className="text-sm text-gray-500">
-                      {selectedPatient.email || selectedPatient.phone}
-                    </div>
-                  )}
-                </div>
-                {canSubmit && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPatient(null)}
-                    className="text-sm text-gray-500 hover:text-gray-700"
-                  >
-                    Change
-                  </button>
-                )}
+          {showNewPatient && !selectedPatient ? (
+            /* Two-column layout: Patient Info | Appointment Details */
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-4">
+                {patientSection}
+                {newPatientFields}
               </div>
-            ) : (
-              <div className="relative">
-                {!showNewPatient && (
-                  <>
-                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={patientSearch}
-                      onChange={(e) => setPatientSearch(e.target.value)}
-                      placeholder="Search by name, email, or phone..."
-                      className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                      disabled={!canSubmit}
-                    />
-                    {isSearching && (
-                      <Loader2Icon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
-                    )}
-
-                    {/* Search Results Dropdown */}
-                    {patientSearch.length >= 2 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        {searchResults.map((patient) => (
-                          <button
-                            key={patient.id}
-                            type="button"
-                            onClick={() => selectPatient(patient)}
-                            className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
-                          >
-                            <div className="font-medium">
-                              {patient.firstName} {patient.lastName}
-                            </div>
-                            {(patient.email || patient.phone) && (
-                              <div className="text-sm text-gray-500">
-                                {patient.email || patient.phone}
-                              </div>
-                            )}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const parts = patientSearch.trim().split(/\s+/);
-                            if (parts.length >= 2) {
-                              setNewFirst(parts[0]);
-                              setNewLast(parts.slice(1).join(" "));
-                            } else if (parts.length === 1) {
-                              setNewFirst(parts[0]);
-                            }
-                            setShowNewPatient(true);
-                            setSearchResults([]);
-                          }}
-                          className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors border-t flex items-center gap-2 text-gray-700"
-                        >
-                          <PlusIcon className="h-4 w-4" />
-                          <span>New Patient</span>
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Inline New Patient Form */}
-                {showNewPatient && (
-                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="text-sm font-medium text-gray-700">New Patient</div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowNewPatient(false);
-                          setNewFirst("");
-                          setNewLast("");
-                          setNewEmail("");
-                          setNewPhone("");
-                        }}
-                        className="text-xs text-gray-500 hover:text-gray-700"
-                      >
-                        Back to search
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">First Name *</label>
-                        <input
-                          type="text"
-                          value={newFirst}
-                          onChange={(e) => setNewFirst(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                          placeholder="First name"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Last Name *</label>
-                        <input
-                          type="text"
-                          value={newLast}
-                          onChange={(e) => setNewLast(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                          placeholder="Last name"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Email *</label>
-                        <input
-                          type="email"
-                          value={newEmail}
-                          onChange={(e) => setNewEmail(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                          placeholder="email@example.com"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Phone *</label>
-                        <input
-                          type="tel"
-                          value={newPhone}
-                          onChange={(e) => {
-                            const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
-                            let formatted = "";
-                            if (digits.length > 6) formatted = `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-                            else if (digits.length > 3) formatted = `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-                            else if (digits.length > 0) formatted = `(${digits}`;
-                            else formatted = "";
-                            setNewPhone(formatted);
-                          }}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
-                          placeholder="(555) 555-5555"
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <div className="space-y-4">
+                {appointmentFields}
               </div>
-            )}
-          </div>
-
-          {/* Provider */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Provider *
-            </label>
-            <select
-              value={providerId}
-              onChange={(e) => setProviderId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-              disabled={!canSubmit}
-              required
-            >
-              <option value="">Select provider...</option>
-              {providers.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Service */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Service
-            </label>
-            <select
-              value={serviceId}
-              onChange={(e) => setServiceId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-              disabled={!canSubmit}
-            >
-              <option value="">No service selected</option>
-              {services.map((service) => (
-                <option key={service.id} value={service.id}>
-                  {service.name} ({service.duration} min - ${service.price})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Room */}
-          {rooms.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Room
-              </label>
-              <select
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                disabled={!canSubmit}
-              >
-                <option value="">No room assigned</option>
-                {rooms.map((room) => (
-                  <option key={room.id} value={room.id}>
-                    {room.name}
-                  </option>
-                ))}
-              </select>
+            </div>
+          ) : (
+            /* Single-column layout (search or selected patient) */
+            <div className="space-y-4">
+              {patientSection}
+              {appointmentFields}
             </div>
           )}
 
-          {/* Date/Time */}
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date *
-              </label>
-              <input
-                type="date"
-                value={startTime.split("T")[0] || ""}
-                onChange={(e) => {
-                  const date = e.target.value;
-                  const startTimePart = startTime.split("T")[1] || "09:00";
-                  const endTimePart = endTime.split("T")[1] || "09:30";
-                  setStartTime(`${date}T${startTimePart}`);
-                  setEndTime(`${date}T${endTimePart}`);
-                }}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                disabled={!canSubmit}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Start Time *
-                </label>
-                <TimeSelect
-                  value={startTime.split("T")[1] || ""}
-                  onChange={(time) => {
-                    const date = startTime.split("T")[0] || "";
-                    setStartTime(`${date}T${time}`);
-                  }}
-                  disabled={!canSubmit}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  End Time *
-                </label>
-                <TimeSelect
-                  value={endTime.split("T")[1] || ""}
-                  onChange={(time) => {
-                    const date = endTime.split("T")[0] || "";
-                    setEndTime(`${date}T${time}`);
-                  }}
-                  disabled={!canSubmit}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Status (only for editing) */}
-          {isEditing && permissions.canEdit && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Status
-              </label>
-              <StatusSelector
-                value={status}
-                onChange={setStatus}
-                disabled={!permissions.canEdit}
-              />
-            </div>
-          )}
-
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none"
-              disabled={!canSubmit}
-              placeholder="Optional notes..."
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-between pt-4 border-t">
-            {/* Delete button (only when editing and has permission) */}
-            {isEditing && permissions.canDelete ? (
-              showDeleteConfirm ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-red-600">Delete?</span>
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={isPending}
-                    className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteConfirm(false)}
-                    disabled={isPending}
-                    className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800"
-                  >
-                    No
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  disabled={isPending}
-                  className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
-                >
-                  <TrashIcon className="h-4 w-4" />
-                  Delete
-                </button>
-              )
-            ) : (
-              <div />
-            )}
-
-            {/* Submit/Cancel */}
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isPending}
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              {canSubmit && (
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50"
-                >
-                  {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
-                  {isEditing ? "Save Changes" : "Create Appointment"}
-                </button>
-              )}
-            </div>
-          </div>
+          {actionButtons}
         </form>
       </div>
     </div>
