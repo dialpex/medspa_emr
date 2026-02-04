@@ -217,6 +217,109 @@ async function main() {
   console.log(`Created ${services.length} services`);
 
   // ===========================================
+  // PRODUCTS (Retail items)
+  // ===========================================
+  const products = await Promise.all([
+    prisma.product.create({
+      data: {
+        clinicId: clinic.id,
+        name: "SkinCeuticals C E Ferulic Serum",
+        description: "High-potency vitamin C antioxidant serum with ferulic acid",
+        size: "1.0 oz",
+        sku: "SKC-CEF-30",
+        upc: "635494263008",
+        category: "Skincare",
+        retailPrice: 182,
+        wholesaleCost: 91,
+        vendor: "SkinCeuticals",
+        inventoryCount: 12,
+        taxable: true,
+      },
+    }),
+    prisma.product.create({
+      data: {
+        clinicId: clinic.id,
+        name: "EltaMD UV Clear Sunscreen SPF 46",
+        description: "Oil-free broad-spectrum sunscreen for sensitive and acne-prone skin",
+        size: "1.7 oz",
+        sku: "ELT-UVC-48",
+        upc: "390205024001",
+        category: "Skincare",
+        retailPrice: 39,
+        wholesaleCost: 19.5,
+        vendor: "EltaMD",
+        inventoryCount: 24,
+        taxable: true,
+      },
+    }),
+    prisma.product.create({
+      data: {
+        clinicId: clinic.id,
+        name: "Revision Skincare Nectifirm",
+        description: "Neck firming cream with plant extracts and peptides",
+        size: "1.7 oz",
+        sku: "REV-NCT-48",
+        upc: "877180001234",
+        category: "Skincare",
+        retailPrice: 98,
+        wholesaleCost: 49,
+        vendor: "Revision Skincare",
+        inventoryCount: 8,
+        taxable: true,
+      },
+    }),
+    prisma.product.create({
+      data: {
+        clinicId: clinic.id,
+        name: "Alastin Regenerating Skin Nectar",
+        description: "Post-procedure healing serum with TriHex Technology",
+        size: "1.0 oz",
+        sku: "ALA-RSN-30",
+        upc: "850004009123",
+        category: "Skincare",
+        retailPrice: 195,
+        wholesaleCost: 97.5,
+        vendor: "Alastin Skincare",
+        inventoryCount: 6,
+        taxable: true,
+      },
+    }),
+    prisma.product.create({
+      data: {
+        clinicId: clinic.id,
+        name: "iS Clinical Active Serum",
+        description: "Botanical anti-aging serum for all skin types",
+        size: "1.0 oz",
+        sku: "ISC-ACT-30",
+        upc: "817244010012",
+        category: "Skincare",
+        retailPrice: 138,
+        wholesaleCost: 69,
+        vendor: "iS Clinical",
+        inventoryCount: 10,
+        taxable: true,
+      },
+    }),
+    prisma.product.create({
+      data: {
+        clinicId: clinic.id,
+        name: "SkinMedica TNS Advanced+ Serum",
+        description: "Growth factor serum for fine lines and wrinkles",
+        size: "1.0 oz",
+        sku: "SKM-TNS-30",
+        upc: "895439002345",
+        category: "Skincare",
+        retailPrice: 295,
+        wholesaleCost: 147.5,
+        vendor: "SkinMedica",
+        inventoryCount: 4,
+        taxable: true,
+      },
+    }),
+  ]);
+  console.log(`Created ${products.length} products`);
+
+  // ===========================================
   // PATIENTS
   // ===========================================
   const patients = await Promise.all([
@@ -674,20 +777,8 @@ By signing below, I confirm my consent to proceed with treatment.`,
         notes: "Full face Sculptra session 2 of 3",
       },
     }),
-    // Today's appointments
-    prisma.appointment.create({
-      data: {
-        clinicId: clinic.id,
-        patientId: patients[1].id,
-        providerId: provider1.id,
-        serviceId: services[8].id, // Consultation
-        roomId: rooms[2].id,
-        startTime: setTime(today, 9, 0),
-        endTime: setTime(today, 9, 30),
-        status: "CheckedIn",
-        notes: "New patient consultation",
-      },
-    }),
+    // Today's appointments — covering all journey phases
+    // 1. Upcoming (Scheduled) — no timestamps
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
@@ -700,6 +791,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         status: "Scheduled",
       },
     }),
+    // 2. Upcoming (Confirmed) — no timestamps
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
@@ -710,6 +802,85 @@ By signing below, I confirm my consent to proceed with treatment.`,
         startTime: setTime(today, 11, 0),
         endTime: setTime(today, 12, 0),
         status: "Confirmed",
+      },
+    }),
+    // 3. Here (CheckedIn) — checkedInAt set
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[1].id,
+        providerId: provider1.id,
+        serviceId: services[8].id, // Consultation
+        roomId: rooms[2].id,
+        startTime: setTime(today, 9, 0),
+        endTime: setTime(today, 9, 30),
+        status: "CheckedIn",
+        notes: "New patient consultation",
+        checkedInAt: setTime(today, 8, 52),
+      },
+    }),
+    // 4. With Provider (InProgress) — checkedInAt + startedAt set
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[5].id,
+        providerId: provider2.id,
+        serviceId: services[0].id, // Botox Forehead
+        roomId: rooms[1].id,
+        startTime: setTime(today, 9, 30),
+        endTime: setTime(today, 10, 0),
+        status: "InProgress",
+        notes: "Returning patient, forehead touch-up",
+        checkedInAt: setTime(today, 9, 20),
+        startedAt: setTime(today, 9, 32),
+      },
+    }),
+    // 5. Done — checkout pending (Completed, no checkedOutAt)
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[6].id,
+        providerId: provider1.id,
+        serviceId: services[6].id, // Chemical Peel
+        roomId: rooms[0].id,
+        startTime: setTime(today, 8, 0),
+        endTime: setTime(today, 8, 30),
+        status: "Completed",
+        notes: "Light peel completed, good tolerance",
+        checkedInAt: setTime(today, 7, 50),
+        startedAt: setTime(today, 8, 2),
+        completedAt: setTime(today, 8, 28),
+      },
+    }),
+    // 6. Done — checked out (Completed, all 4 timestamps)
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[7].id,
+        providerId: provider2.id,
+        serviceId: services[9].id, // Follow-Up Visit
+        roomId: rooms[2].id,
+        startTime: setTime(today, 8, 30),
+        endTime: setTime(today, 8, 45),
+        status: "Completed",
+        notes: "2-week follow-up, healing well",
+        checkedInAt: setTime(today, 8, 22),
+        startedAt: setTime(today, 8, 30),
+        completedAt: setTime(today, 8, 42),
+        checkedOutAt: setTime(today, 8, 48),
+      },
+    }),
+    // 7. Afternoon Upcoming (Scheduled)
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[4].id,
+        providerId: provider1.id,
+        serviceId: services[4].id, // Juvederm Voluma Cheeks
+        roomId: rooms[0].id,
+        startTime: setTime(today, 14, 0),
+        endTime: setTime(today, 14, 45),
+        status: "Scheduled",
       },
     }),
     // Tomorrow's appointments
@@ -1069,16 +1240,20 @@ By signing below, I confirm my consent to proceed with treatment.`,
   }
   console.log(`Created ${salesData.length} additional invoices with payments (Nov 2025 – Jan 2026)`);
 
-  // Product purchases (no serviceId — retail items)
+  // Product purchases (retail items linked to Product records)
   const productSales = [
-    { patientIdx: 0, description: "SkinCeuticals C E Ferulic Serum", price: 182, date: new Date("2026-01-10T11:00:00"), method: "credit", ref: "VISA-4242" },
-    { patientIdx: 0, description: "EltaMD UV Clear Sunscreen SPF 46", price: 39, date: new Date("2026-01-10T11:00:00"), method: "credit", ref: "VISA-4242" },
-    { patientIdx: 2, description: "Revision Skincare Nectifirm", price: 98, date: new Date("2025-12-20T14:00:00"), method: "credit", ref: "AMEX-3310" },
-    { patientIdx: 4, description: "Alastin Regenerating Skin Nectar", price: 195, date: new Date("2026-01-08T10:00:00"), method: "debit", ref: "DBT-9901" },
-    { patientIdx: 1, description: "iS Clinical Active Serum", price: 138, date: new Date("2026-01-15T09:00:00"), method: "credit", ref: "VISA-9944" },
+    { patientIdx: 0, productIdx: 0, date: new Date("2026-01-10T11:00:00"), method: "credit", ref: "VISA-4242" },
+    { patientIdx: 0, productIdx: 1, date: new Date("2026-01-10T11:00:00"), method: "credit", ref: "VISA-4242" },
+    { patientIdx: 2, productIdx: 2, date: new Date("2025-12-20T14:00:00"), method: "credit", ref: "AMEX-3310" },
+    { patientIdx: 4, productIdx: 3, date: new Date("2026-01-08T10:00:00"), method: "debit", ref: "DBT-9901" },
+    { patientIdx: 1, productIdx: 4, date: new Date("2026-01-15T09:00:00"), method: "credit", ref: "VISA-9944" },
+    { patientIdx: 7, productIdx: 5, date: new Date("2026-01-20T10:30:00"), method: "credit", ref: "AMEX-3310" },
+    { patientIdx: 4, productIdx: 0, date: new Date("2025-12-18T15:00:00"), method: "credit", ref: "MC-4466" },
+    { patientIdx: 11, productIdx: 1, date: new Date("2026-01-22T11:00:00"), method: "cash", ref: "" },
   ];
 
   for (const sale of productSales) {
+    const product = products[sale.productIdx];
     const invNum = `INV-${String(invoiceCounter++).padStart(5, "0")}`;
     await prisma.invoice.create({
       data: {
@@ -1086,21 +1261,21 @@ By signing below, I confirm my consent to proceed with treatment.`,
         patientId: patients[sale.patientIdx].id,
         invoiceNumber: invNum,
         status: "Paid",
-        subtotal: sale.price,
+        subtotal: product.retailPrice,
         discountAmount: 0,
         taxAmount: 0,
-        total: sale.price,
+        total: product.retailPrice,
         paidAt: sale.date,
         createdAt: sale.date,
         items: {
           create: [
             {
               clinicId: clinic.id,
-              description: sale.description,
+              productId: product.id,
+              description: product.name,
               quantity: 1,
-              unitPrice: sale.price,
-              total: sale.price,
-              // No serviceId — this is a retail product
+              unitPrice: product.retailPrice,
+              total: product.retailPrice,
             },
           ],
         },
@@ -1108,7 +1283,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
           create: [
             {
               clinicId: clinic.id,
-              amount: sale.price,
+              amount: product.retailPrice,
               paymentMethod: sale.method,
               reference: sale.ref || null,
               createdAt: sale.date,
@@ -1379,7 +1554,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log("- 3 Consent Templates");
   console.log("- 3 Chart Templates (Neurotoxin, Dermal Filler, IV Drip)");
   console.log("- 3 Membership Plans");
-  console.log("- 8 Appointments");
+  console.log("- 12 Appointments");
   console.log("- 4 Charts (1 MDSigned, 2 NeedsSignOff, 1 Draft)");
   console.log("- 2 Patient Consents");
   console.log("- 2 Invoices");

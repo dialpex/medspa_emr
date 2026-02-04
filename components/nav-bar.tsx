@@ -6,12 +6,13 @@ import { signOut } from "next-auth/react";
 import { useRef, useState, useEffect } from "react";
 import {
   Calendar,
+  ClipboardList,
   Users,
   Tag,
   Bell,
   BarChart3,
   Settings,
-  Sparkles,
+  TrendingUp,
   LayoutGrid,
   MessageCircle,
   ChevronDown,
@@ -30,12 +31,13 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { label: "Today", href: "/today", icon: <ClipboardList className="size-4" /> },
   { label: "Calendar", href: "/calendar", icon: <Calendar className="size-4" /> },
   { label: "Patients", href: "/patients", icon: <Users className="size-4" /> },
   { label: "Sales", href: "/sales", icon: <Tag className="size-4" />, roles: ["Owner", "Admin", "Billing"] },
   { label: "Inbox", href: "/inbox", icon: <Bell className="size-4" />, badge: 3 },
   { label: "Reports", href: "/reports", icon: <BarChart3 className="size-4" />, roles: ["Owner", "Admin", "Billing", "MedicalDirector"] },
-  { label: "AI Marketing", href: "/marketing", icon: <Sparkles className="size-4" /> },
+  { label: "AI Marketing", href: "/marketing", icon: <TrendingUp className="size-4" /> },
   { label: "Settings", href: "/settings", icon: <Settings className="size-4" /> },
 ];
 
@@ -69,14 +71,9 @@ export function NavBar({ user }: { user: { name: string; role: Role } }) {
 
   return (
     <header className="sticky top-0 z-50 border-b border-gray-200 bg-gradient-to-b from-purple-50 to-white">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
+      <div className="flex h-14 items-center justify-between px-4 pr-6">
         {/* Logo + Navigation */}
         <div className="flex items-center gap-2">
-          {/* Logo */}
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 text-white font-bold text-lg mr-2">
-            M
-          </div>
-
           {/* Navigation Tabs */}
           <nav className="flex items-center gap-1">
             {visibleItems.map((item) => (
@@ -109,10 +106,14 @@ export function NavBar({ user }: { user: { name: string; role: Role } }) {
             Apps
           </button>
 
+          <div className="h-5 w-px bg-gray-200" />
+
           {/* Messages */}
           <button className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100">
             <MessageCircle className="size-5" />
           </button>
+
+          <div className="h-5 w-px bg-gray-200" />
 
           {/* User profile dropdown */}
           <div className="relative" ref={dropdownRef}>
