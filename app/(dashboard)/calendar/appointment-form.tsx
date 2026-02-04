@@ -154,7 +154,21 @@ export function AppointmentForm({
     e.preventDefault();
     setError("");
 
-    if (!selectedPatient) {
+    // Validate new patient fields if creating a new patient inline
+    if (showNewPatient && !selectedPatient) {
+      if (!newFirst.trim() || !newLast.trim()) {
+        setError("First name and last name are required");
+        return;
+      }
+      if (!newEmail.trim()) {
+        setError("Email is required for new patients");
+        return;
+      }
+      if (!newPhone.trim()) {
+        setError("Phone is required for new patients");
+        return;
+      }
+    } else if (!selectedPatient) {
       setError("Please select a patient");
       return;
     }
@@ -174,10 +188,28 @@ export function AppointmentForm({
 
     startTransition(async () => {
       try {
+        // Resolve patient ID — create new patient first if needed
+        let patientId = selectedPatient?.id;
+
+        if (showNewPatient && !selectedPatient) {
+          const newPatient = await quickCreatePatient({
+            firstName: newFirst.trim(),
+            lastName: newLast.trim(),
+            email: newEmail.trim(),
+            phone: newPhone.trim(),
+          });
+          patientId = newPatient.id;
+        }
+
+        if (!patientId) {
+          setError("Failed to resolve patient");
+          return;
+        }
+
         if (isEditing) {
           // Update existing appointment
           const result = await updateAppointment(appointment.id, {
-            patientId: selectedPatient.id,
+            patientId,
             providerId,
             serviceId: serviceId || null,
             roomId: roomId || null,
@@ -202,7 +234,7 @@ export function AppointmentForm({
         } else {
           // Create new appointment
           const result = await createAppointment({
-            patientId: selectedPatient.id,
+            patientId,
             providerId,
             serviceId: serviceId || undefined,
             roomId: roomId || undefined,
@@ -310,57 +342,83 @@ export function AppointmentForm({
               </div>
             ) : (
               <div className="relative">
-                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={patientSearch}
-                  onChange={(e) => setPatientSearch(e.target.value)}
-                  placeholder="Search by name, email, or phone..."
-                  className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                  disabled={!canSubmit}
-                />
-                {isSearching && (
-                  <Loader2Icon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
-                )}
+                {!showNewPatient && (
+                  <>
+                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={patientSearch}
+                      onChange={(e) => setPatientSearch(e.target.value)}
+                      placeholder="Search by name, email, or phone..."
+                      className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                      disabled={!canSubmit}
+                    />
+                    {isSearching && (
+                      <Loader2Icon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+                    )}
 
-                {/* Search Results Dropdown */}
-                {patientSearch.length >= 2 && !showNewPatient && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {searchResults.map((patient) => (
-                      <button
-                        key={patient.id}
-                        type="button"
-                        onClick={() => selectPatient(patient)}
-                        className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="font-medium">
-                          {patient.firstName} {patient.lastName}
-                        </div>
-                        {(patient.email || patient.phone) && (
-                          <div className="text-sm text-gray-500">
-                            {patient.email || patient.phone}
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowNewPatient(true);
-                        setSearchResults([]);
-                      }}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors border-t flex items-center gap-2 text-gray-700"
-                    >
-                      <PlusIcon className="h-4 w-4" />
-                      <span>New Patient</span>
-                    </button>
-                  </div>
+                    {/* Search Results Dropdown */}
+                    {patientSearch.length >= 2 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {searchResults.map((patient) => (
+                          <button
+                            key={patient.id}
+                            type="button"
+                            onClick={() => selectPatient(patient)}
+                            className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="font-medium">
+                              {patient.firstName} {patient.lastName}
+                            </div>
+                            {(patient.email || patient.phone) && (
+                              <div className="text-sm text-gray-500">
+                                {patient.email || patient.phone}
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const parts = patientSearch.trim().split(/\s+/);
+                            if (parts.length >= 2) {
+                              setNewFirst(parts[0]);
+                              setNewLast(parts.slice(1).join(" "));
+                            } else if (parts.length === 1) {
+                              setNewFirst(parts[0]);
+                            }
+                            setShowNewPatient(true);
+                            setSearchResults([]);
+                          }}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors border-t flex items-center gap-2 text-gray-700"
+                        >
+                          <PlusIcon className="h-4 w-4" />
+                          <span>New Patient</span>
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Inline New Patient Form */}
                 {showNewPatient && (
-                  <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="text-sm font-medium text-gray-700 mb-3">New Patient</div>
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="text-sm font-medium text-gray-700">New Patient</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNewPatient(false);
+                          setNewFirst("");
+                          setNewLast("");
+                          setNewEmail("");
+                          setNewPhone("");
+                        }}
+                        className="text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Back to search
+                      </button>
+                    </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">First Name *</label>
@@ -370,6 +428,7 @@ export function AppointmentForm({
                           onChange={(e) => setNewFirst(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                           placeholder="First name"
+                          required
                         />
                       </div>
                       <div>
@@ -380,20 +439,22 @@ export function AppointmentForm({
                           onChange={(e) => setNewLast(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                           placeholder="Last name"
+                          required
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Email</label>
+                        <label className="block text-xs text-gray-500 mb-1">Email *</label>
                         <input
                           type="email"
                           value={newEmail}
                           onChange={(e) => setNewEmail(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                           placeholder="email@example.com"
+                          required
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Phone</label>
+                        <label className="block text-xs text-gray-500 mb-1">Phone *</label>
                         <input
                           type="tel"
                           value={newPhone}
@@ -408,51 +469,9 @@ export function AppointmentForm({
                           }}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-sm"
                           placeholder="(555) 555-5555"
+                          required
                         />
                       </div>
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                      <button
-                        type="button"
-                        disabled={isPending || !newFirst.trim() || !newLast.trim()}
-                        onClick={() => {
-                          startTransition(async () => {
-                            try {
-                              const patient = await quickCreatePatient({
-                                firstName: newFirst.trim(),
-                                lastName: newLast.trim(),
-                                email: newEmail.trim() || undefined,
-                                phone: newPhone.trim() || undefined,
-                              });
-                              setSelectedPatient(patient);
-                              setShowNewPatient(false);
-                              setPatientSearch("");
-                              setNewFirst("");
-                              setNewLast("");
-                              setNewEmail("");
-                              setNewPhone("");
-                            } catch (err) {
-                              setError(err instanceof Error ? err.message : "Failed to create patient");
-                            }
-                          });
-                        }}
-                        className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50"
-                      >
-                        {isPending ? "Creating..." : "Create Patient"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowNewPatient(false);
-                          setNewFirst("");
-                          setNewLast("");
-                          setNewEmail("");
-                          setNewPhone("");
-                        }}
-                        className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
-                      >
-                        Cancel
-                      </button>
                     </div>
                   </div>
                 )}
