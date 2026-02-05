@@ -1,12 +1,10 @@
 "use client";
 
 // Polyfill for Temporal API (required by @schedule-x)
+// Always assign to ensure consistency after hot-reloads (Turbopack)
 import { Temporal } from "@js-temporal/polyfill";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-if (typeof (globalThis as any).Temporal === "undefined") {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (globalThis as any).Temporal = Temporal;
-}
+(globalThis as any).Temporal = Temporal;
 
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";

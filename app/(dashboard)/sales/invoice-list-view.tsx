@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Plus, MoreVertical, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PageCard } from "@/components/ui/page-card";
 import { InvoiceFilters } from "./invoice-filters";
 import { InvoiceModal } from "./invoice-modal";
 import {
@@ -94,20 +95,21 @@ export function InvoiceListView({ initialInvoices, services, clinicInfo }: Props
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-900">Invoices</h2>
+    <PageCard
+      label="Billing"
+      title="Invoices"
+      headerAction={
         <button
           onClick={() => setModalInvoice("new")}
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700"
         >
           <Plus className="size-4" /> New Invoice
         </button>
-      </div>
-
+      }
+    >
       <InvoiceFilters onFilter={handleFilter} />
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+      <div className="rounded-lg border border-gray-200 overflow-x-auto">
         {invoices.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             <FileText className="size-8 mx-auto mb-2 text-gray-300" />
@@ -194,6 +196,6 @@ export function InvoiceListView({ initialInvoices, services, clinicInfo }: Props
           </div>
         </div>
       )}
-    </div>
+    </PageCard>
   );
 }

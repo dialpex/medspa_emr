@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FileTextIcon, Loader2Icon } from "lucide-react";
 import { getTemplates } from "@/lib/actions/chart-templates";
 import { createChart } from "@/lib/actions/charts";
+import { PageCard } from "@/components/ui/page-card";
 
 type Template = {
   id: string;
@@ -74,13 +75,12 @@ export default function NewChartPage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">New Chart</h1>
+      <PageCard label="Clinical" title="New Chart">
+        {error && (
+          <div className="p-3 text-sm text-red-700 bg-red-50 rounded-lg mb-4">{error}</div>
+        )}
 
-      {error && (
-        <div className="p-3 text-sm text-red-700 bg-red-50 rounded-lg mb-4">{error}</div>
-      )}
-
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+        <div className="space-y-6">
         {/* Patient Selection */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -176,7 +176,8 @@ export default function NewChartPage() {
             Cancel
           </button>
         </div>
-      </div>
+        </div>
+      </PageCard>
     </div>
   );
 }

@@ -66,7 +66,7 @@ export function TodayList({
             )}
           >
             {/* Time */}
-            <div className={cn("flex-shrink-0 text-sm tabular-nums", isCompact ? "w-[120px]" : "w-[140px]")}>
+            <div className="flex-shrink-0 w-[170px] text-sm tabular-nums whitespace-nowrap">
               <span className="text-gray-900 font-medium">
                 {formatTimeRange(apt.startTime, apt.endTime)}
               </span>

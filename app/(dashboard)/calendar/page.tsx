@@ -10,6 +10,7 @@ import {
 import { CalendarFilters } from "./calendar-filters";
 import { CalendarView } from "./calendar-view";
 import { CalendarSkeleton } from "./loading";
+import { PageCard } from "@/components/ui/page-card";
 
 type SearchParams = Promise<{
   date?: string;
@@ -23,26 +24,17 @@ export default async function CalendarPage({
 }: {
   searchParams: SearchParams;
 }) {
-  // Check permission
   await requirePermission("appointments", "view");
 
-  // Await search params
   const params = await searchParams;
-
-  // Parse date from URL or use today
   const dateParam = params.date;
   const currentDate = dateParam ? new Date(dateParam) : new Date();
-
-  // Parse view from URL or default to week
   const view = (params.view === "day" ? "day" : "week") as "day" | "week";
-
-  // Parse filters
   const filters = {
     providerId: params.providerId,
     roomId: params.roomId,
   };
 
-  // Calculate date range based on view
   let startDate: Date;
   let endDate: Date;
 
@@ -52,35 +44,31 @@ export default async function CalendarPage({
     endDate = new Date(currentDate);
     endDate.setHours(23, 59, 59, 999);
   } else {
-    // Week view - get start and end of week
     startDate = new Date(currentDate);
-    startDate.setDate(startDate.getDate() - startDate.getDay()); // Sunday
+    startDate.setDate(startDate.getDate() - startDate.getDay());
     startDate.setHours(0, 0, 0, 0);
     endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + 6); // Saturday
+    endDate.setDate(endDate.getDate() + 6);
     endDate.setHours(23, 59, 59, 999);
   }
 
   return (
     <div className="p-6 max-w-full mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Calendar</h1>
-      </div>
-
-      <Suspense fallback={<CalendarSkeleton />}>
-        <CalendarContent
-          startDate={startDate}
-          endDate={endDate}
-          currentDate={currentDate}
-          view={view}
-          filters={filters}
-        />
-      </Suspense>
+      <PageCard label="Scheduling" title="Calendar">
+        <Suspense fallback={<CalendarSkeleton />}>
+          <CalendarContent
+            startDate={startDate}
+            endDate={endDate}
+            currentDate={currentDate}
+            view={view}
+            filters={filters}
+          />
+        </Suspense>
+      </PageCard>
     </div>
   );
 }
 
-// Separate async component for data fetching
 async function CalendarContent({
   startDate,
   endDate,
@@ -94,7 +82,6 @@ async function CalendarContent({
   view: "day" | "week";
   filters: { providerId?: string; roomId?: string };
 }) {
-  // Parallel data fetching
   const [appointments, providers, rooms, services, permissions] = await Promise.all([
     getAppointments(startDate, endDate, filters),
     getProviders(),

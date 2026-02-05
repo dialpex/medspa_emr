@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/rbac";
 import { getChartWithPhotos } from "@/lib/actions/charts";
 import { ChartDetail } from "./chart-detail";
 import { ChartSignButton } from "./chart-sign-button";
+import { PageCard } from "@/components/ui/page-card";
 
 export default async function ChartDetailPage({
   params,
@@ -25,18 +26,20 @@ export default async function ChartDetailPage({
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <ChartDetail chart={chart} />
-      <div className="mt-6 flex gap-3">
-        {canEdit && (
-          <a
-            href={`/charts/${id}/edit`}
-            className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700"
-          >
-            Edit Chart
-          </a>
-        )}
-        {canSign && <ChartSignButton chartId={id} />}
-      </div>
+      <PageCard label="Clinical" title="Chart Details">
+        <ChartDetail chart={chart} />
+        <div className="mt-6 flex gap-3">
+          {canEdit && (
+            <a
+              href={`/charts/${id}/edit`}
+              className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700"
+            >
+              Edit Chart
+            </a>
+          )}
+          {canSign && <ChartSignButton chartId={id} />}
+        </div>
+      </PageCard>
     </div>
   );
 }

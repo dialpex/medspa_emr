@@ -11,6 +11,7 @@ import {
   ArrowRightIcon,
   ReceiptTextIcon,
 } from "lucide-react";
+import { PageCard } from "@/components/ui/page-card";
 import { getPayments, type PaymentListItem } from "@/lib/actions/payments";
 
 type Props = { payments: PaymentListItem[] };
@@ -214,15 +215,16 @@ export function PaymentsView({ payments: initialPayments }: Props) {
   }, [chartPoints]);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-900">Payments</h2>
-        <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
+    <PageCard
+      label="Billing"
+      title="Payments"
+      headerAction={
+        <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-0.5">
           <button
             onClick={() => setViewMode("table")}
             className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               viewMode === "table"
-                ? "bg-purple-100 text-purple-700"
+                ? "bg-white text-purple-700 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -233,7 +235,7 @@ export function PaymentsView({ payments: initialPayments }: Props) {
             onClick={() => setViewMode("monthly")}
             className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               viewMode === "monthly"
-                ? "bg-purple-100 text-purple-700"
+                ? "bg-white text-purple-700 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -241,7 +243,8 @@ export function PaymentsView({ payments: initialPayments }: Props) {
             Monthly
           </button>
         </div>
-      </div>
+      }
+    >
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -561,6 +564,6 @@ export function PaymentsView({ payments: initialPayments }: Props) {
           )}
         </div>
       )}
-    </div>
+    </PageCard>
   );
 }

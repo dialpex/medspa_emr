@@ -3,6 +3,7 @@ import { getPatient, getPatientTimeline } from "@/lib/actions/patients";
 import { getCharts } from "@/lib/actions/charts";
 import { requirePermission, hasPermission } from "@/lib/rbac";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageCard } from "@/components/ui/page-card";
 import { PatientHeader } from "./patient-header";
 import { PatientDetails } from "./patient-details";
 import { PatientTimeline } from "./patient-timeline";
@@ -35,29 +36,31 @@ export default async function PatientPage({
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <PatientHeader patient={patient} />
+      <PageCard label="CRM" title={`${patient.firstName} ${patient.lastName}`}>
+        <PatientHeader patient={patient} />
 
-      <Tabs defaultValue="details" className="mt-6">
-        <TabsList>
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          {canViewCharts && <TabsTrigger value="charts">Charts</TabsTrigger>}
-        </TabsList>
+        <Tabs defaultValue="details" className="mt-6">
+          <TabsList>
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
+            {canViewCharts && <TabsTrigger value="charts">Charts</TabsTrigger>}
+          </TabsList>
 
-        <TabsContent value="details" className="mt-4">
-          <PatientDetails patient={patient} canEdit={canEdit} />
-        </TabsContent>
-
-        <TabsContent value="timeline" className="mt-4">
-          <PatientTimeline timeline={timeline} />
-        </TabsContent>
-
-        {canViewCharts && (
-          <TabsContent value="charts" className="mt-4">
-            <PatientCharts charts={charts} />
+          <TabsContent value="details" className="mt-4">
+            <PatientDetails patient={patient} canEdit={canEdit} />
           </TabsContent>
-        )}
-      </Tabs>
+
+          <TabsContent value="timeline" className="mt-4">
+            <PatientTimeline timeline={timeline} />
+          </TabsContent>
+
+          {canViewCharts && (
+            <TabsContent value="charts" className="mt-4">
+              <PatientCharts charts={charts} />
+            </TabsContent>
+          )}
+        </Tabs>
+      </PageCard>
     </div>
   );
 }

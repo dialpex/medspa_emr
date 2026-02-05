@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { FileTextIcon, SyringeIcon, HomeIcon, UsersIcon } from "lucide-react";
+import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon } from "lucide-react";
+import { PageCard } from "@/components/ui/page-card";
 
 const settingsItems = [
   {
@@ -12,7 +13,13 @@ const settingsItems = [
     label: "Services",
     description: "Manage treatments, pricing, and service catalog",
     href: "/settings/services",
-    icon: SyringeIcon,
+    icon: SparklesIcon,
+  },
+  {
+    label: "Products",
+    description: "Manage retail products, inventory, and pricing",
+    href: "/settings/products",
+    icon: TagIcon,
   },
   {
     label: "Location Details",
@@ -31,24 +38,23 @@ const settingsItems = [
 export default function SettingsPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Settings</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {settingsItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="flex items-start gap-4 p-5 bg-white rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-sm transition-all"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
-              <item.icon className="size-5" />
-            </div>
-            <div>
+      <PageCard label="Configuration" title="Settings">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {settingsItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex flex-col items-center text-center aspect-square p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-sm transition-all justify-center"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-50 text-purple-600 mb-3">
+                <item.icon className="size-6" />
+              </div>
               <div className="font-medium text-gray-900">{item.label}</div>
-              <div className="text-sm text-gray-500 mt-0.5">{item.description}</div>
-            </div>
-          </Link>
-        ))}
-      </div>
+              <div className="text-xs text-gray-500 mt-1">{item.description}</div>
+            </Link>
+          ))}
+        </div>
+      </PageCard>
     </div>
   );
 }

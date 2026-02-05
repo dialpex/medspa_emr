@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac";
 import { getChartWithPhotos } from "@/lib/actions/charts";
 import { ChartEditor } from "./chart-editor";
+import { PageCard } from "@/components/ui/page-card";
 
 export default async function ChartEditPage({
   params,
@@ -21,7 +22,9 @@ export default async function ChartEditPage({
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <ChartEditor chart={chart} currentUserRole={user.role} />
+      <PageCard label="Clinical" title="Edit Chart">
+        <ChartEditor chart={chart} currentUserRole={user.role} />
+      </PageCard>
     </div>
   );
 }

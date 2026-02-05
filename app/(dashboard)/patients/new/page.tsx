@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createPatient } from "@/lib/actions/patients";
 import { Spinner } from "@/components/ui/spinner";
+import { PageCard } from "@/components/ui/page-card";
 
 type FormData = {
   firstName: string;
@@ -73,21 +74,20 @@ export default function NewPatientPage() {
     <div className="p-6 max-w-3xl mx-auto">
       <Link
         href="/patients"
-        className="text-blue-600 hover:underline text-sm mb-4 inline-block"
+        className="text-purple-600 hover:underline text-sm mb-4 inline-block"
       >
         ← Back to Patients
       </Link>
 
-      <h1 className="text-2xl font-bold mb-6">Add New Patient</h1>
+      <PageCard label="CRM" title="Add New Patient">
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">
+            {error}
+          </div>
+        )}
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
           <h2 className="font-medium text-gray-900 border-b pb-2 mb-4">
             Basic Information
           </h2>
@@ -149,10 +149,10 @@ export default function NewPatientPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="font-medium text-gray-900 border-b pb-2 mb-4">
-            Contact Information
-          </h2>
+          <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+            <h2 className="font-medium text-gray-900 border-b pb-2 mb-4">
+              Contact Information
+            </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -231,10 +231,10 @@ export default function NewPatientPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="font-medium text-gray-900 border-b pb-2 mb-4">
-            Medical Information
-          </h2>
+          <div className="bg-gray-50 rounded-lg border border-gray-200 p-6">
+            <h2 className="font-medium text-gray-900 border-b pb-2 mb-4">
+              Medical Information
+            </h2>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -278,23 +278,24 @@ export default function NewPatientPage() {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3">
-          <Link
-            href="/patients"
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-          >
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            disabled={isPending}
-            className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            {isPending && <Spinner className="h-4 w-4" />}
-            Create Patient
-          </button>
-        </div>
-      </form>
+          <div className="flex justify-end gap-3">
+            <Link
+              href="/patients"
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+            >
+              Cancel
+            </Link>
+            <button
+              type="submit"
+              disabled={isPending}
+              className="px-4 py-2 bg-purple-600 text-white hover:bg-purple-700 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {isPending && <Spinner className="h-4 w-4" />}
+              Create Patient
+            </button>
+          </div>
+        </form>
+      </PageCard>
     </div>
   );
 }

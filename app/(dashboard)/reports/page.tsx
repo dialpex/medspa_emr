@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { PageCard } from "@/components/ui/page-card";
 
 const ALLOWED_ROLES = ["Owner", "Admin", "Billing", "MedicalDirector"];
 
@@ -12,10 +13,11 @@ export default async function ReportsPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Reports</h1>
-      <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-500">
-        Reports coming soon...
-      </div>
+      <PageCard label="Analytics" title="Reports">
+        <div className="py-12 text-center text-gray-400">
+          Reports coming soon...
+        </div>
+      </PageCard>
     </div>
   );
 }

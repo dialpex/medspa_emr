@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getUser } from "@/lib/actions/users";
 import { UserForm } from "../user-form";
+import { PageCard } from "@/components/ui/page-card";
 
 export default async function EditUserPage({
   params,
@@ -13,8 +14,9 @@ export default async function EditUserPage({
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Edit User</h1>
-      <UserForm user={user} />
+      <PageCard label="Configuration" title="Edit User">
+        <UserForm user={user} />
+      </PageCard>
     </div>
   );
 }

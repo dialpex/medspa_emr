@@ -99,21 +99,63 @@ async function TodayContent({
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="mb-4">
-        <TodayFilters
-          providers={providers}
-          rooms={rooms}
-          appointments={allAppointments}
-        />
-      </div>
+      {/* Two-column layout: appointments left, dashboard cards right */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Left column: filters + appointment list */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col">
+          <div className="mb-4">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Appointments</p>
+            <h3 className="text-lg font-semibold text-gray-900 mt-1">Today&apos;s Schedule</h3>
+          </div>
+          <div className="mb-4">
+            <TodayFilters
+              providers={providers}
+              rooms={rooms}
+              appointments={allAppointments}
+            />
+          </div>
+          <TodayList
+            appointments={appointments}
+            permissions={permissions}
+            density={density}
+          />
+        </div>
 
-      {/* List */}
-      <TodayList
-        appointments={appointments}
-        permissions={permissions}
-        density={density}
-      />
+        {/* Right column: dashboard widgets */}
+        <div className="hidden xl:flex flex-col gap-5">
+          {/* Two widgets side by side */}
+          <div className="grid grid-cols-2 gap-5">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 min-h-[340px] flex flex-col">
+              <div className="mb-4">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Widget 1</p>
+                <h3 className="text-lg font-semibold text-gray-900 mt-1">Coming Soon</h3>
+              </div>
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-sm text-gray-300">Content placeholder</span>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 min-h-[340px] flex flex-col">
+              <div className="mb-4">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Widget 2</p>
+                <h3 className="text-lg font-semibold text-gray-900 mt-1">Coming Soon</h3>
+              </div>
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-sm text-gray-300">Content placeholder</span>
+              </div>
+            </div>
+          </div>
+          {/* One full-width widget below */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 min-h-[200px] flex flex-col">
+            <div className="mb-4">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Widget 3</p>
+              <h3 className="text-lg font-semibold text-gray-900 mt-1">Coming Soon</h3>
+            </div>
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-sm text-gray-300">Content placeholder</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   );
 }

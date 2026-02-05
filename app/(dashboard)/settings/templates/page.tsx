@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PlusIcon } from "lucide-react";
 import { requirePermission } from "@/lib/rbac";
 import { getAllTemplates } from "@/lib/actions/chart-templates";
+import { PageCard } from "@/components/ui/page-card";
 
 export default async function TemplatesPage() {
   const user = await requirePermission("charts", "view");
@@ -10,25 +11,22 @@ export default async function TemplatesPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Forms & Charts</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage chart templates used during patient visits
-          </p>
-        </div>
-        {canManage && (
-          <Link
-            href="/settings/templates/new"
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700"
-          >
-            <PlusIcon className="size-4" />
-            New Chart or Form
-          </Link>
-        )}
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <PageCard
+        label="Configuration"
+        title="Forms & Charts"
+        headerAction={
+          canManage ? (
+            <Link
+              href="/settings/templates/new"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700"
+            >
+              <PlusIcon className="size-4" />
+              New Chart or Form
+            </Link>
+          ) : undefined
+        }
+      >
+        <div className="rounded-lg border border-gray-200 overflow-hidden">
         {templates.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             No templates yet. Create one to get started.
@@ -98,7 +96,8 @@ export default async function TemplatesPage() {
             </tbody>
           </table>
         )}
-      </div>
+        </div>
+      </PageCard>
     </div>
   );
 }

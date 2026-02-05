@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Plus, CreditCard, TrendingUp, Users, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PageCard } from "@/components/ui/page-card";
 import {
   createMembershipPlan,
   updateMembershipPlan,
@@ -97,24 +98,37 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
   }
 
   return (
-    <div className="space-y-8">
-      {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+    <PageCard
+      label="Billing"
+      title="Memberships"
+      headerAction={
+        <div className="flex gap-2">
+          <button onClick={() => setShowAssign(true)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+            <Plus className="size-4" /> Assign to Patient
+          </button>
+          <button onClick={() => openPlanForm()} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700">
+            <Plus className="size-4" /> New Plan
+          </button>
+        </div>
+      }
+    >
+      {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 mb-6">{error}</div>}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
             <DollarSign className="size-4" /> Monthly Recurring Revenue
           </div>
           <div className="text-2xl font-bold text-gray-900">${totalMRR.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
             <Users className="size-4" /> Active Members
           </div>
           <div className="text-2xl font-bold text-gray-900">{totalActive}</div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
             <TrendingUp className="size-4" /> Total Enrolled
           </div>
@@ -124,17 +138,7 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
 
       {/* Membership Plans */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Membership Plans</h2>
-          <div className="flex gap-2">
-            <button onClick={() => setShowAssign(true)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
-              <Plus className="size-4" /> Assign to Patient
-            </button>
-            <button onClick={() => openPlanForm()} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700">
-              <Plus className="size-4" /> New Plan
-            </button>
-          </div>
-        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Plans</h3>
 
         {showPlanForm && (
           <div className="bg-white border rounded-lg p-4 mb-4 space-y-3">
@@ -208,9 +212,9 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
       </div>
 
       {/* Membership Data Table */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Membership Data</h2>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Membership Data</h3>
+        <div className="rounded-lg border border-gray-200 overflow-hidden">
           {membershipData.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
               <CreditCard className="size-8 mx-auto mb-2 text-gray-300" />
@@ -265,6 +269,6 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
           )}
         </div>
       </div>
-    </div>
+    </PageCard>
   );
 }
