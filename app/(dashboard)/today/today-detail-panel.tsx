@@ -170,6 +170,7 @@ export function TodayDetailPanel({
 
   const phase = detail
     ? derivePhase({
+        status: detail.status,
         checkedInAt: detail.checkedInAt,
         startedAt: detail.startedAt,
         completedAt: detail.completedAt,
@@ -180,7 +181,9 @@ export function TodayDetailPanel({
     upcoming: { label: "Upcoming", bg: "bg-blue-50", text: "text-blue-700" },
     here: { label: "Here", bg: "bg-yellow-50", text: "text-yellow-700" },
     with_provider: { label: "With Provider", bg: "bg-purple-50", text: "text-purple-700" },
-    done: { label: "Done", bg: "bg-gray-100", text: "text-gray-600" },
+    done: { label: "Done", bg: "bg-green-50", text: "text-green-700" },
+    no_show: { label: "No Show", bg: "bg-red-50", text: "text-red-700" },
+    cancelled: { label: "Cancelled", bg: "bg-gray-100", text: "text-gray-500" },
   };
 
   return (
