@@ -155,6 +155,18 @@ Auth & Security:
 Storage:
 - S3-compatible abstraction (local filesystem for dev)
 
+## TYPESCRIPT 
+- Prefer 'interface' for component props(named 'ComponentNameProps'
+- Use strings unions (`'primary' | 'secondary'`) over enums)
+- For objects: `Record<string, unknown>` for arbritrary keys, `Record<string, never>` for empty
+- User TSDoc format for exported function/type documentation. 
+
+## REACT COMPONENTS
+- Function components with hooks only (no class components)
+- Destructure props in function parameters
+- Use unique identifiers as keys, not array indices
+- Memorization only when clear formance benefits
+- Use `data-testid` attributes for test selectors. 
 ---
 
 ## KEY MVP FEATURES
