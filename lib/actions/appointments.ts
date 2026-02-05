@@ -583,6 +583,7 @@ export async function updateAppointmentStatus(
   });
 
   revalidatePath("/calendar");
+  revalidatePath("/today");
 
   return { success: true };
 }

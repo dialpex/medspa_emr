@@ -4,25 +4,24 @@ import { useState } from "react";
 import { CalendarOffIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TodayAppointment, TodayPermissions } from "@/lib/actions/today";
-import { SmartStatusPill, PHASE_BORDER_COLORS } from "./smart-status-pill";
+import { SmartStatusPill } from "./smart-status-pill";
 import { TodayDetailPanel } from "./today-detail-panel";
 
-function formatTimeRange(start: Date, end: Date): string {
-  const fmt = (d: Date) =>
-    new Date(d).toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-  // Remove duplicate AM/PM if both are the same period
-  const startStr = fmt(start);
-  const endStr = fmt(end);
-  const startPeriod = startStr.slice(-2);
-  const endPeriod = endStr.slice(-2);
-  if (startPeriod === endPeriod) {
-    return `${startStr.slice(0, -3)} \u2013 ${endStr}`;
-  }
-  return `${startStr} \u2013 ${endStr}`;
+function formatTime(date: Date): string {
+  return new Date(date).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function formatDuration(start: Date, end: Date): string {
+  const diffMs = new Date(end).getTime() - new Date(start).getTime();
+  const minutes = Math.round(diffMs / 60000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  return remaining > 0 ? `${hours}h ${remaining}m` : `${hours}h`;
 }
 
 export function TodayList({
@@ -53,87 +52,47 @@ export function TodayList({
 
   return (
     <>
-      <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden bg-white">
+      <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg bg-white">
         {appointments.map((apt) => (
           <div
             key={apt.id}
             onClick={() => setSelectedId(apt.id)}
             className={cn(
-              "flex items-center gap-4 cursor-pointer transition-colors hover:bg-gray-50 border-l-4",
-              PHASE_BORDER_COLORS[apt.phase],
+              "flex items-center cursor-pointer transition-colors hover:bg-gray-50 group",
               isCompact ? "px-4 py-2" : "px-4 py-3",
-              selectedId === apt.id && "bg-blue-50 hover:bg-blue-50"
+              selectedId === apt.id && "bg-blue-50/60 hover:bg-blue-50/60"
             )}
           >
-            {/* Time */}
-            <div className="flex-shrink-0 w-[170px] text-sm tabular-nums whitespace-nowrap">
-              <span className="text-gray-900 font-medium">
-                {formatTimeRange(apt.startTime, apt.endTime)}
-              </span>
-            </div>
-
-            {/* Patient + Service + Provider + Room */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900 truncate">
-                  {apt.patientName}
-                </span>
-                {/* Secondary badges - only in comfortable mode */}
-                {!isCompact && (
-                  <div className="flex items-center gap-1.5">
-                    {apt.status === "Scheduled" && (
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-orange-50 text-orange-600 border border-orange-200">
-                        Needs Confirmation
-                      </span>
-                    )}
-                    {apt.completedAt && !apt.checkedOutAt && (
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-200">
-                        Checkout Pending
-                      </span>
-                    )}
-                    {apt.chartStatus && (
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border",
-                          apt.chartStatus === "Draft" &&
-                            "bg-gray-50 text-gray-500 border-gray-200",
-                          apt.chartStatus === "NeedsSignOff" &&
-                            "bg-yellow-50 text-yellow-600 border-yellow-200",
-                          apt.chartStatus === "MDSigned" &&
-                            "bg-green-50 text-green-600 border-green-200"
-                        )}
-                      >
-                        {apt.chartStatus === "NeedsSignOff"
-                          ? "Needs Sign-Off"
-                          : apt.chartStatus === "MDSigned"
-                            ? "MD Signed"
-                            : apt.chartStatus}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className={cn("flex items-center gap-2 text-sm text-gray-500", isCompact && "text-xs")}>
-                {apt.serviceName && <span>{apt.serviceName}</span>}
-                {apt.serviceName && apt.providerName && (
-                  <span className="text-gray-300">&middot;</span>
-                )}
-                <span>{apt.providerName}</span>
-                {apt.roomName && (
-                  <>
-                    <span className="text-gray-300">&middot;</span>
-                    <span>{apt.roomName}</span>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Status Pill */}
+            {/* Status Indicator - Fixed width, left */}
             <div className="flex-shrink-0">
               <SmartStatusPill
                 appointment={apt}
                 permissions={permissions}
               />
+            </div>
+
+            {/* Main Content - Flexible */}
+            <div className="flex-1 min-w-0 ml-1">
+              <div className="font-semibold text-gray-900 truncate">
+                {apt.patientName}
+              </div>
+              {!isCompact && (
+                <div className="text-sm text-gray-500 truncate">
+                  {apt.serviceName && <span>{apt.serviceName}</span>}
+                  {apt.serviceName && apt.providerName && (
+                    <span className="text-gray-300"> &middot; </span>
+                  )}
+                  <span className="text-xs text-gray-400">{apt.providerName}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Time - Right aligned */}
+            <div className="flex-shrink-0 text-right ml-4">
+              <div className="text-xs text-gray-400">{formatTime(apt.startTime)}</div>
+              {!isCompact && (
+                <div className="text-[10px] text-gray-300">{formatDuration(apt.startTime, apt.endTime)}</div>
+              )}
             </div>
           </div>
         ))}

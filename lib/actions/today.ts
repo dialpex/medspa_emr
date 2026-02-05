@@ -89,7 +89,6 @@ export async function getTodayAppointments(filters?: {
     clinicId: user.clinicId,
     deletedAt: null,
     startTime: { gte: startOfDay, lte: endOfDay },
-    status: { notIn: ["Cancelled", "NoShow"] as AppointmentStatus[] },
   };
 
   if (filters?.providerId) {

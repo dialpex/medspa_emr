@@ -55,6 +55,7 @@ function TimeGridEvent({ calendarEvent }: { calendarEvent: Record<string, unknow
     patientName: string;
     serviceName: string | null;
     status: AppointmentStatus;
+    startTimeDisplay?: string;
   } | undefined;
 
   const status = customData?.status || "Scheduled";
@@ -62,20 +63,22 @@ function TimeGridEvent({ calendarEvent }: { calendarEvent: Record<string, unknow
   const patientName = customData?.patientName || (calendarEvent.title as string) || "";
   const serviceName = customData?.serviceName || "";
 
-  // Get the start time from the Temporal.ZonedDateTime
+  // Use pre-computed display time from _customData, fall back to extraction
   const start = calendarEvent.start as unknown as Temporal.ZonedDateTime;
-  let timeStr = "";
-  try {
-    timeStr = formatEventTime(zonedDateTimeToDate(start));
-  } catch {
-    timeStr = "";
+  let timeStr = customData?.startTimeDisplay || "";
+  if (!timeStr) {
+    try {
+      timeStr = formatEventTime(utcZonedDateTimeToLocalDate(start));
+    } catch {
+      timeStr = "";
+    }
   }
 
   // Check if this is a compact (short) event
   const startMs = start ? Number(start.epochMilliseconds) : 0;
   const end = calendarEvent.end as unknown as Temporal.ZonedDateTime;
   const endMs = end ? Number(end.epochMilliseconds) : 0;
-  const durationMin = (endMs - startMs) / 60000;
+  const durationMin = startMs && endMs ? (endMs - startMs) / 60000 : 30;
   const isCompact = durationMin <= 30;
 
   return (
@@ -133,20 +136,31 @@ export type CalendarViewProps = {
   };
 };
 
-// Get the browser's IANA timezone
-const LOCAL_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-// Convert Date to Temporal.ZonedDateTime for schedule-x
-function dateToZonedDateTime(date: Date | string): Temporal.ZonedDateTime {
-  const d = new Date(date);
-  // Use epoch milliseconds to avoid ambiguity
-  const instant = Temporal.Instant.fromEpochMilliseconds(d.getTime());
-  return instant.toZonedDateTimeISO(LOCAL_TIMEZONE);
-}
-
 // Convert Temporal.ZonedDateTime to Date
 function zonedDateTimeToDate(zdt: Temporal.ZonedDateTime): Date {
   return new Date(zdt.epochMilliseconds);
+}
+
+// Build a Temporal.ZonedDateTime in UTC using the browser's *local* time
+// components.  This makes .hour and epochMilliseconds agree on the same
+// clock value, so schedule-x positions events where the user expects them
+// (no UTC ↔ local offset).
+function dateToUtcZonedDateTime(date: Date | string): Temporal.ZonedDateTime {
+  const d = new Date(date);
+  return Temporal.PlainDateTime.from({
+    year: d.getFullYear(),
+    month: d.getMonth() + 1,
+    day: d.getDate(),
+    hour: d.getHours(),
+    minute: d.getMinutes(),
+    second: d.getSeconds(),
+  }).toZonedDateTime("UTC");
+}
+
+// Reverse: convert a "fake-UTC" ZonedDateTime back to a real local Date
+function utcZonedDateTimeToLocalDate(zdt: Temporal.ZonedDateTime): Date {
+  // The hour/minute stored in the ZDT represent local wall-clock time
+  return new Date(zdt.year, zdt.month - 1, zdt.day, zdt.hour, zdt.minute, zdt.second);
 }
 
 // Minimum visual duration for events (30 minutes in ms)
@@ -162,8 +176,8 @@ function appointmentToEvent(apt: CalendarAppointment) {
   return {
     id: apt.id,
     title: apt.patientName,
-    start: dateToZonedDateTime(apt.startTime),
-    end: dateToZonedDateTime(new Date(displayEndMs)),
+    start: dateToUtcZonedDateTime(apt.startTime),
+    end: dateToUtcZonedDateTime(new Date(displayEndMs)),
     _customData: {
       patientId: apt.patientId,
       patientName: apt.patientName,
@@ -175,6 +189,7 @@ function appointmentToEvent(apt: CalendarAppointment) {
       roomName: apt.roomName,
       status: apt.status,
       notes: apt.notes,
+      startTimeDisplay: formatEventTime(apt.startTime),
     },
   };
 }
@@ -314,9 +329,9 @@ function CalendarInner({
         if (!permissions.canCreate) return;
 
         try {
-          // dateTime is a Temporal.ZonedDateTime
+          // dateTime is a "fake-UTC" ZonedDateTime — interpret as local time
           const zdt = dateTime as unknown as Temporal.ZonedDateTime;
-          const startTime = zonedDateTimeToDate(zdt);
+          const startTime = utcZonedDateTimeToLocalDate(zdt);
           const endTime = new Date(startTime.getTime() + 30 * 60000); // +30 min default
 
           setFormState({
@@ -340,11 +355,11 @@ function CalendarInner({
       onEventUpdate: async (updatedEvent) => {
         if (!permissions.canEdit) return;
 
-        // start/end are Temporal.ZonedDateTime
+        // start/end are "fake-UTC" ZonedDateTimes whose h/m represent local time
         const startZdt = updatedEvent.start as unknown as Temporal.ZonedDateTime;
         const endZdt = updatedEvent.end as unknown as Temporal.ZonedDateTime;
-        const startTime = zonedDateTimeToDate(startZdt);
-        const endTime = zonedDateTimeToDate(endZdt);
+        const startTime = utcZonedDateTimeToLocalDate(startZdt);
+        const endTime = utcZonedDateTimeToLocalDate(endZdt);
 
         await updateAppointment(updatedEvent.id as string, {
           startTime: startTime.toISOString(),
