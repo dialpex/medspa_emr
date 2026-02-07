@@ -56,6 +56,9 @@ model Clinic {
   rooms             Room[]
   chartTemplates    ChartTemplate[]
   products          Product[]
+  communicationPreferences PatientCommunicationPreference[]
+  conversations     Conversation[]
+  messageTemplates  MessageTemplate[]
 }
 
 // ===========================================
@@ -133,6 +136,9 @@ model Patient {
   consents         PatientConsent[]
   invoices         Invoice[]
   patientMemberships PatientMembership[]
+  communicationPreference PatientCommunicationPreference?
+  conversation     Conversation?
+  messages         Message[]
 
   @@index([clinicId])
   @@index([lastName, firstName])
@@ -580,6 +586,9 @@ enum AuditAction {
   AppointmentUndoCheckIn
   AppointmentUndoStart
   AppointmentUndoComplete
+  MessageSend
+  MessageFailed
+  ConversationView
 }
 
 model AuditLog {
@@ -603,4 +612,145 @@ model AuditLog {
   @@index([action])
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+// ===========================================
+// PATIENT COMMUNICATION
+// ===========================================
+
+enum ConsentSource {
+  FrontDesk
+  Portal
+  Imported
+  Other
+}
+
+enum MessageDirection {
+  Outbound
+  Inbound
+}
+
+enum MessageChannel {
+  SMS
+  MMS
+}
+
+enum MessagePurpose {
+  AppointmentConfirmation
+  Reminder
+  Arrival
+  FollowUp
+  Generic
+}
+
+enum SmsVendor {
+  Twilio
+}
+
+enum MessageStatus {
+  Queued
+  Sent
+  Delivered
+  Failed
+  Canceled
+}
+
+enum ConversationType {
+  Patient
+}
+
+model PatientCommunicationPreference {
+  id            String        @id @default(cuid())
+  clinicId      String
+  patientId     String        @unique
+  phoneE164     String?
+  smsOptIn      Boolean       @default(false)
+  smsOptInAt    DateTime?
+  smsOptOutAt   DateTime?
+  consentSource ConsentSource @default(FrontDesk)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  clinic  Clinic  @relation(fields: [clinicId], references: [id])
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@unique([clinicId, patientId])
+  @@index([clinicId])
+  @@index([patientId])
+}
+
+model Conversation {
+  id                 String           @id @default(cuid())
+  clinicId           String
+  type               ConversationType @default(Patient)
+  patientId          String           @unique
+  lastMessageAt      DateTime?
+  lastMessagePreview String?
+  unreadCount        Int              @default(0)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  // Relations
+  clinic   Clinic    @relation(fields: [clinicId], references: [id])
+  patient  Patient   @relation(fields: [patientId], references: [id])
+  messages Message[]
+
+  @@unique([clinicId, patientId])
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([lastMessageAt])
+}
+
+model Message {
+  id               String           @id @default(cuid())
+  clinicId         String
+  conversationId   String
+  direction        MessageDirection
+  channel          MessageChannel   @default(SMS)
+  purpose          MessagePurpose   @default(Generic)
+  patientId        String
+  appointmentId    String?
+  bodyTextSnapshot String
+  bodyHash         String
+  mediaUrls        String?          // JSON array of URLs
+  vendor           SmsVendor?
+  vendorMessageId  String?
+  status           MessageStatus    @default(Queued)
+  errorCode        String?
+  errorMessage     String?
+  createdByUserId  String?
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  patient      Patient      @relation(fields: [patientId], references: [id])
+
+  @@index([clinicId])
+  @@index([conversationId])
+  @@index([patientId])
+  @@index([appointmentId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model MessageTemplate {
+  id        String         @id @default(cuid())
+  clinicId  String
+  key       String
+  purpose   MessagePurpose @default(Generic)
+  bodyText  String
+  isActive  Boolean        @default(true)
+  version   Int            @default(1)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  // Relations
+  clinic Clinic @relation(fields: [clinicId], references: [id])
+
+  @@unique([clinicId, key])
+  @@index([clinicId])
 }
