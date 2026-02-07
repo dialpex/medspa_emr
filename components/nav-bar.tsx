@@ -35,13 +35,19 @@ const navItems: NavItem[] = [
   { label: "Calendar", href: "/calendar", icon: <Calendar className="size-4" /> },
   { label: "Patients", href: "/patients", icon: <Users className="size-4" /> },
   { label: "Sales", href: "/sales", icon: <Tag className="size-4" />, roles: ["Owner", "Admin", "Billing"] },
-  { label: "Inbox", href: "/inbox", icon: <Bell className="size-4" />, badge: 3 },
+  { label: "Inbox", href: "/inbox", icon: <Bell className="size-4" />, roles: ["Owner", "Admin", "FrontDesk", "Provider"] },
   { label: "Reports", href: "/reports", icon: <BarChart3 className="size-4" />, roles: ["Owner", "Admin", "Billing", "MedicalDirector"] },
   { label: "AI Marketing", href: "/marketing", icon: <TrendingUp className="size-4" /> },
   { label: "Settings", href: "/settings", icon: <Settings className="size-4" /> },
 ];
 
-export function NavBar({ user }: { user: { name: string; role: Role } }) {
+export function NavBar({
+  user,
+  inboxUnreadCount,
+}: {
+  user: { name: string; role: Role };
+  inboxUnreadCount?: number;
+}) {
   const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -58,9 +64,14 @@ export function NavBar({ user }: { user: { name: string; role: Role } }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [dropdownOpen]);
 
-  const visibleItems = navItems.filter((item) =>
-    !item.roles || item.roles.includes(user.role)
-  );
+  const visibleItems = navItems
+    .filter((item) => !item.roles || item.roles.includes(user.role))
+    .map((item) => {
+      if (item.href === "/inbox" && inboxUnreadCount) {
+        return { ...item, badge: inboxUnreadCount };
+      }
+      return item;
+    });
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";

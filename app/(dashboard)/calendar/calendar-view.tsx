@@ -416,9 +416,9 @@ function CalendarInner({
         .sx-react-calendar-wrapper .sx-current-time-indicator {
           background-color: #ef4444;
         }
-        /* Header styling */
-        .sx-react-calendar-wrapper .sx-calendar__header {
-          display: none; /* We use our own header */
+        /* Hide built-in Schedule-X header — we use our own */
+        .sx-react-calendar-wrapper .sx__calendar-header {
+          display: none;
         }
       `}</style>
 

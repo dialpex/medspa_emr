@@ -11,6 +11,7 @@ export const ROLE_PERMISSIONS = {
     invoices: { view: true, create: true, edit: true, delete: true },
     users: { view: true, create: true, edit: true, delete: true },
     reports: { view: true },
+    messaging: { view: true, create: true, edit: false, delete: false },
   },
   Admin: {
     patients: { view: true, create: true, edit: true, delete: true },
@@ -21,6 +22,7 @@ export const ROLE_PERMISSIONS = {
     invoices: { view: true, create: true, edit: true, delete: true },
     users: { view: true, create: true, edit: true, delete: true },
     reports: { view: true },
+    messaging: { view: true, create: true, edit: false, delete: false },
   },
   Provider: {
     patients: { view: true, create: true, edit: true, delete: false },
@@ -31,6 +33,7 @@ export const ROLE_PERMISSIONS = {
     invoices: { view: true, create: true, edit: true, delete: false },
     users: { view: false, create: false, edit: false, delete: false },
     reports: { view: true },
+    messaging: { view: true, create: true, edit: false, delete: false },
   },
   FrontDesk: {
     patients: { view: true, create: true, edit: true, delete: false },
@@ -41,6 +44,7 @@ export const ROLE_PERMISSIONS = {
     invoices: { view: true, create: true, edit: true, delete: false },
     users: { view: false, create: false, edit: false, delete: false },
     reports: { view: false },
+    messaging: { view: true, create: true, edit: false, delete: false },
   },
   Billing: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -51,6 +55,7 @@ export const ROLE_PERMISSIONS = {
     invoices: { view: true, create: true, edit: true, delete: true },
     users: { view: false, create: false, edit: false, delete: false },
     reports: { view: true },
+    messaging: { view: false, create: false, edit: false, delete: false },
   },
   MedicalDirector: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -61,6 +66,7 @@ export const ROLE_PERMISSIONS = {
     invoices: { view: false, create: false, edit: false, delete: false },
     users: { view: false, create: false, edit: false, delete: false },
     reports: { view: true },
+    messaging: { view: false, create: false, edit: false, delete: false },
   },
   ReadOnly: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -71,6 +77,7 @@ export const ROLE_PERMISSIONS = {
     invoices: { view: true, create: false, edit: false, delete: false },
     users: { view: false, create: false, edit: false, delete: false },
     reports: { view: true },
+    messaging: { view: false, create: false, edit: false, delete: false },
   },
 } as const;
 

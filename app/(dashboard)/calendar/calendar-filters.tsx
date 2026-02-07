@@ -1,13 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CalendarIcon,
   FilterIcon,
+  ChevronDown,
 } from "lucide-react";
 import type { Provider, Room } from "@/lib/actions/appointments";
+import { MiniCalendar } from "./mini-calendar";
 
 export type CalendarFiltersProps = {
   providers: Provider[];
@@ -25,6 +28,7 @@ export function CalendarFilters({
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const [showMiniCal, setShowMiniCal] = useState(false);
   const selectedProviderId = searchParams.get("providerId") || "";
   const selectedRoomId = searchParams.get("roomId") || "";
 
@@ -103,7 +107,8 @@ export function CalendarFilters({
   };
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+    <div className="mb-4 relative">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       {/* Date Navigation */}
       <div className="flex items-center gap-2">
         <button
@@ -129,7 +134,13 @@ export function CalendarFilters({
           <ChevronRightIcon className="h-4 w-4" />
         </button>
 
-        <h2 className="text-lg font-semibold ml-4">{formatDateHeader()}</h2>
+        <button
+          onClick={() => setShowMiniCal(!showMiniCal)}
+          className="flex items-center gap-1 ml-2"
+        >
+          <h2 className="text-lg font-semibold">{formatDateHeader()}</h2>
+          <ChevronDown className={`size-4 text-gray-400 transition-transform ${showMiniCal ? "rotate-180" : ""}`} />
+        </button>
       </div>
 
       {/* View Toggle & Filters */}
@@ -194,6 +205,20 @@ export function CalendarFilters({
           </div>
         )}
       </div>
+      </div>
+
+      {/* Mini Calendar */}
+      {showMiniCal && (
+        <div className="absolute top-full left-0 mt-2 rounded-xl border border-gray-200 bg-white p-4 shadow-lg z-50">
+          <MiniCalendar
+            currentDate={dateObj}
+            onSelectDate={(date) => {
+              navigateToDate(date);
+              setShowMiniCal(false);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

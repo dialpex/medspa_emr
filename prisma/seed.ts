@@ -1544,6 +1544,210 @@ By signing below, I confirm my consent to proceed with treatment.`,
   ]);
   console.log(`Created ${auditLogs.length} audit log entries`);
 
+  // ===========================================
+  // PATIENT COMMUNICATION PREFERENCES
+  // ===========================================
+  const commPrefs = await Promise.all([
+    prisma.patientCommunicationPreference.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[0].id, // Jennifer Williams
+        phoneE164: "+15552345678",
+        smsOptIn: true,
+        smsOptInAt: new Date(today.getFullYear(), today.getMonth() - 2, 10),
+        consentSource: "FrontDesk",
+      },
+    }),
+    prisma.patientCommunicationPreference.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[2].id, // Lisa Chen
+        phoneE164: "+15554567890",
+        smsOptIn: true,
+        smsOptInAt: new Date(today.getFullYear(), today.getMonth() - 1, 5),
+        consentSource: "Portal",
+      },
+    }),
+    prisma.patientCommunicationPreference.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[3].id, // David Martinez
+        phoneE164: "+15555678901",
+        smsOptIn: false,
+        smsOptInAt: new Date(today.getFullYear(), today.getMonth() - 3, 1),
+        smsOptOutAt: new Date(today.getFullYear(), today.getMonth() - 1, 15),
+        consentSource: "FrontDesk",
+      },
+    }),
+  ]);
+  console.log(`Created ${commPrefs.length} communication preferences`);
+
+  // ===========================================
+  // CONVERSATIONS
+  // ===========================================
+  const conversations = await Promise.all([
+    prisma.conversation.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[0].id, // Jennifer Williams
+        lastMessageAt: new Date(today.getTime() - 2 * 60 * 60 * 1000), // 2 hours ago
+        lastMessagePreview: "Your appointment is confirmed for tomorrow at 10 AM.",
+        unreadCount: 0,
+      },
+    }),
+    prisma.conversation.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[2].id, // Lisa Chen
+        lastMessageAt: new Date(today.getTime() - 24 * 60 * 60 * 1000), // yesterday
+        lastMessagePreview: "Thank you! See you then.",
+        unreadCount: 1,
+      },
+    }),
+    prisma.conversation.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[3].id, // David Martinez
+        lastMessageAt: new Date(today.getTime() - 48 * 60 * 60 * 1000), // 2 days ago
+        lastMessagePreview: "Reminder: Your appointment is scheduled for...",
+        unreadCount: 0,
+      },
+    }),
+  ]);
+  console.log(`Created ${conversations.length} conversations`);
+
+  // ===========================================
+  // MESSAGES
+  // ===========================================
+  const messages = await Promise.all([
+    // Conversation 1 (Jennifer Williams): 2 outbound
+    prisma.message.create({
+      data: {
+        clinicId: clinic.id,
+        conversationId: conversations[0].id,
+        direction: "Outbound",
+        channel: "SMS",
+        purpose: "Reminder",
+        patientId: patients[0].id,
+        bodyTextSnapshot: "Hi Jennifer, this is a reminder about your upcoming Botox appointment tomorrow at 10 AM. Reply CONFIRM to confirm.",
+        bodyHash: "sha256:reminder1hash",
+        status: "Delivered",
+        sentAt: new Date(today.getTime() - 4 * 60 * 60 * 1000),
+        deliveredAt: new Date(today.getTime() - 4 * 60 * 60 * 1000 + 5000),
+        createdByUserId: frontDesk.id,
+        createdAt: new Date(today.getTime() - 4 * 60 * 60 * 1000),
+      },
+    }),
+    prisma.message.create({
+      data: {
+        clinicId: clinic.id,
+        conversationId: conversations[0].id,
+        direction: "Outbound",
+        channel: "SMS",
+        purpose: "AppointmentConfirmation",
+        patientId: patients[0].id,
+        bodyTextSnapshot: "Your appointment is confirmed for tomorrow at 10 AM. Please arrive 10 minutes early. See you soon!",
+        bodyHash: "sha256:confirm1hash",
+        status: "Delivered",
+        sentAt: new Date(today.getTime() - 2 * 60 * 60 * 1000),
+        deliveredAt: new Date(today.getTime() - 2 * 60 * 60 * 1000 + 3000),
+        createdByUserId: frontDesk.id,
+        createdAt: new Date(today.getTime() - 2 * 60 * 60 * 1000),
+      },
+    }),
+    // Conversation 2 (Lisa Chen): 1 outbound + 1 inbound
+    prisma.message.create({
+      data: {
+        clinicId: clinic.id,
+        conversationId: conversations[1].id,
+        direction: "Outbound",
+        channel: "SMS",
+        purpose: "FollowUp",
+        patientId: patients[2].id,
+        bodyTextSnapshot: "Hi Lisa, how are you feeling after your lip filler treatment? Please let us know if you have any questions.",
+        bodyHash: "sha256:followup1hash",
+        status: "Delivered",
+        sentAt: new Date(today.getTime() - 26 * 60 * 60 * 1000),
+        deliveredAt: new Date(today.getTime() - 26 * 60 * 60 * 1000 + 4000),
+        createdByUserId: provider1.id,
+        createdAt: new Date(today.getTime() - 26 * 60 * 60 * 1000),
+      },
+    }),
+    prisma.message.create({
+      data: {
+        clinicId: clinic.id,
+        conversationId: conversations[1].id,
+        direction: "Inbound",
+        channel: "SMS",
+        purpose: "Generic",
+        patientId: patients[2].id,
+        bodyTextSnapshot: "Thank you! See you then.",
+        bodyHash: "sha256:inbound1hash",
+        status: "Delivered",
+        deliveredAt: new Date(today.getTime() - 24 * 60 * 60 * 1000),
+        createdAt: new Date(today.getTime() - 24 * 60 * 60 * 1000),
+      },
+    }),
+    // Conversation 3 (David Martinez): 1 outbound before opt-out
+    prisma.message.create({
+      data: {
+        clinicId: clinic.id,
+        conversationId: conversations[2].id,
+        direction: "Outbound",
+        channel: "SMS",
+        purpose: "Reminder",
+        patientId: patients[3].id,
+        bodyTextSnapshot: "Reminder: Your appointment is scheduled for next week. Please confirm your attendance.",
+        bodyHash: "sha256:reminder2hash",
+        status: "Delivered",
+        sentAt: new Date(today.getTime() - 48 * 60 * 60 * 1000),
+        deliveredAt: new Date(today.getTime() - 48 * 60 * 60 * 1000 + 6000),
+        createdByUserId: frontDesk.id,
+        createdAt: new Date(today.getTime() - 48 * 60 * 60 * 1000),
+      },
+    }),
+  ]);
+  console.log(`Created ${messages.length} messages`);
+
+  // ===========================================
+  // MESSAGE TEMPLATES
+  // ===========================================
+  const messageTemplates = await Promise.all([
+    prisma.messageTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        key: "appointment-reminder",
+        purpose: "Reminder",
+        bodyText: "Hi {{firstName}}, this is a reminder about your upcoming appointment at Radiance MedSpa. Please reply CONFIRM to confirm your attendance.",
+      },
+    }),
+    prisma.messageTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        key: "appointment-confirmation",
+        purpose: "AppointmentConfirmation",
+        bodyText: "Hi {{firstName}}, your appointment at Radiance MedSpa is confirmed. Please arrive 10 minutes early. See you soon!",
+      },
+    }),
+    prisma.messageTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        key: "post-treatment-followup",
+        purpose: "FollowUp",
+        bodyText: "Hi {{firstName}}, how are you feeling after your treatment? If you have any questions or concerns, please don't hesitate to reach out. - Radiance MedSpa",
+      },
+    }),
+    prisma.messageTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        key: "arrival-instructions",
+        purpose: "Arrival",
+        bodyText: "Hi {{firstName}}, we're looking forward to seeing you! When you arrive, please check in at the front desk. Parking is available in the lot behind our building.",
+      },
+    }),
+  ]);
+  console.log(`Created ${messageTemplates.length} message templates`);
+
   console.log("\nDatabase seeding completed successfully!");
   console.log("\nSummary:");
   console.log("- 1 Clinic");
@@ -1560,6 +1764,9 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log("- 2 Invoices");
   console.log("- 2 Patient Memberships");
   console.log("- 6 Audit Log Entries");
+  console.log("- 3 Communication Preferences");
+  console.log("- 3 Conversations with 5 Messages");
+  console.log("- 4 Message Templates");
 }
 
 main()
