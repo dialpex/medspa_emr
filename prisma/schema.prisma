@@ -54,6 +54,7 @@ model Clinic {
   patientMemberships   PatientMembership[]
   auditLogs         AuditLog[]
   rooms             Room[]
+  resources         Resource[]
   chartTemplates    ChartTemplate[]
   products          Product[]
   communicationPreferences PatientCommunicationPreference[]
@@ -151,12 +152,37 @@ model Patient {
 // ===========================================
 
 model Room {
-  id        String   @id @default(cuid())
-  clinicId  String
-  name      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  clinicId      String
+  name          String
+  description   String?
+  category      String?
+  color         String?
+  capacity      String   @default("one")
+  maxConcurrent Int      @default(1)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  clinic       Clinic        @relation(fields: [clinicId], references: [id])
+  appointments Appointment[]
+
+  @@index([clinicId])
+}
+
+model Resource {
+  id            String   @id @default(cuid())
+  clinicId      String
+  name          String
+  description   String?
+  category      String?
+  color         String?
+  capacity      String   @default("one")
+  maxConcurrent Int      @default(1)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
   clinic       Clinic        @relation(fields: [clinicId], references: [id])
@@ -182,6 +208,7 @@ model Appointment {
   providerId  String
   serviceId   String?
   roomId      String?
+  resourceId  String?
   startTime   DateTime
   endTime     DateTime
   status      AppointmentStatus @default(Scheduled)
@@ -199,7 +226,8 @@ model Appointment {
   patient  Patient  @relation(fields: [patientId], references: [id])
   provider User     @relation("AppointmentProvider", fields: [providerId], references: [id])
   service  Service? @relation(fields: [serviceId], references: [id])
-  room     Room?    @relation(fields: [roomId], references: [id])
+  room     Room?     @relation(fields: [roomId], references: [id])
+  resource Resource? @relation(fields: [resourceId], references: [id])
   chart    Chart?
   invoice  Invoice?
 
@@ -538,6 +566,7 @@ model PatientMembership {
   planId    String
   status    String   @default("Active") // Active, Paused, Cancelled
   startDate DateTime @default(now())
+  termMonths   Int      @default(12)
   nextBillDate DateTime?
   cancelledAt  DateTime?
   createdAt DateTime @default(now())
