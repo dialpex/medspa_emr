@@ -19,6 +19,8 @@ export type CalendarAppointment = {
   serviceName: string | null;
   roomId: string | null;
   roomName: string | null;
+  resourceId: string | null;
+  resourceName: string | null;
   startTime: Date;
   endTime: Date;
   status: AppointmentStatus;
@@ -32,6 +34,11 @@ export type Provider = {
 };
 
 export type Room = {
+  id: string;
+  name: string;
+};
+
+export type ResourceOption = {
   id: string;
   name: string;
 };
@@ -86,6 +93,7 @@ export async function getAppointments(
       provider: { select: { name: true } },
       service: { select: { name: true } },
       room: { select: { name: true } },
+      resource: { select: { name: true } },
     },
     orderBy: { startTime: "asc" },
   });
@@ -100,6 +108,8 @@ export async function getAppointments(
     serviceName: apt.service?.name ?? null,
     roomId: apt.roomId,
     roomName: apt.room?.name ?? null,
+    resourceId: apt.resourceId,
+    resourceName: apt.resource?.name ?? null,
     startTime: apt.startTime,
     endTime: apt.endTime,
     status: apt.status,
@@ -124,6 +134,7 @@ export async function getAppointment(id: string): Promise<CalendarAppointment | 
       provider: { select: { name: true } },
       service: { select: { name: true } },
       room: { select: { name: true } },
+      resource: { select: { name: true } },
     },
   });
 
@@ -139,6 +150,8 @@ export async function getAppointment(id: string): Promise<CalendarAppointment | 
     serviceName: apt.service?.name ?? null,
     roomId: apt.roomId,
     roomName: apt.room?.name ?? null,
+    resourceId: apt.resourceId,
+    resourceName: apt.resource?.name ?? null,
     startTime: apt.startTime,
     endTime: apt.endTime,
     status: apt.status,
@@ -188,6 +201,27 @@ export async function getRooms(): Promise<Room[]> {
   });
 
   return rooms;
+}
+
+/**
+ * Get all active resources (equipment)
+ */
+export async function getResources(): Promise<ResourceOption[]> {
+  const user = await requirePermission("appointments", "view");
+
+  const resources = await prisma.resource.findMany({
+    where: {
+      clinicId: user.clinicId,
+      isActive: true,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return resources;
 }
 
 /**
@@ -354,6 +388,7 @@ export type CreateAppointmentInput = {
   providerId: string;
   serviceId?: string;
   roomId?: string;
+  resourceId?: string;
   startTime: string; // ISO string
   endTime: string; // ISO string
   notes?: string;
@@ -421,6 +456,20 @@ export async function createAppointment(
     }
   }
 
+  // Verify resource if provided
+  if (input.resourceId) {
+    const resource = await prisma.resource.findFirst({
+      where: {
+        id: input.resourceId,
+        clinicId: user.clinicId,
+        isActive: true,
+      },
+    });
+    if (!resource) {
+      return { success: false, error: "Resource not found" };
+    }
+  }
+
   const appointment = await prisma.appointment.create({
     data: {
       clinicId: user.clinicId,
@@ -428,6 +477,7 @@ export async function createAppointment(
       providerId: input.providerId,
       serviceId: input.serviceId || null,
       roomId: input.roomId || null,
+      resourceId: input.resourceId || null,
       startTime: new Date(input.startTime),
       endTime: new Date(input.endTime),
       notes: input.notes || null,
@@ -438,6 +488,7 @@ export async function createAppointment(
       provider: { select: { name: true } },
       service: { select: { name: true } },
       room: { select: { name: true } },
+      resource: { select: { name: true } },
     },
   });
 
@@ -455,6 +506,8 @@ export async function createAppointment(
       serviceName: appointment.service?.name ?? null,
       roomId: appointment.roomId,
       roomName: appointment.room?.name ?? null,
+      resourceId: appointment.resourceId,
+      resourceName: appointment.resource?.name ?? null,
       startTime: appointment.startTime,
       endTime: appointment.endTime,
       status: appointment.status,
@@ -468,6 +521,7 @@ export type UpdateAppointmentInput = {
   providerId?: string;
   serviceId?: string | null;
   roomId?: string | null;
+  resourceId?: string | null;
   startTime?: string;
   endTime?: string;
   notes?: string;
@@ -532,6 +586,16 @@ export async function updateAppointment(
       if (!room) return { success: false, error: "Room not found" };
     }
     updateData.roomId = input.roomId || null;
+  }
+
+  if (input.resourceId !== undefined) {
+    if (input.resourceId) {
+      const resource = await prisma.resource.findFirst({
+        where: { id: input.resourceId, clinicId: user.clinicId, isActive: true },
+      });
+      if (!resource) return { success: false, error: "Resource not found" };
+    }
+    updateData.resourceId = input.resourceId || null;
   }
 
   if (input.startTime !== undefined) {

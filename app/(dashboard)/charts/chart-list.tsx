@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PlusIcon, FileTextIcon } from "lucide-react";
+import { PatientAvatar } from "@/components/patient-avatar";
 
 type ChartItem = {
   id: string;
@@ -98,14 +99,19 @@ export function ChartList({ initialCharts }: { initialCharts: ChartItem[] }) {
               {filtered.map((chart) => (
                 <tr key={chart.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">
-                      {chart.patient.firstName} {chart.patient.lastName}
-                    </div>
-                    {chart.chiefComplaint && (
-                      <div className="text-xs text-gray-500 truncate max-w-xs">
-                        {chart.chiefComplaint}
+                    <div className="flex items-center gap-3">
+                      <PatientAvatar firstName={chart.patient.firstName} lastName={chart.patient.lastName} />
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          {chart.patient.firstName} {chart.patient.lastName}
+                        </div>
+                        {chart.chiefComplaint && (
+                          <div className="text-xs text-gray-500 truncate max-w-xs">
+                            {chart.chiefComplaint}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {chart.template?.name ?? "—"}

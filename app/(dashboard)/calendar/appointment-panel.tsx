@@ -28,8 +28,10 @@ import {
   type PatientTransaction,
   type Provider,
   type Room,
+  type ResourceOption,
   type Service,
 } from "@/lib/actions/appointments";
+import { PatientAvatar } from "@/components/patient-avatar";
 import { StatusBadge, STATUS_LABELS } from "./appointment-card";
 import { AppointmentForm } from "./appointment-form";
 import { createChart, getCharts } from "@/lib/actions/charts";
@@ -92,6 +94,7 @@ export type AppointmentPanelProps = {
   onClose: () => void;
   providers: Provider[];
   rooms: Room[];
+  resources: ResourceOption[];
   services: Service[];
   permissions: {
     canCreate: boolean;
@@ -105,6 +108,7 @@ export function AppointmentPanel({
   onClose,
   providers,
   rooms,
+  resources,
   services,
   permissions,
 }: AppointmentPanelProps) {
@@ -166,6 +170,8 @@ export function AppointmentPanel({
         serviceName: detail.serviceName,
         roomId: null,
         roomName: detail.roomName,
+        resourceId: null,
+        resourceName: null,
         startTime: detail.startTime,
         endTime: detail.endTime,
         status: detail.status,
@@ -237,10 +243,7 @@ export function AppointmentPanel({
                     </h3>
                     <div className="flex items-start gap-3">
                       {/* Avatar */}
-                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center text-sm font-semibold">
-                        {detail.patientFirstName[0]}
-                        {detail.patientLastName[0]}
-                      </div>
+                      <PatientAvatar size="md" firstName={detail.patientFirstName} lastName={detail.patientLastName} />
                       <div className="flex-1 min-w-0 space-y-1.5">
                         {detail.patientPhone && (
                           <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -477,6 +480,7 @@ export function AppointmentPanel({
           }}
           providers={providers}
           rooms={rooms}
+          resources={resources}
           services={services}
           permissions={permissions}
           appointment={calendarAppointment}

@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition, useCallback } from "react";
 import { Search, MessageSquare } from "lucide-react";
+import { PatientAvatar } from "@/components/patient-avatar";
 import type { getConversations } from "@/lib/actions/messaging";
 
 type Conversation = Awaited<ReturnType<typeof getConversations>>[number];
@@ -109,36 +110,39 @@ export function ConversationList({
                     : "hover:bg-gray-50 border-l-2 border-l-transparent"
                 }`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm text-gray-900 truncate">
-                        {conv.patient.firstName} {conv.patient.lastName}
+                <div className="flex items-start gap-3">
+                  <PatientAvatar firstName={conv.patient.firstName} lastName={conv.patient.lastName} />
+                  <div className="flex items-start justify-between gap-2 flex-1 min-w-0">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm text-gray-900 truncate">
+                          {conv.patient.firstName} {conv.patient.lastName}
+                        </span>
+                        {isOptedOut && (
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                            Opted Out
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {conv.patient.phone || "No phone"}
+                      </p>
+                      {conv.lastMessagePreview && (
+                        <p className="text-xs text-gray-400 mt-1 truncate">
+                          {conv.lastMessagePreview}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <span className="text-[10px] text-gray-400">
+                        {formatRelativeTime(conv.lastMessageAt)}
                       </span>
-                      {isOptedOut && (
-                        <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                          Opted Out
+                      {conv.unreadCount > 0 && (
+                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-purple-500 px-1 text-[10px] font-bold text-white">
+                          {conv.unreadCount > 99 ? "99+" : conv.unreadCount}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {conv.patient.phone || "No phone"}
-                    </p>
-                    {conv.lastMessagePreview && (
-                      <p className="text-xs text-gray-400 mt-1 truncate">
-                        {conv.lastMessagePreview}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    <span className="text-[10px] text-gray-400">
-                      {formatRelativeTime(conv.lastMessageAt)}
-                    </span>
-                    {conv.unreadCount > 0 && (
-                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-purple-500 px-1 text-[10px] font-bold text-white">
-                        {conv.unreadCount > 99 ? "99+" : conv.unreadCount}
-                      </span>
-                    )}
                   </div>
                 </div>
               </button>

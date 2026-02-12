@@ -124,6 +124,11 @@
   }
 }
 
+/* Schedule-X: constrain resize handle to bottom edge only */
+.sx__time-grid-event-resize-handle {
+  height: 6px !important;
+}
+
 /* Tiptap editor */
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);

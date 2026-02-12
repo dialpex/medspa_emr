@@ -11,15 +11,18 @@ import {
   assignMembershipToPatient,
   type MembershipPlanItem,
   type MembershipDataItem,
+  type PatientMembershipItem,
 } from "@/lib/actions/memberships";
 import { searchPatients } from "@/lib/actions/invoices";
+import { PatientAvatar } from "@/components/patient-avatar";
 
 type Props = {
   plans: MembershipPlanItem[];
   membershipData: MembershipDataItem[];
+  patientMemberships: PatientMembershipItem[];
 };
 
-export function MembershipsView({ plans: initialPlans, membershipData }: Props) {
+export function MembershipsView({ plans: initialPlans, membershipData, patientMemberships }: Props) {
   const [plans, setPlans] = useState(initialPlans);
   const [isPending, startTransition] = useTransition();
   const [showPlanForm, setShowPlanForm] = useState(false);
@@ -35,6 +38,7 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
   // Assign form state
   const [assignPlanId, setAssignPlanId] = useState("");
   const [assignPatientId, setAssignPatientId] = useState("");
+  const [assignTermMonths, setAssignTermMonths] = useState("12");
   const [patientSearch, setPatientSearch] = useState("");
   const [patientResults, setPatientResults] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
 
@@ -90,7 +94,7 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
     if (!assignPlanId || !assignPatientId) return;
     setError(null);
     startTransition(async () => {
-      const result = await assignMembershipToPatient({ patientId: assignPatientId, planId: assignPlanId });
+      const result = await assignMembershipToPatient({ patientId: assignPatientId, planId: assignPlanId, termMonths: parseInt(assignTermMonths, 10) });
       if (!result.success) { setError(result.error); return; }
       setShowAssign(false);
       window.location.reload();
@@ -167,7 +171,7 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
 
         {showAssign && (
           <div className="bg-white border rounded-lg p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Plan</label>
                 <select value={assignPlanId} onChange={(e) => setAssignPlanId(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
@@ -200,6 +204,14 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
                   </ul>
                 )}
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Term (months)</label>
+                <select value={assignTermMonths} onChange={(e) => setAssignTermMonths(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>{n} {n === 1 ? "month" : "months"}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex gap-2">
               <button onClick={handleAssign} disabled={isPending || !assignPlanId || !assignPatientId} className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50">
@@ -211,9 +223,7 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
         )}
       </div>
 
-      {/* Membership Data Table */}
       <div className="mt-8">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Membership Data</h3>
         <div className="rounded-lg border border-gray-200 overflow-hidden">
           {membershipData.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
@@ -264,6 +274,67 @@ export function MembershipsView({ plans: initialPlans, membershipData }: Props) 
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Member History Table */}
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Member History</h3>
+        <div className="rounded-lg border border-gray-200 overflow-hidden">
+          {patientMemberships.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              <Users className="size-8 mx-auto mb-2 text-gray-300" />
+              No member history yet.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Patient</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Plan</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Start Date</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Remaining</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Price/mo</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {patientMemberships.map((m) => {
+                  const toDate = (v: string | number | Date) => v instanceof Date ? v : new Date(typeof v === "string" && /^\d+$/.test(v) ? Number(v) : v);
+                  const now = new Date();
+                  const endRef = m.status === "Cancelled" && m.cancelledAt ? toDate(m.cancelledAt) : now;
+                  const start = toDate(m.startDate);
+                  const elapsed = (endRef.getFullYear() - start.getFullYear()) * 12 + (endRef.getMonth() - start.getMonth());
+                  const left = Math.max(0, m.termMonths - elapsed);
+                  const remaining = `${left} mo`;
+                  return (
+                    <tr key={m.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <PatientAvatar firstName={m.patient.firstName} lastName={m.patient.lastName} size="sm" />
+                          <span className="font-medium text-gray-900">{m.patient.firstName} {m.patient.lastName}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">{m.plan.name}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={cn(
+                          "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                          m.status === "Active" ? "bg-green-100 text-green-700" :
+                          m.status === "Paused" ? "bg-yellow-100 text-yellow-700" :
+                          "bg-gray-100 text-gray-500"
+                        )}>
+                          {m.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">{start.toLocaleDateString()}</td>
+                      <td className="px-4 py-3 text-right text-gray-700">{remaining}</td>
+                      <td className="px-4 py-3 text-right font-medium">${m.plan.price.toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

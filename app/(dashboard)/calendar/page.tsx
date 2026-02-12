@@ -4,6 +4,7 @@ import {
   getAppointments,
   getProviders,
   getRooms,
+  getResources,
   getServices,
   getAppointmentPermissions,
 } from "@/lib/actions/appointments";
@@ -82,10 +83,11 @@ async function CalendarContent({
   view: "day" | "week";
   filters: { providerId?: string; roomId?: string };
 }) {
-  const [appointments, providers, rooms, services, permissions] = await Promise.all([
+  const [appointments, providers, rooms, resources, services, permissions] = await Promise.all([
     getAppointments(startDate, endDate, filters),
     getProviders(),
     getRooms(),
+    getResources(),
     getServices(),
     getAppointmentPermissions(),
   ]);
@@ -102,6 +104,7 @@ async function CalendarContent({
         appointments={appointments}
         providers={providers}
         rooms={rooms}
+        resources={resources}
         services={services}
         currentDate={currentDate.toISOString()}
         view={view}

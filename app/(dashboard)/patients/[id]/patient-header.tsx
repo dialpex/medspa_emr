@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { PatientDetail } from "@/lib/actions/patients";
+import { PatientAvatar } from "@/components/patient-avatar";
 
 function PatientTags({ tags }: { tags: string | null }) {
   if (!tags) return null;
@@ -46,9 +47,12 @@ export function PatientHeader({ patient }: { patient: PatientDetail }) {
 
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold">
-            {patient.firstName} {patient.lastName}
-          </h1>
+          <div className="flex items-center gap-3">
+            <PatientAvatar firstName={patient.firstName} lastName={patient.lastName} size="md" />
+            <h1 className="text-2xl font-bold">
+              {patient.firstName} {patient.lastName}
+            </h1>
+          </div>
           <div className="text-gray-600 mt-1">
             {patient.dateOfBirth && (
               <span>

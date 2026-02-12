@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { PatientListItem } from "@/lib/actions/patients";
+import { PatientAvatar } from "@/components/patient-avatar";
 
 function formatDate(date: Date | null): string {
   if (!date) return "—";
@@ -61,12 +62,15 @@ export function PatientList({ patients }: { patients: PatientListItem[] }) {
               className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
             >
               <td className="py-3 px-4">
-                <Link
-                  href={`/patients/${patient.id}`}
-                  className="text-blue-600 hover:underline font-medium"
-                >
-                  {patient.lastName}, {patient.firstName}
-                </Link>
+                <div className="flex items-center gap-3">
+                  <PatientAvatar firstName={patient.firstName} lastName={patient.lastName} />
+                  <Link
+                    href={`/patients/${patient.id}`}
+                    className="text-blue-600 hover:underline font-medium"
+                  >
+                    {patient.lastName}, {patient.firstName}
+                  </Link>
+                </div>
               </td>
               <td className="py-3 px-4 text-gray-600">
                 {formatDate(patient.dateOfBirth)}

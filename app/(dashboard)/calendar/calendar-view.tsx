@@ -20,6 +20,7 @@ import {
   type CalendarAppointment,
   type Provider,
   type Room,
+  type ResourceOption,
   type Service,
 } from "@/lib/actions/appointments";
 import { AppointmentForm } from "./appointment-form";
@@ -126,6 +127,7 @@ export type CalendarViewProps = {
   appointments: CalendarAppointment[];
   providers: Provider[];
   rooms: Room[];
+  resources: ResourceOption[];
   services: Service[];
   currentDate: string; // ISO string from server
   view: "day" | "week";
@@ -220,6 +222,7 @@ export function CalendarView({
   appointments,
   providers,
   rooms,
+  resources,
   services,
   currentDate,
   view,
@@ -259,6 +262,7 @@ export function CalendarView({
     appointments={appointments}
     providers={providers}
     rooms={rooms}
+    resources={resources}
     services={services}
     currentDate={currentDate}
     view={view}
@@ -275,6 +279,7 @@ function CalendarInner({
   appointments,
   providers,
   rooms,
+  resources,
   services,
   currentDate,
   view,
@@ -434,6 +439,7 @@ function CalendarInner({
         onClose={() => setPanelAppointmentId(null)}
         providers={providers}
         rooms={rooms}
+        resources={resources}
         services={services}
         permissions={permissions}
       />
@@ -444,6 +450,7 @@ function CalendarInner({
         onClose={handleCloseForm}
         providers={providers}
         rooms={rooms}
+        resources={resources}
         services={services}
         permissions={permissions}
         initialStartTime={formState.initialStartTime}

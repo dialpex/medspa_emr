@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Plus, MoreVertical, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PatientAvatar } from "@/components/patient-avatar";
 import { PageCard } from "@/components/ui/page-card";
 import { InvoiceFilters } from "./invoice-filters";
 import { InvoiceModal } from "./invoice-modal";
@@ -119,9 +120,9 @@ export function InvoiceListView({ initialInvoices, services, clinicInfo }: Props
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Patient</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Invoice #</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Patient</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Total</th>
                 <th className="w-10" />
@@ -130,9 +131,14 @@ export function InvoiceListView({ initialInvoices, services, clinicInfo }: Props
             <tbody className="divide-y">
               {invoices.map((inv) => (
                 <tr key={inv.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openInvoice(inv.id)}>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="flex items-center gap-3">
+                      <PatientAvatar firstName={inv.patient.firstName} lastName={inv.patient.lastName} />
+                      {inv.patient.firstName} {inv.patient.lastName}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 font-medium text-gray-900">{inv.invoiceNumber}</td>
                   <td className="px-4 py-3 text-gray-600">{new Date(inv.createdAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-gray-900">{inv.patient.firstName} {inv.patient.lastName}</td>
                   <td className="px-4 py-3">
                     <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[inv.status]?.bg, STATUS_COLORS[inv.status]?.text)}>
                       {inv.status === "PartiallyPaid" ? "Partially Paid" : inv.status}

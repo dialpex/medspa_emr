@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon } from "lucide-react";
+import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon, BoxIcon } from "lucide-react";
 import { PageCard } from "@/components/ui/page-card";
 
 const settingsItems = [
@@ -20,6 +20,12 @@ const settingsItems = [
     description: "Manage retail products, inventory, and pricing",
     href: "/settings/products",
     icon: TagIcon,
+  },
+  {
+    label: "Resources",
+    description: "Manage rooms and equipment for scheduling",
+    href: "/settings/resources",
+    icon: BoxIcon,
   },
   {
     label: "Location Details",

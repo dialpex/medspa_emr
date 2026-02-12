@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getInvoices, getClinicInfo } from "@/lib/actions/invoices";
 import { getPayments } from "@/lib/actions/payments";
-import { getMembershipPlans, getMembershipData } from "@/lib/actions/memberships";
+import { getMembershipPlans, getMembershipData, getPatientMemberships } from "@/lib/actions/memberships";
 import { getServicesForClinic } from "@/lib/actions/services";
 import { SalesSidebar } from "./sales-sidebar";
 import { InvoiceListView } from "./invoice-list-view";
@@ -40,11 +40,12 @@ export default async function SalesPage({ searchParams }: Props) {
     const payments = await getPayments();
     content = <PaymentsView payments={payments} />;
   } else if (section === "memberships") {
-    const [plans, data] = await Promise.all([
+    const [plans, data, patientMemberships] = await Promise.all([
       getMembershipPlans(),
       getMembershipData(),
+      getPatientMemberships(),
     ]);
-    content = <MembershipsView plans={plans} membershipData={data} />;
+    content = <MembershipsView plans={plans} membershipData={data} patientMemberships={patientMemberships} />;
   } else if (section === "gift-cards") {
     content = <GiftCardsView />;
   }

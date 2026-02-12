@@ -31,6 +31,7 @@ export type PatientMembershipItem = {
   id: string;
   status: string;
   startDate: Date;
+  termMonths: number;
   nextBillDate: Date | null;
   cancelledAt: Date | null;
   patient: { id: string; firstName: string; lastName: string };
@@ -153,7 +154,7 @@ export async function getPatientMemberships(): Promise<PatientMembershipItem[]> 
   });
 }
 
-export async function assignMembershipToPatient(input: { patientId: string; planId: string }) {
+export async function assignMembershipToPatient(input: { patientId: string; planId: string; termMonths?: number }) {
   try {
     const user = await requirePermission("invoices", "create");
     const plan = await prisma.membershipPlan.findFirst({ where: { id: input.planId, clinicId: user.clinicId, isActive: true } });
@@ -170,6 +171,7 @@ export async function assignMembershipToPatient(input: { patientId: string; plan
         planId: input.planId,
         status: "Active",
         startDate: now,
+        termMonths: input.termMonths ?? 12,
         nextBillDate: nextBill,
       },
     });

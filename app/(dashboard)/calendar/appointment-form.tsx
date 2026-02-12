@@ -14,6 +14,7 @@ import {
   type CalendarAppointment,
   type Provider,
   type Room,
+  type ResourceOption,
   type Service,
   type PatientSearchResult,
 } from "@/lib/actions/appointments";
@@ -24,6 +25,7 @@ export type AppointmentFormProps = {
   onClose: () => void;
   providers: Provider[];
   rooms: Room[];
+  resources: ResourceOption[];
   services: Service[];
   permissions: {
     canCreate: boolean;
@@ -42,6 +44,7 @@ export function AppointmentForm({
   onClose,
   providers,
   rooms,
+  resources,
   services,
   permissions,
   initialStartTime,
@@ -60,6 +63,7 @@ export function AppointmentForm({
   const [providerId, setProviderId] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [roomId, setRoomId] = useState("");
+  const [resourceId, setResourceId] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [notes, setNotes] = useState("");
@@ -98,6 +102,7 @@ export function AppointmentForm({
       setProviderId(appointment.providerId);
       setServiceId(appointment.serviceId || "");
       setRoomId(appointment.roomId || "");
+      setResourceId(appointment.resourceId || "");
       setStartTime(formatDateTimeLocal(appointment.startTime));
       setEndTime(formatDateTimeLocal(appointment.endTime));
       setNotes(appointment.notes || "");
@@ -108,6 +113,7 @@ export function AppointmentForm({
       setProviderId(providers[0]?.id || "");
       setServiceId("");
       setRoomId("");
+      setResourceId("");
       setStartTime(formatDateTimeLocal(snapTo15Min(initialStartTime || new Date())));
       setEndTime(formatDateTimeLocal(snapTo15Min(initialEndTime || addMinutes(new Date(), 30))));
       setNotes("");
@@ -213,6 +219,7 @@ export function AppointmentForm({
             providerId,
             serviceId: serviceId || null,
             roomId: roomId || null,
+            resourceId: resourceId || null,
             startTime: start.toISOString(),
             endTime: end.toISOString(),
             notes: notes || undefined,
@@ -238,6 +245,7 @@ export function AppointmentForm({
             providerId,
             serviceId: serviceId || undefined,
             roomId: roomId || undefined,
+            resourceId: resourceId || undefined,
             startTime: start.toISOString(),
             endTime: end.toISOString(),
             notes: notes || undefined,
@@ -348,6 +356,24 @@ export function AppointmentForm({
               {rooms.map((room) => (
                 <option key={room.id} value={room.id}>
                   {room.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {resources.length > 0 && (
+          <div>
+            <label className={labelClass}>Resource</label>
+            <select
+              value={resourceId}
+              onChange={(e) => setResourceId(e.target.value)}
+              className={inputClass}
+              disabled={!canSubmit}
+            >
+              <option value="">No resource assigned</option>
+              {resources.map((resource) => (
+                <option key={resource.id} value={resource.id}>
+                  {resource.name}
                 </option>
               ))}
             </select>
