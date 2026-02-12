@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { NavBar } from "@/components/nav-bar";
+import { Sidebar } from "@/components/sidebar";
 import { getTotalUnreadCount } from "@/lib/actions/messaging";
 import type { Role } from "@prisma/client";
 
@@ -23,9 +23,9 @@ export default async function DashboardLayout({
   const inboxUnreadCount = await getTotalUnreadCount().catch(() => 0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <NavBar user={user} inboxUnreadCount={inboxUnreadCount} />
-      <main>{children}</main>
+    <div className="flex min-h-screen">
+      <Sidebar user={user} inboxUnreadCount={inboxUnreadCount} />
+      <main className="flex-1 min-w-0 bg-gray-50">{children}</main>
     </div>
   );
 }
