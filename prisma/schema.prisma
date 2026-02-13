@@ -60,6 +60,7 @@ model Clinic {
   communicationPreferences PatientCommunicationPreference[]
   conversations     Conversation[]
   messageTemplates  MessageTemplate[]
+  notificationTemplates NotificationTemplate[]
 }
 
 // ===========================================
@@ -782,4 +783,45 @@ model MessageTemplate {
 
   @@unique([clinicId, key])
   @@index([clinicId])
+}
+
+// ===========================================
+// NOTIFICATION TEMPLATES
+// ===========================================
+
+enum NotificationTrigger {
+  PreAppointment
+  PostAppointment
+}
+
+enum TimingUnit {
+  Minutes
+  Hours
+  Days
+}
+
+model NotificationTemplate {
+  id            String              @id @default(cuid())
+  clinicId      String
+  key           String?
+  name          String
+  description   String?
+  trigger       NotificationTrigger
+  offsetValue   Int
+  offsetUnit    TimingUnit
+  bodyText      String
+  bodyHtml      String?
+  emailEnabled  Boolean             @default(false)
+  textEnabled   Boolean             @default(false)
+  isActive      Boolean             @default(true)
+  isSystem      Boolean             @default(false)
+  systemKey     String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id])
+
+  @@unique([clinicId, key])
+  @@index([clinicId])
+  @@index([clinicId, systemKey])
 }

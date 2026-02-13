@@ -212,11 +212,10 @@ export function LocationForm({ initialData }: { initialData: LocationData }) {
             { key: "instagram", label: "Instagram" },
             { key: "twitter", label: "Twitter / X" },
             { key: "youtube", label: "YouTube" },
-            { key: "pinterest", label: "Pinterest" },
-            { key: "googlePlaceId", label: "Google Place ID" },
+            { key: "googleReviewLink", label: "Google Review Link" },
           ].map((s) => (
             <Field key={s.key} label={s.label}>
-              <input className={inputCls} value={data.socialAccounts[s.key] ?? ""} onChange={(e) => setSocial(s.key, e.target.value)} placeholder={s.key === "googlePlaceId" ? "Place ID" : `${s.label} URL`} />
+              <input className={inputCls} value={data.socialAccounts[s.key] ?? ""} onChange={(e) => setSocial(s.key, e.target.value)} placeholder={s.key === "googleReviewLink" ? "https://g.page/r/..." : `${s.label} URL`} />
             </Field>
           ))}
         </div>

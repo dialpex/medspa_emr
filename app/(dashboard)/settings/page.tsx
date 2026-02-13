@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon, BoxIcon } from "lucide-react";
+import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon, BoxIcon, BellIcon } from "lucide-react";
 import { PageCard } from "@/components/ui/page-card";
 
 const settingsItems = [
@@ -26,6 +26,12 @@ const settingsItems = [
     description: "Manage rooms and equipment for scheduling",
     href: "/settings/resources",
     icon: BoxIcon,
+  },
+  {
+    label: "Patient Notifications",
+    description: "Appointment reminders & follow-ups",
+    href: "/settings/notifications",
+    icon: BellIcon,
   },
   {
     label: "Location Details",

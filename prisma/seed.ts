@@ -1748,6 +1748,71 @@ By signing below, I confirm my consent to proceed with treatment.`,
   ]);
   console.log(`Created ${messageTemplates.length} message templates`);
 
+  // ===========================================
+  // NOTIFICATION TEMPLATES
+  // ===========================================
+  const notificationTemplates = await Promise.all([
+    prisma.notificationTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        key: "booking-confirmation",
+        name: "Appointment Confirmation",
+        description: "Confirmation sent to patients after a booking.",
+        trigger: "PreAppointment",
+        offsetValue: 0,
+        offsetUnit: "Minutes",
+        bodyText:
+          "Hi {{firstName}}, your appointment at {{clinicName}} is confirmed for {{appointmentDate}} at {{appointmentTime}}. Reply CONFIRM to confirm or call us to reschedule.",
+        isSystem: true,
+      },
+    }),
+    prisma.notificationTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        key: "appointment-reminder",
+        name: "Appointment Reminder",
+        description: "Reminds the patient about their upcoming appointment.",
+        trigger: "PreAppointment",
+        offsetValue: 2,
+        offsetUnit: "Days",
+        bodyText:
+          "Hi {{firstName}}, this is a reminder about your appointment at {{clinicName}} on {{appointmentDate}} at {{appointmentTime}}. We look forward to seeing you!",
+        isSystem: true,
+      },
+    }),
+    prisma.notificationTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        key: "services-receipt",
+        name: "Services Receipt",
+        description: "Services and products receipt sent after checkout.",
+        trigger: "PostAppointment",
+        offsetValue: 0,
+        offsetUnit: "Minutes",
+        bodyText:
+          "Hi {{firstName}}, here is your receipt from {{clinicName}} for your visit on {{appointmentDate}}. Thank you for choosing us!",
+        isSystem: true,
+      },
+    }),
+    prisma.notificationTemplate.create({
+      data: {
+        clinicId: clinic.id,
+        key: "review-request",
+        name: "Review Reminder",
+        description: "Reminds patients to leave a review after their visit.",
+        trigger: "PostAppointment",
+        offsetValue: 2,
+        offsetUnit: "Hours",
+        bodyText:
+          "Hi {{firstName}}, thank you for visiting {{clinicName}}! We'd love to hear about your experience. Leave us a review here: {{reviewLink}}",
+        isSystem: true,
+      },
+    }),
+  ]);
+  console.log(
+    `Created ${notificationTemplates.length} notification templates`
+  );
+
   console.log("\nDatabase seeding completed successfully!");
   console.log("\nSummary:");
   console.log("- 1 Clinic");
