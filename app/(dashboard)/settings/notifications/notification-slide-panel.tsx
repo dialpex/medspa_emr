@@ -67,12 +67,13 @@ export function NotificationSlidePanel({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [trigger, setTrigger] = useState<NotificationTrigger>("PreAppointment");
-  const [offsetValue, setOffsetValue] = useState(0);
+  const [offsetValue, setOffsetValue] = useState<number | "">("");
   const [offsetUnit, setOffsetUnit] = useState<TimingUnit>("Hours");
   const [bodyText, setBodyText] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
@@ -103,7 +104,7 @@ export function NotificationSlidePanel({
         setName("");
         setDescription("");
         setTrigger(mode.trigger);
-        setOffsetValue(0);
+        setOffsetValue("");
         setOffsetUnit("Hours");
         setBodyText("");
         setBodyHtml("");
@@ -134,26 +135,41 @@ export function NotificationSlidePanel({
     }
   }
 
+  function showError(msg: string) {
+    setError(msg);
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const numericOffset = offsetValue === "" ? 0 : offsetValue;
+
+    // Auto-derive plain text from HTML if text body is empty but HTML has content
+    let effectiveBodyText = bodyText.trim();
+    if (!effectiveBodyText && bodyHtml.trim()) {
+      effectiveBodyText = stripHtml(bodyHtml);
+    }
 
     const input = {
       name: name.trim(),
       description: description.trim() || undefined,
       trigger,
-      offsetValue,
+      offsetValue: numericOffset,
       offsetUnit,
-      bodyText: bodyText.trim(),
+      bodyText: effectiveBodyText,
       bodyHtml: bodyHtml.trim() || undefined,
     };
 
     if (!input.name) {
-      setError("Name is required");
+      showError("Name is required");
       return;
     }
     if (!input.bodyText) {
-      setError("Message body is required");
+      showError("Message body is required");
       return;
     }
 
@@ -169,13 +185,13 @@ export function NotificationSlidePanel({
           result = await updateNotificationTemplate(targetId, input);
         }
         if (result && !result.success) {
-          setError(result.error || "Something went wrong");
+          showError(result.error || "Something went wrong");
           return;
         }
         onClose();
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong");
+        showError(err instanceof Error ? err.message : "Something went wrong");
       }
     });
   }
@@ -186,13 +202,13 @@ export function NotificationSlidePanel({
       try {
         const result = await deleteNotificationTemplate(resolved.effective.id);
         if (!result.success) {
-          setError(result.error || "Something went wrong");
+          showError(result.error || "Something went wrong");
           return;
         }
         onClose();
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong");
+        showError(err instanceof Error ? err.message : "Something went wrong");
       }
     });
   }
@@ -205,13 +221,13 @@ export function NotificationSlidePanel({
           resolved.systemTemplate!.key!
         );
         if (!result.success) {
-          setError(result.error || "Something went wrong");
+          showError(result.error || "Something went wrong");
           return;
         }
         onClose();
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong");
+        showError(err instanceof Error ? err.message : "Something went wrong");
       }
     });
   }
@@ -219,7 +235,7 @@ export function NotificationSlidePanel({
   const timingDirection =
     trigger === "PreAppointment" ? "before" : "after";
   const timingLabel =
-    offsetValue === 0
+    offsetValue === "" || offsetValue === 0
       ? trigger === "PreAppointment"
         ? "immediately when booked"
         : "immediately after"
@@ -267,7 +283,7 @@ export function NotificationSlidePanel({
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
             {error && (
               <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
@@ -323,9 +339,15 @@ export function NotificationSlidePanel({
                     type="number"
                     min={0}
                     value={offsetValue}
-                    onChange={(e) =>
-                      setOffsetValue(Math.max(0, parseInt(e.target.value) || 0))
-                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "") {
+                        setOffsetValue("");
+                      } else {
+                        setOffsetValue(Math.max(0, parseInt(val) || 0));
+                      }
+                    }}
+                    placeholder="0"
                     className={`${inputClass} w-24`}
                   />
                   <select

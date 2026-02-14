@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { PencilIcon, PlusIcon } from "lucide-react";
+import { PencilIcon, PlusIcon, TrashIcon } from "lucide-react";
 import {
   type NotificationTemplateItem,
   type ClinicPreviewData,
   toggleNotificationChannel,
+  deleteNotificationTemplate,
 } from "@/lib/actions/notifications";
 import { NotificationSlidePanel } from "./notification-slide-panel";
 import { PageCard } from "@/components/ui/page-card";
@@ -92,6 +93,8 @@ export function NotificationsClient({
     setPanelOpen(true);
   }
 
+  const [confirmDelete, setConfirmDelete] = useState<ResolvedTemplate | null>(null);
+
   function closePanel() {
     setPanelOpen(false);
   }
@@ -105,17 +108,28 @@ export function NotificationsClient({
               title="Pre-appointment"
               items={preTemplates}
               onEdit={openEdit}
+              onDelete={(item) => setConfirmDelete(item)}
               onAdd={() => openCreate("PreAppointment")}
             />
             <NotificationSection
               title="Post-appointment"
               items={postTemplates}
               onEdit={openEdit}
+              onDelete={(item) => setConfirmDelete(item)}
               onAdd={() => openCreate("PostAppointment")}
             />
           </div>
         </PageCard>
       </div>
+
+      {/* Delete confirmation dialog */}
+      {confirmDelete && (
+        <DeleteConfirmDialog
+          item={confirmDelete}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => setConfirmDelete(null)}
+        />
+      )}
 
       <NotificationSlidePanel
         isOpen={panelOpen}
@@ -131,11 +145,13 @@ function NotificationSection({
   title,
   items,
   onEdit,
+  onDelete,
   onAdd,
 }: {
   title: string;
   items: ResolvedTemplate[];
   onEdit: (item: ResolvedTemplate) => void;
+  onDelete: (item: ResolvedTemplate) => void;
   onAdd: () => void;
 }) {
   return (
@@ -147,6 +163,7 @@ function NotificationSection({
             key={item.displayId}
             item={item}
             onEdit={() => onEdit(item)}
+            onDelete={() => onDelete(item)}
           />
         ))}
         <button
@@ -164,9 +181,11 @@ function NotificationSection({
 function NotificationRow({
   item,
   onEdit,
+  onDelete,
 }: {
   item: ResolvedTemplate;
   onEdit: () => void;
+  onDelete: () => void;
 }) {
   const { effective } = item;
 
@@ -192,6 +211,15 @@ function NotificationRow({
         >
           <PencilIcon className="h-4 w-4" />
         </button>
+        {item.isFullyCustom && (
+          <button
+            onClick={onDelete}
+            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+            title="Delete notification"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -234,5 +262,59 @@ function ChannelCheckbox({
       />
       <span className="text-sm text-gray-600">{label}</span>
     </label>
+  );
+}
+
+function DeleteConfirmDialog({
+  item,
+  onCancel,
+  onConfirm,
+}: {
+  item: ResolvedTemplate;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  function handleDelete() {
+    startTransition(async () => {
+      const result = await deleteNotificationTemplate(item.effective.id);
+      if (result.success) {
+        onConfirm();
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/30" onClick={onCancel} />
+      <div className="relative bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          Delete notification
+        </h3>
+        <p className="text-sm text-gray-600 mb-6">
+          Are you sure you want to delete &ldquo;{item.effective.name}&rdquo;?
+          This action cannot be undone.
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            disabled={isPending}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isPending}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+          >
+            {isPending ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
