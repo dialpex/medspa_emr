@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { LocationData, updateLocationData } from "@/lib/actions/location";
 
 const DAYS = [
@@ -95,6 +95,31 @@ export function LocationForm({ initialData }: { initialData: LocationData }) {
     setSaved(false);
   }
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/logo/upload", { method: "POST", body: formData });
+      const json = await res.json();
+      if (json.success) {
+        set("logoUrl", json.logoUrl + "?t=" + Date.now());
+      }
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function handleLogoRemove() {
+    set("logoUrl", "");
+  }
+
   async function handleSave() {
     setSaving(true);
     try {
@@ -107,6 +132,48 @@ export function LocationForm({ initialData }: { initialData: LocationData }) {
 
   return (
     <div>
+      {/* Business Logo */}
+      <Section title="Business Logo">
+        <div className="flex items-center gap-6">
+          {data.logoUrl ? (
+            <img src={data.logoUrl} alt="Business logo" className="h-20 w-20 rounded-lg object-cover border border-gray-200" />
+          ) : (
+            <div className="flex h-20 w-20 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 text-white text-2xl font-semibold">
+              {data.name.charAt(0) || "?"}
+            </div>
+          )}
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-gray-500">JPEG, PNG, WebP, or SVG. Max 2MB.</p>
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                onChange={handleLogoUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {uploading ? "Uploading..." : "Upload Logo"}
+              </button>
+              {data.logoUrl && (
+                <button
+                  type="button"
+                  onClick={handleLogoRemove}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </Section>
+
       {/* Location Info */}
       <Section title="Location Info">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

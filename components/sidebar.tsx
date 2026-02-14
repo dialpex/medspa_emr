@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -28,11 +29,12 @@ type NavItem = {
   icon: React.ReactNode;
   roles?: Role[];
   badge?: number;
+  dividerAfter?: boolean;
 };
 
 const navItems: NavItem[] = [
   { label: "AI Assist", href: "/ai-assist", icon: <Sparkles className="size-5" />, roles: ["Owner", "Admin", "Provider", "FrontDesk", "Billing", "MedicalDirector"] },
-  { label: "Today", href: "/today", icon: <ClipboardList className="size-5" /> },
+  { label: "Today", href: "/today", icon: <ClipboardList className="size-5" />, dividerAfter: true },
   { label: "Calendar", href: "/calendar", icon: <Calendar className="size-5" /> },
   { label: "Patients", href: "/patients", icon: <Users className="size-5" /> },
   { label: "Sales", href: "/sales", icon: <Tag className="size-5" />, roles: ["Owner", "Admin", "Billing"] },
@@ -47,9 +49,13 @@ const STORAGE_KEY = "sidebar-collapsed";
 export function Sidebar({
   user,
   inboxUnreadCount,
+  clinicLogo,
+  clinicName,
 }: {
   user: { name: string; role: Role };
   inboxUnreadCount?: number;
+  clinicLogo?: string | null;
+  clinicName: string;
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -142,31 +148,41 @@ export function Sidebar({
 
   return (
     <aside
-      className={`relative sticky top-0 flex h-screen flex-col border-r border-gray-200 bg-white transition-all duration-300 ease-in-out ${
-        collapsed ? "w-[68px]" : "w-[240px]"
+      className={`relative sticky top-0 flex h-screen flex-col border-r border-gray-200 bg-white ${
+        collapsed ? "w-[72px]" : "w-[240px] transition-all duration-300 ease-in-out"
       }`}
     >
       {/* Collapse/expand toggle — floating circle on the edge */}
       <button
         onClick={toggleCollapse}
-        className="absolute -right-3.5 top-5 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm hover:bg-gray-50 transition-colors"
+        className="absolute -right-3.5 top-[3.85rem] z-10 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm hover:bg-gray-50 transition-colors"
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {collapsed ? <ChevronRight className="size-4 text-gray-600" /> : <ChevronLeft className="size-4 text-gray-600" />}
       </button>
 
       {/* Logo / Brand */}
-      <div className={`flex h-14 items-center border-b border-gray-100 px-4 ${collapsed ? "justify-center" : ""}`}>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 text-white text-sm font-bold">
-          M
+      <div className="px-3 pb-2 pt-4">
+        <div className="flex items-center gap-3 min-w-0 pl-[4px]">
+          {clinicLogo ? (
+            <img src={clinicLogo} alt={clinicName} className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+          ) : (
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 text-white text-lg font-semibold">
+              {clinicName.charAt(0)}
+            </div>
+          )}
+          <span
+            className={`text-lg font-semibold text-gray-900 truncate transition-opacity duration-300 ${
+              collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
+            }`}
+            title={clinicName}
+          >
+            {clinicName}
+          </span>
         </div>
-        <span
-          className={`ml-3 text-lg font-semibold text-gray-900 whitespace-nowrap transition-opacity duration-300 ${
-            collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
-          }`}
-        >
-          MedSpa
-        </span>
+      </div>
+      <div className="flex justify-center px-3 py-1">
+        <div className={`h-px bg-gray-200 ${collapsed ? "w-6" : "w-full"}`} />
       </div>
 
       {/* Navigation */}
@@ -184,50 +200,60 @@ export function Sidebar({
             />
           )}
           {visibleItems.map((item) => (
-            <li
-              key={item.href}
-              ref={(el) => {
-                if (el) itemRefs.current.set(item.href, el);
-                else itemRefs.current.delete(item.href);
-              }}
-            >
-              <Link
-                href={item.href}
-                title={collapsed ? item.label : undefined}
-                className={`relative z-[1] flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
-                  isActive(item.href) ? "text-purple-700" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                } ${collapsed ? "justify-center" : ""}`}
+            <React.Fragment key={item.href}>
+              <li
+                ref={(el) => {
+                  if (el) itemRefs.current.set(item.href, el);
+                  else itemRefs.current.delete(item.href);
+                }}
               >
-                <span className="shrink-0">{item.icon}</span>
-                <span
-                  className={`whitespace-nowrap transition-opacity duration-300 ${
-                    collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
+                <Link
+                  href={item.href}
+                  title={collapsed ? item.label : undefined}
+                  className={`relative z-[1] flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
+                    isActive(item.href) ? "text-purple-700" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >
-                  {item.label}
-                </span>
-                {item.badge != null && item.badge > 0 && (
+                  <span className="relative shrink-0">
+                    {item.icon}
+                    {collapsed && item.badge != null && item.badge > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-bold text-white">
+                        {item.badge > 99 ? "99+" : item.badge}
+                      </span>
+                    )}
+                  </span>
                   <span
-                    className={`flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ${
-                      collapsed ? "absolute -top-1 -right-1" : "ml-auto"
+                    className={`whitespace-nowrap transition-opacity duration-300 ${
+                      collapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
                     }`}
                   >
-                    {item.badge > 99 ? "99+" : item.badge}
+                    {item.label}
                   </span>
-                )}
-              </Link>
-            </li>
+                  {!collapsed && item.badge != null && item.badge > 0 && (
+                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                      {item.badge > 99 ? "99+" : item.badge}
+                    </span>
+                  )}
+                </Link>
+              </li>
+              {item.dividerAfter && (
+                <li aria-hidden="true" className="flex justify-center py-2">
+                  <div className={`h-px bg-gray-200 ${collapsed ? "w-6" : "w-full mx-3"}`} />
+                </li>
+              )}
+            </React.Fragment>
           ))}
         </ul>
       </nav>
 
       {/* User section */}
-      <div className="relative border-t border-gray-200 px-3 py-3" ref={dropdownRef}>
+      <div className="flex justify-center px-3 py-1">
+        <div className={`h-px bg-gray-200 ${collapsed ? "w-6" : "w-full"}`} />
+      </div>
+      <div className="relative px-3 py-3" ref={dropdownRef}>
         <button
           onClick={() => setDropdownOpen((v) => !v)}
-          className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 hover:bg-gray-50 transition-colors ${
-            collapsed ? "justify-center" : ""
-          }`}
+          className={`flex w-full items-center gap-3 rounded-lg py-2 hover:bg-gray-50 transition-colors ${collapsed ? "pl-[6px]" : "px-3"}`}
         >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-pink-400 text-white text-sm font-medium">
             {user.name.charAt(0)}
