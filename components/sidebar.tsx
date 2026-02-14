@@ -13,6 +13,7 @@ import {
   BarChart3,
   Settings,
   TrendingUp,
+  Sparkles,
   ChevronLeft,
   ChevronRight,
   User,
@@ -30,6 +31,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { label: "AI Assist", href: "/ai-assist", icon: <Sparkles className="size-5" />, roles: ["Owner", "Admin", "Provider", "FrontDesk", "Billing", "MedicalDirector"] },
   { label: "Today", href: "/today", icon: <ClipboardList className="size-5" /> },
   { label: "Calendar", href: "/calendar", icon: <Calendar className="size-5" /> },
   { label: "Patients", href: "/patients", icon: <Users className="size-5" /> },

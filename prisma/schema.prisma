@@ -619,6 +619,7 @@ enum AuditAction {
   MessageSend
   MessageFailed
   ConversationView
+  AiChat
 }
 
 model AuditLog {
