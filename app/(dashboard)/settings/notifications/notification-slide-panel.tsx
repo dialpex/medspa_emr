@@ -90,8 +90,8 @@ export function NotificationSlidePanel({
   useEffect(() => {
     if (isOpen) {
       setError(null);
-      setEditorTab("text");
       if (mode.type === "edit") {
+        setEditorTab(mode.resolved.effective.emailEnabled ? "email" : "text");
         const eff = mode.resolved.effective;
         setName(eff.name);
         setDescription(eff.description || "");
@@ -101,6 +101,7 @@ export function NotificationSlidePanel({
         setBodyText(eff.bodyText);
         setBodyHtml(eff.bodyHtml || eff.bodyText);
       } else {
+        setEditorTab("text");
         setName("");
         setDescription("");
         setTrigger(mode.trigger);
@@ -162,6 +163,8 @@ export function NotificationSlidePanel({
       offsetUnit,
       bodyText: effectiveBodyText,
       bodyHtml: bodyHtml.trim() || undefined,
+      emailEnabled: editorTab === "email",
+      textEnabled: editorTab === "text",
     };
 
     if (!input.name) {

@@ -1,17 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { PencilIcon, PlusIcon, TrashIcon } from "lucide-react";
+import Link from "next/link";
+import {
+  PlusIcon,
+  Mail,
+  MessageSquare,
+  MoreVertical,
+  HelpCircle,
+  ChevronRight,
+  Sparkles,
+} from "lucide-react";
 import {
   type NotificationTemplateItem,
   type ClinicPreviewData,
-  toggleNotificationChannel,
   deleteNotificationTemplate,
+  toggleNotificationActive,
 } from "@/lib/actions/notifications";
 import { NotificationSlidePanel } from "./notification-slide-panel";
 import { PageCard } from "@/components/ui/page-card";
-import type { NotificationTrigger } from "@prisma/client";
+import type { NotificationTrigger, TimingUnit } from "@prisma/client";
 
 export type ResolvedTemplate = {
   displayId: string;
@@ -62,6 +71,26 @@ function resolveTemplates(
   return resolved;
 }
 
+function formatTiming(
+  trigger: NotificationTrigger,
+  offsetValue: number,
+  offsetUnit: TimingUnit
+): string {
+  const unitLabel = offsetUnit.toLowerCase();
+
+  if (offsetValue === 0) {
+    if (trigger === "PreAppointment") {
+      return "Immediately after appointment creation";
+    }
+    return "Immediately after appointment checkout";
+  }
+
+  if (trigger === "PreAppointment") {
+    return `Scheduled ${offsetValue} ${unitLabel} before start time`;
+  }
+  return `${offsetValue} ${unitLabel} after appointment checkout`;
+}
+
 export function NotificationsClient({
   templates,
   clinicPreview,
@@ -93,33 +122,130 @@ export function NotificationsClient({
     setPanelOpen(true);
   }
 
-  const [confirmDelete, setConfirmDelete] = useState<ResolvedTemplate | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ResolvedTemplate | null>(
+    null
+  );
 
   function closePanel() {
     setPanelOpen(false);
   }
 
+  const preActiveCount = preTemplates.filter(
+    (r) => r.effective.isActive
+  ).length;
+  const postActiveCount = postTemplates.filter(
+    (r) => r.effective.isActive
+  ).length;
+
   return (
     <>
-      <div className="p-6 max-w-5xl mx-auto">
-        <PageCard label="Configuration" title="Patient Notifications">
-          <div className="space-y-8">
+      <div className="p-6 max-w-5xl mx-auto space-y-5">
+        {/* Breadcrumb + top bar */}
+        <div className="flex items-center justify-between">
+          <nav className="flex items-center gap-1.5 text-sm text-gray-500">
+            <Link href="/settings" className="hover:text-gray-700">Settings</Link>
+            <ChevronRight className="h-3.5 w-3.5" />
+            <span className="text-gray-900 font-medium">
+              Patient Notifications
+            </span>
+          </nav>
+          <div className="flex items-center gap-3">
+            <button className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+              <HelpCircle className="h-4 w-4" />
+              Help Center
+            </button>
+            <button className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors">
+              Save Changes
+            </button>
+          </div>
+        </div>
+
+        {/* Main card */}
+        <PageCard label="Configuration Engine" title="Patient Notifications">
+          <p className="text-sm text-gray-500 -mt-2 mb-6">
+            Configure automated notifications for appointment reminders,
+            follow-ups, and patient engagement workflows.
+          </p>
+
+          <div className="space-y-0">
+            {/* Pre-appointment Triggers */}
             <NotificationSection
-              title="Pre-appointment"
+              title="Pre-appointment Triggers"
+              description="Notifications sent before a scheduled appointment to remind and prepare patients."
+              activeCount={preActiveCount}
               items={preTemplates}
               onEdit={openEdit}
               onDelete={(item) => setConfirmDelete(item)}
               onAdd={() => openCreate("PreAppointment")}
+              addLabel="Configure New Pre-Appointment Notification"
             />
+
+            <hr className="my-8 border-gray-200" />
+
+            {/* Post-appointment Triggers */}
             <NotificationSection
-              title="Post-appointment"
+              title="Post-appointment Triggers"
+              description="Follow-up messages sent after appointments to collect feedback and encourage rebooking."
+              activeCount={postActiveCount}
               items={postTemplates}
               onEdit={openEdit}
               onDelete={(item) => setConfirmDelete(item)}
               onAdd={() => openCreate("PostAppointment")}
+              addLabel="Add Post-Appointment Follow-up Sequence"
             />
+
+            {/* AI Smart Suggestion */}
+            <div className="mt-8 rounded-xl border border-purple-100 bg-purple-50/50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-purple-100 p-2">
+                  <Sparkles className="h-4 w-4 text-purple-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">
+                    AI Smart Suggestion
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Based on your no-show rate of 12%, we recommend adding a
+                    same-day reminder 2 hours before appointments. Clinics with
+                    similar profiles saw a 34% reduction in no-shows.
+                  </p>
+                  <button className="text-sm font-bold text-purple-600 hover:text-purple-700 mt-2 transition-colors">
+                    Generate Draft
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Gateway Status footer */}
+          <div className="mt-8 pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-green-500" />
+                Gateway Status: Online
+              </span>
+              <span>Last synchronized: 2 mins ago</span>
+            </div>
+            <span>
+              All changes are automatically saved to your draft workspace.
+            </span>
           </div>
         </PageCard>
+
+        {/* Stats bar */}
+        <div className="grid grid-cols-3 gap-4">
+          <StatCard label="Total Volume" value="1,248" sub="Last 30 days" />
+          <StatCard
+            label="Delivery Rate"
+            value="98.2%"
+            sub="Across all channels"
+          />
+          <StatCard
+            label="Opt-out Rate"
+            value="0.4%"
+            sub="Industry avg: 1.2%"
+          />
+        </div>
       </div>
 
       {/* Delete confirmation dialog */}
@@ -141,44 +267,82 @@ export function NotificationsClient({
   );
 }
 
+function StatCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+        {label}
+      </p>
+      <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+      <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+    </div>
+  );
+}
+
 function NotificationSection({
   title,
+  description,
+  activeCount,
   items,
   onEdit,
   onDelete,
   onAdd,
+  addLabel,
 }: {
   title: string;
+  description: string;
+  activeCount: number;
   items: ResolvedTemplate[];
   onEdit: (item: ResolvedTemplate) => void;
   onDelete: (item: ResolvedTemplate) => void;
   onAdd: () => void;
+  addLabel: string;
 }) {
   return (
     <div>
-      <h3 className="text-base font-bold text-gray-900 mb-4">{title}</h3>
-      <div className="space-y-4">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-gray-900" />
+          <h3 className="text-base font-bold text-gray-900">{title}</h3>
+        </div>
+        <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-0.5">
+          {activeCount} Active Item{activeCount !== 1 ? "s" : ""}
+        </span>
+      </div>
+      <p className="text-sm text-gray-500 mb-4 ml-4">{description}</p>
+
+      <div className="space-y-3">
         {items.map((item) => (
-          <NotificationRow
+          <NotificationCard
             key={item.displayId}
             item={item}
             onEdit={() => onEdit(item)}
             onDelete={() => onDelete(item)}
           />
         ))}
+
+        {/* Dashed add button */}
         <button
           onClick={onAdd}
-          className="flex items-center gap-1.5 text-sm text-purple-600 hover:text-purple-700 font-medium transition-colors mt-2"
+          className="w-full border-2 border-dashed border-gray-300 rounded-xl p-4 flex items-center justify-center gap-2 text-sm text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors"
         >
           <PlusIcon className="h-4 w-4" />
-          Add custom notification
+          {addLabel}
         </button>
       </div>
     </div>
   );
 }
 
-function NotificationRow({
+function NotificationCard({
   item,
   onEdit,
   onDelete,
@@ -188,80 +352,102 @@ function NotificationRow({
   onDelete: () => void;
 }) {
   const { effective } = item;
-
-  return (
-    <div className="flex items-center justify-between">
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold text-gray-900 text-sm">
-          {effective.name}
-        </p>
-        {effective.description && (
-          <p className="text-sm text-gray-400 italic mt-0.5">
-            {effective.description}
-          </p>
-        )}
-      </div>
-      <div className="flex items-center gap-5 ml-6 shrink-0">
-        <ChannelCheckbox item={item} channel="email" label="Email" />
-        <ChannelCheckbox item={item} channel="text" label="Text" />
-        <button
-          onClick={onEdit}
-          className="p-1 text-gray-500 hover:text-purple-600 transition-colors"
-          title="Edit notification"
-        >
-          <PencilIcon className="h-4 w-4" />
-        </button>
-        {item.isFullyCustom && (
-          <button
-            onClick={onDelete}
-            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-            title="Delete notification"
-          >
-            <TrashIcon className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ChannelCheckbox({
-  item,
-  channel,
-  label,
-}: {
-  item: ResolvedTemplate;
-  channel: "email" | "text";
-  label: string;
-}) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const { effective } = item;
-  const checked =
-    channel === "email" ? effective.emailEnabled : effective.textEnabled;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isToggling, startToggle] = useTransition();
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  function handleToggle() {
-    startTransition(async () => {
-      await toggleNotificationChannel(effective.id, channel);
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
+
+  function handleToggleActive() {
+    setMenuOpen(false);
+    startToggle(async () => {
+      await toggleNotificationActive(effective.id);
       router.refresh();
     });
   }
 
+  const icon = effective.emailEnabled ? (
+    <Mail className="h-5 w-5 text-gray-500" />
+  ) : (
+    <MessageSquare className="h-5 w-5 text-gray-500" />
+  );
+
+  const timing = formatTiming(
+    effective.trigger,
+    effective.offsetValue,
+    effective.offsetUnit
+  );
+
   return (
-    <label
-      className={`flex items-center gap-1.5 cursor-pointer select-none ${
-        isPending ? "opacity-50" : ""
-      }`}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={handleToggle}
-        disabled={isPending}
-        className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-      />
-      <span className="text-sm text-gray-600">{label}</span>
-    </label>
+    <div className="border border-gray-200 rounded-xl p-4 flex items-center gap-4">
+      <div className="rounded-lg bg-gray-100 p-2.5 shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-gray-900">{effective.name}</p>
+        <p className="text-xs text-gray-500 mt-0.5">{timing}</p>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        {effective.isActive ? (
+          <span className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-0.5">
+            Active
+          </span>
+        ) : (
+          <span className="text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-0.5">
+            Inactive
+          </span>
+        )}
+
+        {/* Three-dot menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen((prev) => !prev)}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onEdit();
+                }}
+                className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Edit
+              </button>
+              <button
+                onClick={handleToggleActive}
+                disabled={isToggling}
+                className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                {effective.isActive ? "Deactivate" : "Activate"}
+              </button>
+              {item.isFullyCustom && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onDelete();
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
