@@ -39,7 +39,7 @@ export function CalendarSkeleton() {
             <div className="h-4 w-12 bg-gray-200 rounded animate-pulse" />
           </div>
           {[...Array(7)].map((_, i) => (
-            <div key={i} className="p-3 border-r border-gray-200 last:border-r-0">
+            <div key={`hdr-${i}`} className="p-3 border-r border-gray-200 last:border-r-0">
               <div className="h-4 w-16 bg-gray-200 rounded animate-pulse mx-auto" />
             </div>
           ))}
@@ -61,7 +61,7 @@ export function CalendarSkeleton() {
             <div className="border-r border-gray-200">
               {[...Array(13)].map((_, i) => (
                 <div
-                  key={i}
+                  key={`time-${i}`}
                   className="h-16 border-b border-gray-100 flex items-start justify-end pr-2 pt-1"
                 >
                   <div className="h-3 w-10 bg-gray-100 rounded animate-pulse" />
@@ -71,10 +71,10 @@ export function CalendarSkeleton() {
 
             {/* Day columns */}
             {[...Array(7)].map((_, dayIdx) => (
-              <div key={dayIdx} className="border-r border-gray-200 last:border-r-0">
+              <div key={`day-${dayIdx}`} className="border-r border-gray-200 last:border-r-0">
                 {[...Array(13)].map((_, hourIdx) => (
                   <div
-                    key={hourIdx}
+                    key={`hour-${hourIdx}`}
                     className="h-16 border-b border-gray-100"
                   />
                 ))}
@@ -87,7 +87,7 @@ export function CalendarSkeleton() {
       {/* Legend skeleton */}
       <div className="flex flex-wrap gap-4">
         {[...Array(7)].map((_, i) => (
-          <div key={i} className="flex items-center gap-1">
+          <div key={`legend-${i}`} className="flex items-center gap-1">
             <div className="w-3 h-3 rounded bg-gray-200 animate-pulse" />
             <div className="h-3 w-16 bg-gray-200 rounded animate-pulse" />
           </div>

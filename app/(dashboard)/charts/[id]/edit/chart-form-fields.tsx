@@ -78,7 +78,7 @@ function ProductRows({
   return (
     <div className="space-y-2">
       {value.map((row, i) => (
-        <div key={i} className="grid grid-cols-4 gap-2">
+        <div key={`row-${i}-${row.name || ""}-${row.lot || ""}`} className="grid grid-cols-4 gap-2">
           <input
             type="text"
             value={row.name}

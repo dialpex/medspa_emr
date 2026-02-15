@@ -93,7 +93,7 @@ Audit logs must include:
 
 ## 8. TypeScript Conventions
 
-- `interface` for component props, named `ComponentNameProps`
+- `interface` for component props named `ComponentNameProps` when 3+ props; inline `{ prop: Type }` is fine for 1-2 props
 - `type` for unions/intersections, `interface` for extensible object shapes
 - String unions (`'primary' | 'secondary'`) over enums
 - `Record<string, unknown>` for arbitrary keys, `Record<string, never>` for empty objects
@@ -106,9 +106,9 @@ Audit logs must include:
 
 - Function components with hooks only
 - Destructure props in function parameters
-- Unique identifiers as keys, not array indices
+- Unique identifiers as keys, not array indices — use item IDs, unique values, or stable string prefixes (`key={`skeleton-${i}`}`) for static/skeleton lists
 - Memoization only when clear performance benefit
-- `data-testid` attributes for test selectors
+- `data-testid` attributes for test selectors (add incrementally as E2E tests are introduced)
 - Colocate related files (component, styles, tests)
 - Controlled components for forms
 - Event handlers named `handleX` (e.g., `handleClick`, `handleSubmit`)

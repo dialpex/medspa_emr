@@ -96,7 +96,7 @@ export function MiniCalendar({
             <th className="w-8" />
             {DAYS.map((d, i) => (
               <th
-                key={i}
+                key={`${d}-${i}`}
                 className="h-7 w-9 text-center text-[11px] font-medium text-gray-400 uppercase"
               >
                 {d}

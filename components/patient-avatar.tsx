@@ -1,9 +1,9 @@
-type PatientAvatarProps = {
+interface PatientAvatarProps {
   firstName: string;
   lastName: string;
   size?: "sm" | "md";
   imageUrl?: string | null;
-};
+}
 
 const SIZE_CLASSES = {
   sm: "h-8 w-8 text-xs",

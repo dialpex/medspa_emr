@@ -529,7 +529,7 @@ export function PaymentsView({ payments: initialPayments }: Props) {
                       {m.weeks.map((w, i) => {
                         const height = weekMax > 0 ? (w.total / weekMax) * 100 : 0;
                         return (
-                          <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
+                          <div key={`week-${i}`} className="flex-1 flex flex-col items-center gap-1 group relative">
                             <div className="w-full relative h-12">
                               <div
                                 className={`absolute bottom-0 left-0 right-0 rounded transition-all ${

@@ -1,12 +1,12 @@
 import { cn } from "@/lib/utils";
 
-type PageCardProps = {
+interface PageCardProps {
   label?: string;
   title?: string;
   children: React.ReactNode;
   className?: string;
   headerAction?: React.ReactNode;
-};
+}
 
 export function PageCard({
   label,

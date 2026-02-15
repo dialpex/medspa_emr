@@ -3,7 +3,7 @@
 import type { AppointmentStatus } from "@prisma/client";
 import { cn } from "@/lib/utils";
 
-export type AppointmentCardProps = {
+export interface AppointmentCardProps {
   id: string;
   patientName: string;
   providerName: string;
@@ -11,7 +11,7 @@ export type AppointmentCardProps = {
   roomName: string | null;
   status: AppointmentStatus;
   onClick?: () => void;
-};
+}
 
 // Status color mapping
 const STATUS_COLORS: Record<AppointmentStatus, { bg: string; border: string; text: string }> = {

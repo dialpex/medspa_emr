@@ -288,21 +288,21 @@ function OptionsEditor({
     inputRef.current?.focus();
   };
 
-  const removeOption = (index: number) => {
-    onChange(options.filter((_, i) => i !== index));
+  const removeOption = (value: string) => {
+    onChange(options.filter((o) => o !== value));
   };
 
   return (
     <div className="rounded-lg border border-gray-300 bg-white p-2">
       {options.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
-          {options.map((opt, i) => (
+          {options.map((opt) => (
             <span
-              key={i}
+              key={opt}
               className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700"
             >
               {opt}
-              <button type="button" onClick={() => removeOption(i)}
+              <button type="button" onClick={() => removeOption(opt)}
                 className="text-gray-400 hover:text-red-500 ml-0.5">
                 &times;
               </button>

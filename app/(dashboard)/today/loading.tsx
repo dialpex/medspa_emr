@@ -26,14 +26,14 @@ export function TodaySkeleton() {
       {/* Phase tabs skeleton */}
       <div className="flex items-center gap-1 border-b border-gray-200 pb-0">
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-9 w-24 bg-gray-200 rounded animate-pulse" />
+          <div key={`tab-${i}`} className="h-9 w-24 bg-gray-200 rounded animate-pulse" />
         ))}
       </div>
 
       {/* List skeleton */}
       <div className="border border-gray-200 rounded-lg overflow-hidden bg-white divide-y divide-gray-100">
         {[...Array(6)].map((_, i) => (
-          <div key={i} className="flex items-center gap-4 px-4 py-3">
+          <div key={`row-${i}`} className="flex items-center gap-4 px-4 py-3">
             <div className="w-[140px] flex-shrink-0">
               <div className="h-4 w-28 bg-gray-200 rounded animate-pulse" />
             </div>

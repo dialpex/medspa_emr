@@ -250,9 +250,9 @@ export function MessageThread({
                       {/* Media */}
                       {mediaUrls.length > 0 && (
                         <div className="flex gap-1 mb-1.5">
-                          {mediaUrls.map((url: string, i: number) => (
+                          {mediaUrls.map((url: string) => (
                             <img
-                              key={i}
+                              key={url}
                               src={url}
                               alt="Attachment"
                               className="h-32 w-32 rounded-lg object-cover cursor-pointer"

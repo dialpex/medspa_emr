@@ -65,8 +65,8 @@ function JsonDisplay({ label, value }: { label: string; value: string | null }) 
           <div>
             <dt className="text-xs font-semibold text-gray-500 uppercase">{label}</dt>
             <dd className="mt-1 flex flex-wrap gap-1">
-              {parsed.map((item: string, i: number) => (
-                <span key={i} className="px-2 py-0.5 text-sm bg-purple-50 text-purple-700 rounded-full">
+              {parsed.map((item: string) => (
+                <span key={item} className="px-2 py-0.5 text-sm bg-purple-50 text-purple-700 rounded-full">
                   {item}
                 </span>
               ))}
@@ -79,8 +79,8 @@ function JsonDisplay({ label, value }: { label: string; value: string | null }) 
         <div>
           <dt className="text-xs font-semibold text-gray-500 uppercase">{label}</dt>
           <dd className="mt-1 space-y-1">
-            {parsed.map((item: Record<string, string | number>, i: number) => (
-              <div key={i} className="text-sm text-gray-900 bg-gray-50 rounded p-2">
+            {parsed.map((item: Record<string, string | number>, idx: number) => (
+              <div key={Object.values(item).join("-") || idx} className="text-sm text-gray-900 bg-gray-50 rounded p-2">
                 {Object.entries(item).map(([k, v]) => (
                   <span key={k} className="mr-3">
                     <span className="text-gray-500">{k}:</span> {String(v)}

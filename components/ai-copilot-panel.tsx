@@ -153,8 +153,8 @@ export function AiCopilotPanel({
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+          {messages.map((msg, msgIdx) => (
+            <div key={`${msg.role}-${msgIdx}`} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
                 className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm ${
                   msg.role === "user"

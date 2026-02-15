@@ -112,8 +112,8 @@ function ResultView({
       )}
       {examples && (
         <div className="space-y-1 pl-6">
-          {examples.map((ex, i) => (
-            <p key={i} className="text-sm text-gray-500 italic">
+          {examples.map((ex) => (
+            <p key={ex} className="text-sm text-gray-500 italic">
               &ldquo;{ex}&rdquo;
             </p>
           ))}

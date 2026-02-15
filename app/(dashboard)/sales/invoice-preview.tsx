@@ -124,7 +124,7 @@ export function InvoicePreview({
               </thead>
               <tbody>
                 {items.map((item, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                  <tr key={`item-${item.description}-${i}`} style={{ borderBottom: "1px solid #f3f4f6" }}>
                     <td style={{ padding: "12px 16px", color: "#4b5563" }}>{item.quantity}</td>
                     <td style={{ padding: "12px 16px", color: "#1f2937" }}>{item.description}</td>
                     <td style={{ padding: "12px 16px", textAlign: "right", color: "#4b5563" }}>${item.unitPrice.toFixed(2)}</td>

@@ -109,12 +109,11 @@ export function MessageComposer({
     }
   };
 
-  const removeAttachment = (index: number) => {
+  const removeAttachment = (url: string) => {
     setAttachments((prev) => {
-      const next = [...prev];
-      URL.revokeObjectURL(next[index].preview);
-      next.splice(index, 1);
-      return next;
+      const target = prev.find((a) => a.url === url);
+      if (target) URL.revokeObjectURL(target.preview);
+      return prev.filter((a) => a.url !== url);
     });
   };
 
@@ -179,15 +178,15 @@ export function MessageComposer({
       {/* Attachments preview */}
       {attachments.length > 0 && (
         <div className="flex gap-2 px-4 pt-3">
-          {attachments.map((att, i) => (
-            <div key={i} className="relative group">
+          {attachments.map((att) => (
+            <div key={att.url} className="relative group">
               <img
                 src={att.preview}
                 alt={att.filename}
                 className="h-16 w-16 rounded-lg object-cover border border-gray-200"
               />
               <button
-                onClick={() => removeAttachment(i)}
+                onClick={() => removeAttachment(att.url)}
                 className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <X className="size-3" />
