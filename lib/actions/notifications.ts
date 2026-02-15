@@ -36,6 +36,8 @@ type NotificationInput = {
   offsetUnit: TimingUnit;
   bodyText: string;
   bodyHtml?: string;
+  emailEnabled: boolean;
+  textEnabled: boolean;
 };
 
 export type ClinicPreviewData = {
@@ -111,6 +113,8 @@ export async function createNotificationTemplate(
       offsetUnit: input.offsetUnit,
       bodyText: input.bodyText.trim(),
       bodyHtml: input.bodyHtml || null,
+      emailEnabled: input.emailEnabled,
+      textEnabled: input.textEnabled,
     },
   });
 
@@ -152,6 +156,8 @@ export async function updateNotificationTemplate(
           offsetUnit: input.offsetUnit,
           bodyText: input.bodyText.trim(),
           bodyHtml: input.bodyHtml || null,
+          emailEnabled: input.emailEnabled,
+          textEnabled: input.textEnabled,
         },
       });
     } else {
@@ -166,8 +172,8 @@ export async function updateNotificationTemplate(
           offsetUnit: input.offsetUnit,
           bodyText: input.bodyText.trim(),
           bodyHtml: input.bodyHtml || null,
-          emailEnabled: existing.emailEnabled,
-          textEnabled: existing.textEnabled,
+          emailEnabled: input.emailEnabled,
+          textEnabled: input.textEnabled,
           isActive: existing.isActive,
         },
       });
@@ -183,6 +189,8 @@ export async function updateNotificationTemplate(
         offsetUnit: input.offsetUnit,
         bodyText: input.bodyText.trim(),
         bodyHtml: input.bodyHtml || null,
+        emailEnabled: input.emailEnabled,
+        textEnabled: input.textEnabled,
       },
     });
   }
@@ -220,6 +228,25 @@ export async function resetNotificationTemplate(
   if (!override) return { success: false, error: "No custom override found" };
 
   await prisma.notificationTemplate.delete({ where: { id: override.id } });
+
+  revalidatePath("/settings/notifications");
+  return { success: true };
+}
+
+export async function toggleNotificationActive(
+  id: string
+): Promise<ActionResult> {
+  const user = await requirePermission("messaging", "create");
+
+  const existing = await prisma.notificationTemplate.findFirst({
+    where: { id, clinicId: user.clinicId },
+  });
+  if (!existing) return { success: false, error: "Template not found" };
+
+  await prisma.notificationTemplate.update({
+    where: { id },
+    data: { isActive: !existing.isActive },
+  });
 
   revalidatePath("/settings/notifications");
   return { success: true };
