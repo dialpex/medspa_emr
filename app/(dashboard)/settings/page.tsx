@@ -50,7 +50,7 @@ const settingsItems = [
 export default function SettingsPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <PageCard label="Configuration" title="Settings">
+      <PageCard title="Settings">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {settingsItems.map((item) => (
             <Link

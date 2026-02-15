@@ -97,7 +97,6 @@ export function InvoiceListView({ initialInvoices, services, clinicInfo }: Props
 
   return (
     <PageCard
-      label="Billing"
       title="Invoices"
       headerAction={
         <button

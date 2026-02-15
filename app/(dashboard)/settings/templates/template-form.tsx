@@ -559,20 +559,22 @@ interface TemplateFormProps {
     description: string | null;
     category: string | null;
     fieldsConfig: string;
-    isActive: boolean;
+    status: string;
   };
+  initialFields?: TemplateFieldConfig[];
+  importMeta?: { name?: string; type?: string; category?: string };
 }
 
-export function TemplateForm({ template }: TemplateFormProps) {
+export function TemplateForm({ template, initialFields, importMeta }: TemplateFormProps) {
   const router = useRouter();
-  const [type, setType] = useState(template?.type ?? "chart");
-  const [name, setName] = useState(template?.name ?? "");
+  const [type, setType] = useState(template?.type ?? importMeta?.type ?? "chart");
+  const [name, setName] = useState(template?.name ?? importMeta?.name ?? "");
   const [description, setDescription] = useState(template?.description ?? "");
-  const [category, setCategory] = useState(template?.category ?? "");
+  const [category, setCategory] = useState(template?.category ?? importMeta?.category ?? "");
   const [fields, setFields] = useState<TemplateFieldConfig[]>(() => {
+    if (initialFields && initialFields.length > 0) return initialFields;
     if (!template) return [];
     const parsed = JSON.parse(template.fieldsConfig) as TemplateFieldConfig[];
-    // Ensure every field has a stable key
     return parsed.map((f, i) => ({ ...f, key: f.key || `field_init_${i}` }));
   });
   const [saving, setSaving] = useState(false);

@@ -14,7 +14,7 @@ export default async function EditUserPage({
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <PageCard label="Configuration" title="Edit User">
+      <PageCard title="Edit User">
         <UserForm user={user} />
       </PageCard>
     </div>

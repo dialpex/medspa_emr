@@ -30,18 +30,19 @@ type NavItem = {
   roles?: Role[];
   badge?: number;
   dividerAfter?: boolean;
+  sectionBefore?: string;
 };
 
 const navItems: NavItem[] = [
-  { label: "AI Assist", href: "/ai-assist", icon: <Sparkles className="size-5" />, roles: ["Owner", "Admin", "Provider", "FrontDesk", "Billing", "MedicalDirector"] },
-  { label: "Today", href: "/today", icon: <ClipboardList className="size-5" />, dividerAfter: true },
-  { label: "Calendar", href: "/calendar", icon: <Calendar className="size-5" /> },
-  { label: "Patients", href: "/patients", icon: <Users className="size-5" /> },
-  { label: "Sales", href: "/sales", icon: <Tag className="size-5" />, roles: ["Owner", "Admin", "Billing"] },
-  { label: "Inbox", href: "/inbox", icon: <Bell className="size-5" />, roles: ["Owner", "Admin", "FrontDesk", "Provider"] },
-  { label: "Reports", href: "/reports", icon: <BarChart3 className="size-5" />, roles: ["Owner", "Admin", "Billing", "MedicalDirector"] },
-  { label: "AI Marketing", href: "/marketing", icon: <TrendingUp className="size-5" /> },
-  { label: "Settings", href: "/settings", icon: <Settings className="size-5" /> },
+  { label: "AI Copilot", href: "/ai-assist", icon: <Sparkles className="size-5" />, roles: ["Owner", "Admin", "Provider", "FrontDesk", "Billing", "MedicalDirector"] },
+  { label: "Daily Dashboard", href: "/today", icon: <ClipboardList className="size-5" /> },
+  { label: "Scheduler", href: "/calendar", icon: <Calendar className="size-5" />, sectionBefore: "Clinical" },
+  { label: "Patient Directory", href: "/patients", icon: <Users className="size-5" /> },
+  { label: "Revenue & Sales", href: "/sales", icon: <Tag className="size-5" />, roles: ["Owner", "Admin", "Billing"] },
+  { label: "Communications", href: "/inbox", icon: <Bell className="size-5" />, roles: ["Owner", "Admin", "FrontDesk", "Provider"] },
+  { label: "Analytics", href: "/reports", icon: <BarChart3 className="size-5" />, sectionBefore: "Management", roles: ["Owner", "Admin", "Billing", "MedicalDirector"] },
+  { label: "Marketing Center", href: "/marketing", icon: <TrendingUp className="size-5" /> },
+  { label: "System Config", href: "/settings", icon: <Settings className="size-5" /> },
 ];
 
 const STORAGE_KEY = "sidebar-collapsed";
@@ -201,6 +202,17 @@ export function Sidebar({
           )}
           {visibleItems.map((item) => (
             <React.Fragment key={item.href}>
+              {item.sectionBefore && (
+                <li aria-hidden="true" className={collapsed ? "flex justify-center py-1.5" : "pt-4 pb-1"}>
+                  {collapsed ? (
+                    <div className="h-px w-6 bg-gray-200" />
+                  ) : (
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-3">
+                      {item.sectionBefore}
+                    </span>
+                  )}
+                </li>
+              )}
               <li
                 ref={(el) => {
                   if (el) itemRefs.current.set(item.href, el);

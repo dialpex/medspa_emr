@@ -55,7 +55,7 @@ export default async function CalendarPage({
 
   return (
     <div className="p-6 max-w-full mx-auto">
-      <PageCard label="Scheduling" title="Calendar">
+      <PageCard title="Calendar">
         <Suspense fallback={<CalendarSkeleton />}>
           <CalendarContent
             startDate={startDate}

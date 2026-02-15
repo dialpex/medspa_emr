@@ -75,7 +75,7 @@ export default function NewChartPage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <PageCard label="Clinical" title="New Chart">
+      <PageCard title="New Chart">
         {error && (
           <div className="p-3 text-sm text-red-700 bg-red-50 rounded-lg mb-4">{error}</div>
         )}

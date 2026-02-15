@@ -319,7 +319,7 @@ model ChartTemplate {
   description  String?
   category     String?
   fieldsConfig String   // JSON array of field definitions
-  isActive     Boolean  @default(true)
+  status       String   @default("Active") // Active, Draft, Archived
   isSystem     Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

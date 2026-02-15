@@ -103,7 +103,6 @@ export function MembershipsView({ plans: initialPlans, membershipData, patientMe
 
   return (
     <PageCard
-      label="Billing"
       title="Memberships"
       headerAction={
         <div className="flex gap-2">

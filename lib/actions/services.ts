@@ -66,7 +66,7 @@ export async function getService(id: string): Promise<ServiceItem | null> {
 export async function getTemplateOptions(): Promise<TemplateOption[]> {
   const user = await requirePermission("patients", "view");
   const templates = await prisma.chartTemplate.findMany({
-    where: { clinicId: user.clinicId, isActive: true, deletedAt: null },
+    where: { clinicId: user.clinicId, status: "Active", deletedAt: null },
     orderBy: { name: "asc" },
     select: { id: true, name: true, type: true },
   });

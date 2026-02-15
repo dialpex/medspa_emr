@@ -17,7 +17,7 @@ export default async function EditTemplatePage({
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <PageCard label="Configuration" title="Edit Template">
+      <PageCard title="Edit Template">
         <TemplateForm template={template} />
       </PageCard>
     </div>

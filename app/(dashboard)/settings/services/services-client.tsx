@@ -36,7 +36,6 @@ export function ServicesClient({
     <>
       <div className="p-6 max-w-5xl mx-auto">
         <PageCard
-          label="Configuration"
           title="Services"
           headerAction={
             <button

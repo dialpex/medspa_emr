@@ -37,7 +37,6 @@ export function ProductsClient({
     <>
       <div className="p-6 max-w-5xl mx-auto">
         <PageCard
-          label="Configuration"
           title="Products"
           headerAction={
             <button

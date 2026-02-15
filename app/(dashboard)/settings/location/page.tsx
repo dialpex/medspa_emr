@@ -6,7 +6,7 @@ export default async function LocationPage() {
   const data = await getLocationData();
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <PageCard label="Configuration" title="Location Details">
+      <PageCard title="Location Details">
         <LocationForm initialData={data} />
       </PageCard>
     </div>

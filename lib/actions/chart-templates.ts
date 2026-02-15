@@ -7,7 +7,7 @@ import {
   AuthorizationError,
 } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
-import type { TemplateFieldConfig } from "@/lib/types/charts";
+import type { TemplateFieldConfig, TemplateStatus } from "@/lib/types/charts";
 
 export interface TemplateInput {
   type?: string;
@@ -15,7 +15,7 @@ export interface TemplateInput {
   description?: string;
   category?: string;
   fieldsConfig: TemplateFieldConfig[];
-  isActive?: boolean;
+  status?: TemplateStatus;
 }
 
 export async function getTemplates() {
@@ -24,7 +24,7 @@ export async function getTemplates() {
   return prisma.chartTemplate.findMany({
     where: {
       clinicId: user.clinicId,
-      isActive: true,
+      status: "Active",
       deletedAt: null,
     },
     orderBy: { name: "asc" },
@@ -68,7 +68,7 @@ export async function createTemplate(input: TemplateInput) {
         description: input.description,
         category: input.category,
         fieldsConfig: JSON.stringify(input.fieldsConfig),
-        isActive: input.isActive ?? true,
+        status: input.status ?? "Active",
       },
     });
 
@@ -100,7 +100,7 @@ export async function updateTemplate(id: string, input: Partial<TemplateInput>) 
         ...(input.fieldsConfig !== undefined && {
           fieldsConfig: JSON.stringify(input.fieldsConfig),
         }),
-        ...(input.isActive !== undefined && { isActive: input.isActive }),
+        ...(input.status !== undefined && { status: input.status }),
       },
     });
 
@@ -129,9 +129,58 @@ export async function deleteTemplate(id: string) {
 
     await prisma.chartTemplate.update({
       where: { id },
-      data: { deletedAt: new Date(), isActive: false },
+      data: { deletedAt: new Date(), status: "Archived" },
     });
 
+    revalidatePath("/settings/templates");
+    return { success: true as const };
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return { success: false as const, error: error.message };
+    }
+    throw error;
+  }
+}
+
+export async function bulkArchiveTemplates(ids: string[]) {
+  try {
+    const user = await requirePermission("charts", "edit");
+
+    await prisma.chartTemplate.updateMany({
+      where: {
+        id: { in: ids },
+        clinicId: user.clinicId,
+        isSystem: false,
+        deletedAt: null,
+      },
+      data: { status: "Archived" },
+    });
+
+    revalidatePath("/settings/templates");
+    return { success: true as const };
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return { success: false as const, error: error.message };
+    }
+    throw error;
+  }
+}
+
+export async function bulkDeleteTemplates(ids: string[]) {
+  try {
+    const user = await requirePermission("charts", "delete");
+
+    await prisma.chartTemplate.updateMany({
+      where: {
+        id: { in: ids },
+        clinicId: user.clinicId,
+        isSystem: false,
+        deletedAt: null,
+      },
+      data: { deletedAt: new Date(), status: "Archived" },
+    });
+
+    revalidatePath("/settings/templates");
     return { success: true as const };
   } catch (error) {
     if (error instanceof AuthorizationError) {
