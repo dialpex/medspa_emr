@@ -9,7 +9,7 @@ export default async function ChartsPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <PageCard label="Clinical" title="Charts">
+      <PageCard title="Charts">
         <ChartList initialCharts={charts} />
       </PageCard>
     </div>

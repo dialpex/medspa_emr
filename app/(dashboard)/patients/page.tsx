@@ -19,7 +19,6 @@ export default async function PatientsPage({
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <PageCard
-        label="CRM"
         title="Patients"
         headerAction={
           canCreate && (

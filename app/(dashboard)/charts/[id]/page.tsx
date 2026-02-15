@@ -26,7 +26,7 @@ export default async function ChartDetailPage({
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <PageCard label="Clinical" title="Chart Details">
+      <PageCard title="Chart Details">
         <ChartDetail chart={chart} />
         <div className="mt-6 flex gap-3">
           {canEdit && (

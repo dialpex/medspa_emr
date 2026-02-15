@@ -19,7 +19,6 @@ export default async function UsersPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <PageCard
-        label="Configuration"
         title="Users"
         headerAction={
           <Link

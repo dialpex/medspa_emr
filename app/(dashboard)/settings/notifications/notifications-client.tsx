@@ -154,14 +154,51 @@ export function NotificationsClient({
               <HelpCircle className="h-4 w-4" />
               Help Center
             </button>
-            <button className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors">
+            <button className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition-colors">
               Save Changes
             </button>
           </div>
         </div>
 
+        {/* Stats bar */}
+        <div className="grid grid-cols-3 gap-4">
+          <StatCard label="Total Volume" value="1,248" sub="Last 30 days" />
+          <StatCard
+            label="Delivery Rate"
+            value="98.2%"
+            sub="Across all channels"
+          />
+          <StatCard
+            label="Opt-out Rate"
+            value="0.4%"
+            sub="Industry avg: 1.2%"
+          />
+        </div>
+
+        {/* AI Smart Suggestion */}
+        <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-purple-100 p-2">
+              <Sparkles className="h-4 w-4 text-purple-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900">
+                AI Smart Suggestion
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                Based on your no-show rate of 12%, we recommend adding a
+                same-day reminder 2 hours before appointments. Clinics with
+                similar profiles saw a 34% reduction in no-shows.
+              </p>
+              <button className="text-sm font-bold text-purple-600 hover:text-purple-700 mt-2 transition-colors">
+                Generate Draft
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Main card */}
-        <PageCard label="Configuration Engine" title="Patient Notifications">
+        <PageCard title="Patient Notifications">
           <p className="text-sm text-gray-500 -mt-2 mb-6">
             Configure automated notifications for appointment reminders,
             follow-ups, and patient engagement workflows.
@@ -193,28 +230,6 @@ export function NotificationsClient({
               onAdd={() => openCreate("PostAppointment")}
               addLabel="Add Post-Appointment Follow-up Sequence"
             />
-
-            {/* AI Smart Suggestion */}
-            <div className="mt-8 rounded-xl border border-purple-100 bg-purple-50/50 p-4">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-purple-100 p-2">
-                  <Sparkles className="h-4 w-4 text-purple-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">
-                    AI Smart Suggestion
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Based on your no-show rate of 12%, we recommend adding a
-                    same-day reminder 2 hours before appointments. Clinics with
-                    similar profiles saw a 34% reduction in no-shows.
-                  </p>
-                  <button className="text-sm font-bold text-purple-600 hover:text-purple-700 mt-2 transition-colors">
-                    Generate Draft
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Gateway Status footer */}
@@ -231,21 +246,6 @@ export function NotificationsClient({
             </span>
           </div>
         </PageCard>
-
-        {/* Stats bar */}
-        <div className="grid grid-cols-3 gap-4">
-          <StatCard label="Total Volume" value="1,248" sub="Last 30 days" />
-          <StatCard
-            label="Delivery Rate"
-            value="98.2%"
-            sub="Across all channels"
-          />
-          <StatCard
-            label="Opt-out Rate"
-            value="0.4%"
-            sub="Industry avg: 1.2%"
-          />
-        </div>
       </div>
 
       {/* Delete confirmation dialog */}

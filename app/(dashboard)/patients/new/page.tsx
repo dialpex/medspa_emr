@@ -79,7 +79,7 @@ export default function NewPatientPage() {
         ← Back to Patients
       </Link>
 
-      <PageCard label="CRM" title="Add New Patient">
+      <PageCard title="Add New Patient">
         {error && (
           <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">
             {error}

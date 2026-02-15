@@ -36,7 +36,7 @@ export default async function PatientPage({
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <PageCard label="CRM" title={`${patient.firstName} ${patient.lastName}`}>
+      <PageCard title={`${patient.firstName} ${patient.lastName}`}>
         <PatientHeader patient={patient} />
 
         <Tabs defaultValue="details" className="mt-6">

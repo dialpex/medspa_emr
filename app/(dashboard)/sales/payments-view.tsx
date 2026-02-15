@@ -217,7 +217,6 @@ export function PaymentsView({ payments: initialPayments }: Props) {
 
   return (
     <PageCard
-      label="Billing"
       title="Payments"
       headerAction={
         <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-0.5">

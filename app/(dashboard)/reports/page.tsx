@@ -13,7 +13,7 @@ export default async function ReportsPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <PageCard label="Analytics" title="Reports">
+      <PageCard title="Reports">
         <div className="py-12 text-center text-gray-400">
           Reports coming soon...
         </div>

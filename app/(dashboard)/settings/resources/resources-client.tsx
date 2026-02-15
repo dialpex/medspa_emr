@@ -34,7 +34,6 @@ export function ResourcesClient({ items }: { items: SettingsItem[] }) {
     <>
       <div className="p-6 max-w-5xl mx-auto">
         <PageCard
-          label="Configuration"
           title="Resources"
           headerAction={
             <button

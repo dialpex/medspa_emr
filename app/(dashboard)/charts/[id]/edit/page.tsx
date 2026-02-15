@@ -22,7 +22,7 @@ export default async function ChartEditPage({
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <PageCard label="Clinical" title="Edit Chart">
+      <PageCard title="Edit Chart">
         <ChartEditor chart={chart} currentUserRole={user.role} />
       </PageCard>
     </div>

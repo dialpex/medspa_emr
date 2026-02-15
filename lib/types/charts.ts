@@ -1,3 +1,5 @@
+export type TemplateStatus = "Active" | "Draft" | "Archived";
+
 export type FieldType =
   | "text"
   | "textarea"
