@@ -14,11 +14,9 @@ import {
   XIcon,
   FileTextIcon,
   ClipboardListIcon,
-  UploadIcon,
 } from "lucide-react";
 import { bulkArchiveTemplates, bulkDeleteTemplates } from "@/lib/actions/chart-templates";
 import type { TemplateStatus } from "@/lib/types/charts";
-import { ImportModal } from "./import-modal";
 import { AiCopilotPanel } from "@/components/ai-copilot-panel";
 import { useRouter } from "next/navigation";
 
@@ -60,7 +58,7 @@ export function TemplatesList({ templates, canManage }: TemplatesListProps) {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+
 
   // Derive categories and counts
   const allCategories = useMemo(() => {
@@ -165,19 +163,6 @@ export function TemplatesList({ templates, canManage }: TemplatesListProps) {
 
   return (
     <div className="space-y-4">
-      {/* Import button (above search) */}
-      {canManage && (
-        <div className="flex justify-end -mt-2 mb-1">
-          <button
-            onClick={() => setImportOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            <UploadIcon className="size-4" />
-            Import Template
-          </button>
-        </div>
-      )}
-
       {/* Search + Filter bar */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
@@ -558,9 +543,6 @@ export function TemplatesList({ templates, canManage }: TemplatesListProps) {
       >
         Coming Soon — Patient Portals are under development.
       </div>
-
-      {/* Import modal */}
-      <ImportModal isOpen={importOpen} onClose={() => setImportOpen(false)} />
 
       {/* AI Copilot panel */}
       <AiCopilotPanel

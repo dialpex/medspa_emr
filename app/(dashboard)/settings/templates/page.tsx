@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/rbac";
 import { getAllTemplates } from "@/lib/actions/chart-templates";
 import { PageCard } from "@/components/ui/page-card";
 import { TemplatesList } from "./templates-list";
+import { ImportButton } from "./import-button";
 
 export default async function TemplatesPage() {
   const user = await requirePermission("charts", "view");
@@ -17,7 +18,7 @@ export default async function TemplatesPage() {
         headerAction={
           canManage ? (
             <div className="flex items-center gap-2">
-              {/* Import button is rendered inside TemplatesList as it needs client state for modal */}
+              <ImportButton />
               <Link
                 href="/settings/templates/new"
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700"
