@@ -2,7 +2,12 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircleIcon, Loader2Icon, AlertCircleIcon, CameraIcon, XIcon, PencilIcon, PlusIcon, SparklesIcon, MicIcon, SquareIcon } from "lucide-react";
+import Link from "next/link";
+import {
+  CheckCircleIcon, Loader2Icon, AlertCircleIcon, XIcon,
+  PencilIcon, PlusIcon, SparklesIcon, MicIcon, SquareIcon,
+  ArrowLeftIcon, SaveIcon, PrinterIcon, CopyIcon, FileTextIcon,
+} from "lucide-react";
 import { updateChart, updateTreatmentCard, providerSignChart } from "@/lib/actions/charts";
 import { getEffectiveStatus } from "@/lib/encounter-utils";
 import { parseStructuredData } from "@/lib/templates/schemas";
@@ -15,11 +20,25 @@ import { LaserFields } from "@/components/treatment-cards/laser-fields";
 import { EstheticsFields } from "@/components/treatment-cards/esthetics-fields";
 import { CardStatusBadge } from "@/components/treatment-cards/card-status-badge";
 import { AiDraftPreviewModal } from "@/components/ai-draft-preview-modal";
+import { AftercareConsent } from "@/components/aftercare-consent";
+import { ChartAiContextPanel } from "@/components/chart-ai-context-panel";
+import { SmartPhotoGallery } from "@/components/smart-photo-gallery";
+import { ProcedureDetailsCard } from "@/components/procedure-details-card";
+
+import { CollapsibleCard } from "@/components/ui/collapsible-card";
+import type { PreviousTreatmentSummary } from "@/lib/actions/charts";
 import type { InjectableData, LaserData, EstheticsData } from "@/lib/templates/schemas";
 import type { TemplateFieldConfig } from "@/lib/types/charts";
 import type { Role } from "@prisma/client";
 
 type SaveStatus = "saved" | "saving" | "unsaved" | "error";
+
+const PHOTO_SLOTS = [
+  { key: "frontal", label: "Frontal" },
+  { key: "angle-right", label: "45° Right" },
+  { key: "angle-left", label: "45° Left" },
+  { key: "profile", label: "Profile" },
+];
 
 type ChartData = {
   id: string;
@@ -31,9 +50,19 @@ type ChartData = {
   dosageUnits: string | null;
   aftercareNotes: string | null;
   additionalNotes: string | null;
-  patient: { firstName: string; lastName: string; allergies: string | null };
+  patient: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    allergies: string | null;
+    dateOfBirth: Date | null;
+    tags: string | null;
+    medicalNotes: string | null;
+    appointments?: Array<{ startTime: Date }>;
+  };
   encounter: { id: string; status: string } | null;
   template: { name: string; fieldsConfig: string } | null;
+  appointment: { startTime: Date; service: { name: string } | null } | null;
   photos: Array<{
     id: string;
     filename: string;
@@ -58,130 +87,69 @@ type ChartData = {
   }>;
 };
 
-const PHOTO_SLOTS = [
-  { key: "frontal", label: "Frontal" },
-  { key: "angle", label: "Angle" },
-  { key: "profile", label: "Profile" },
-];
+function computeAge(dob: Date | null): string | null {
+  if (!dob) return null;
+  const d = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - d.getFullYear();
+  const monthDiff = today.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < d.getDate())) {
+    age--;
+  }
+  return `${age}y`;
+}
 
-function ChartPhotoSlot({
-  label,
-  photoId,
-  annotations,
-  onUpload,
-  onRemove,
-  onAnnotate,
-  disabled,
-  uploading,
-}: {
-  label: string;
-  photoId: string;
-  annotations: string | null;
-  onUpload: (file: File) => void;
-  onRemove: () => void;
-  onAnnotate: () => void;
-  disabled?: boolean;
-  uploading?: boolean;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
+function parseAllergies(allergies: string | null): string[] {
+  if (!allergies) return [];
+  try {
+    const parsed = JSON.parse(allergies);
+    if (Array.isArray(parsed)) return parsed.filter(Boolean);
+  } catch {
+    // Not JSON, treat as comma-separated
+  }
+  return allergies.split(",").map((s) => s.trim()).filter(Boolean);
+}
 
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative w-full">
-        {photoId ? (
-          <div className="relative aspect-[3/4] rounded-2xl overflow-hidden border border-gray-200 bg-gray-100 shadow-sm">
-            {annotations ? (
-              <div
-                className="w-full h-full cursor-pointer"
-                onClick={!disabled ? onAnnotate : undefined}
-              >
-                <PhotoAnnotationRenderer
-                  photoUrl={`/api/photos/${photoId}`}
-                  annotations={annotations}
-                  className="w-full h-full [&_canvas]:w-full [&_canvas]:h-full [&_canvas]:object-cover [&_canvas]:rounded-none"
-                />
-              </div>
-            ) : (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/photos/${photoId}`}
-                  alt={label}
-                  className="w-full h-full object-cover cursor-pointer"
-                  onClick={!disabled ? onAnnotate : undefined}
-                />
-              </>
-            )}
-            {!disabled && (
-              <button
-                type="button"
-                onClick={onRemove}
-                className="absolute top-2 right-2 p-1 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
-              >
-                <XIcon className="size-3.5" />
-              </button>
-            )}
-            {!disabled && (
-              <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={onAnnotate}
-                  className="p-1.5 bg-white/90 rounded-full text-gray-600 hover:bg-white shadow-sm transition-colors"
-                  title="Annotate"
-                >
-                  <PencilIcon className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => inputRef.current?.click()}
-                  className="p-1.5 bg-white/90 rounded-full text-gray-600 hover:bg-white shadow-sm transition-colors"
-                  title="Replace photo"
-                >
-                  <CameraIcon className="size-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <button
-            type="button"
-            disabled={disabled || uploading}
-            onClick={() => inputRef.current?.click()}
-            className="w-full aspect-[3/4] rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-1.5 text-gray-400 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {uploading ? (
-              <div className="size-6 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
-            ) : (
-              <CameraIcon className="size-6" />
-            )}
-            <span className="text-[11px] font-medium">
-              {uploading ? "Uploading..." : "Add Photo"}
-            </span>
-          </button>
-        )}
-      </div>
-      <span className="text-xs font-medium text-gray-600">{label}</span>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onUpload(file);
-          e.target.value = "";
-        }}
-      />
-    </div>
-  );
+function formatRelativeTime(date: Date): string {
+  const now = new Date();
+  const d = new Date(date);
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    return `${weeks} week${weeks > 1 ? "s" : ""} ago`;
+  }
+  if (diffDays < 365) {
+    const months = Math.floor(diffDays / 30);
+    return `${months} month${months > 1 ? "s" : ""} ago`;
+  }
+  const years = Math.floor(diffDays / 365);
+  return `${years} year${years > 1 ? "s" : ""} ago`;
+}
+
+function SaveStatusDot({ status }: { status: SaveStatus }) {
+  const colors: Record<SaveStatus, string> = {
+    saved: "bg-green-500",
+    saving: "bg-amber-400 animate-pulse",
+    unsaved: "bg-amber-500",
+    error: "bg-red-500",
+  };
+  return <div className={`size-2.5 rounded-full ${colors[status]}`} />;
 }
 
 export function ChartEditor({
   chart,
   currentUserRole,
+  previousTreatment,
+  consentTemplates,
 }: {
   chart: ChartData;
   currentUserRole: Role;
+  previousTreatment: PreviousTreatmentSummary | null;
+  consentTemplates: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
@@ -190,12 +158,9 @@ export function ChartEditor({
   // Standard chart fields
   const [chiefComplaint, setChiefComplaint] = useState(chart.chiefComplaint ?? "");
   const [areasTreated, setAreasTreated] = useState(chart.areasTreated ?? "");
-  const [productsUsed, setProductsUsed] = useState(chart.productsUsed ?? "");
-  const [dosageUnits, setDosageUnits] = useState(chart.dosageUnits ?? "");
-  const [aftercareNotes, setAftercare] = useState(chart.aftercareNotes ?? "");
   const [additionalNotes, setAdditional] = useState(chart.additionalNotes ?? "");
 
-  // Photo slots: { frontal: "photoId", angle: "photoId", profile: "photoId" }
+  // Photo slots
   const [slotPhotos, setSlotPhotos] = useState<Record<string, string>>(() => {
     const map: Record<string, string> = {};
     for (const p of chart.photos) {
@@ -246,9 +211,6 @@ export function ChartEditor({
     const setters: Record<string, (v: string) => void> = {
       chiefComplaint: setChiefComplaint,
       areasTreated: setAreasTreated,
-      productsUsed: setProductsUsed,
-      dosageUnits: setDosageUnits,
-      aftercareNotes: setAftercare,
       additionalNotes: setAdditional,
     };
     setters[field]?.(value);
@@ -307,7 +269,6 @@ export function ChartEditor({
     setSignError(null);
     setBlockingCards([]);
 
-    // Client-side validation
     const blocking: Array<{ cardTitle: string; missingFields: string[] }> = [];
     for (const card of chart.treatmentCards) {
       const result = validateTreatmentCard(card.templateType, card.structuredData);
@@ -339,203 +300,238 @@ export function ChartEditor({
     setProviderConfirming(false);
   };
 
+  // Computed patient info
+  const age = computeAge(chart.patient.dateOfBirth);
+  const allergyList = parseAllergies(chart.patient.allergies);
+  const isVip = chart.patient.tags?.toLowerCase().includes("vip");
+  const serviceName = chart.appointment?.service?.name;
+  const dob = chart.patient.dateOfBirth
+    ? new Date(chart.patient.dateOfBirth).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  const lastVisit = chart.patient.appointments?.[0]?.startTime;
+  const initials = `${chart.patient.firstName.charAt(0)}${chart.patient.lastName.charAt(0)}`.toUpperCase();
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {chart.patient.firstName} {chart.patient.lastName}
-          </h1>
-          {chart.template && (
-            <p className="text-sm text-gray-500 mt-1">{chart.template.name}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 text-sm">
-          {saveStatus === "saved" && (
-            <><CheckCircleIcon className="size-4 text-green-500" /><span className="text-green-600">Saved</span></>
-          )}
-          {saveStatus === "saving" && (
-            <><Loader2Icon className="size-4 animate-spin text-gray-400" /><span className="text-gray-500">Saving...</span></>
-          )}
-          {saveStatus === "unsaved" && <span className="text-amber-600">Unsaved changes</span>}
-          {saveStatus === "error" && (
-            <><AlertCircleIcon className="size-4 text-red-500" /><span className="text-red-600">Save failed</span></>
-          )}
-        </div>
-      </div>
-
-      {/* Allergies */}
-      {chart.patient.allergies && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg border border-red-200">
-          <AlertCircleIcon className="size-4 text-red-500" />
-          <span className="text-sm text-red-700">
-            <strong>Allergies:</strong> {chart.patient.allergies}
-          </span>
-        </div>
-      )}
-
-      {/* Chart Details Card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
-        <h2 className="text-sm font-semibold text-gray-900">Chart Details</h2>
-
-        {/* Photo slots row */}
-        {!chart.template && (
-          <div className="grid grid-cols-3 gap-4">
-            {PHOTO_SLOTS.map((slot) => (
-              <ChartPhotoSlot
-                key={slot.key}
-                label={slot.label}
-                photoId={slotPhotos[slot.key] ?? ""}
-                annotations={slotAnnotations[slot.key] ?? null}
-                onUpload={(f) => handleSlotUpload(slot.key, f)}
-                onRemove={() => handleSlotRemove(slot.key)}
-                onAnnotate={() => setAnnotatingSlot(slot.key)}
-                disabled={isLocked}
-                uploading={uploadingSlot === slot.key}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Form fields */}
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Chief Complaint</label>
-            <textarea
-              value={chiefComplaint}
-              onChange={(e) => handleStandardChange("chiefComplaint", e.target.value)}
-              disabled={isLocked}
-              rows={2}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-              placeholder="Reason for visit..."
-            />
-          </div>
-
-          {!chart.template && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Areas Treated</label>
-                <input
-                  type="text"
-                  value={areasTreated}
-                  onChange={(e) => handleStandardChange("areasTreated", e.target.value)}
-                  disabled={isLocked}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-                  placeholder="e.g. Forehead, Glabella"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Products Used</label>
-                <textarea
-                  value={productsUsed}
-                  onChange={(e) => handleStandardChange("productsUsed", e.target.value)}
-                  disabled={isLocked}
-                  rows={2}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Dosage/Units</label>
-                <input
-                  type="text"
-                  value={dosageUnits}
-                  onChange={(e) => handleStandardChange("dosageUnits", e.target.value)}
-                  disabled={isLocked}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Aftercare Notes</label>
-                <textarea
-                  value={aftercareNotes}
-                  onChange={(e) => handleStandardChange("aftercareNotes", e.target.value)}
-                  disabled={isLocked}
-                  rows={2}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
-                <textarea
-                  value={additionalNotes}
-                  onChange={(e) => handleStandardChange("additionalNotes", e.target.value)}
-                  disabled={isLocked}
-                  rows={2}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-                />
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Template-driven fields */}
-      {chart.template && templateFields.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <ChartFormFields
-            fields={templateFields}
-            values={templateValues}
-            onChange={handleTemplateChange}
-            disabled={isLocked}
-            chartId={chart.id}
-            patientId={chart.patientId}
-          />
-        </div>
-      )}
-
-      {/* Treatment Cards */}
-      {chart.treatmentCards.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-900">Treatment Cards</h2>
-          {chart.treatmentCards.map((card) => (
-            <TreatmentCardEditor
-              key={card.id}
-              card={card}
-              chartId={chart.id}
-              patientId={chart.patientId}
-              disabled={isLocked}
-            />
+    <div className="flex flex-col h-[calc(100vh-64px)]">
+      {/* Top Editing Bar */}
+      <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-gray-200 flex-shrink-0">
+        <Link
+          href="/charts"
+          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <ArrowLeftIcon className="size-5" />
+        </Link>
+        <span className="text-sm font-medium text-gray-700">
+          Editing Chart:{" "}
+          <span className="text-gray-900">{chart.patient.firstName} {chart.patient.lastName}</span>
+        </span>
+        <div className="flex items-center gap-2 ml-auto">
+          {allergyList.map((allergy) => (
+            <span
+              key={allergy}
+              className="px-2 py-0.5 text-[10px] font-bold uppercase bg-red-100 text-red-700 rounded"
+            >
+              Allergy: {allergy}
+            </span>
           ))}
+          {isVip && (
+            <span className="px-2 py-0.5 text-[10px] font-bold uppercase bg-purple-100 text-purple-700 rounded">
+              VIP Client
+            </span>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Complete & Sign */}
-      {canProviderSign && (
-        <div className="space-y-3">
+      {/* Two-column container */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Column — Main Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-24">
+          {/* Patient Header Card */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-start gap-4">
+              {/* Avatar */}
+              <div className="size-12 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-lg font-bold flex-shrink-0">
+                {initials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-xl font-bold text-gray-900">
+                    {chart.patient.firstName} {chart.patient.lastName}
+                  </h1>
+                  <span className="px-2 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded">
+                    ID: {chart.patient.id.slice(0, 8)}
+                  </span>
+                  <span className="px-2 py-0.5 text-xs font-medium bg-green-50 text-green-700 rounded-full">
+                    Draft Autosaved
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                  {dob && <span>DOB: {dob}{age ? ` (${age})` : ""}</span>}
+                  {lastVisit && (
+                    <>
+                      <span className="text-gray-300">|</span>
+                      <span>Last Visit: {formatRelativeTime(lastVisit)}</span>
+                    </>
+                  )}
+                  {serviceName && (
+                    <>
+                      <span className="text-gray-300">|</span>
+                      <span className="uppercase text-xs font-semibold text-purple-600">
+                        {serviceName}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {(allergyList.length > 0 || isVip) && (
+                  <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                    {allergyList.map((allergy) => (
+                      <span
+                        key={allergy}
+                        className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full"
+                      >
+                        {allergy}
+                      </span>
+                    ))}
+                    {isVip && (
+                      <span className="px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-700 rounded-full">
+                        VIP
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Smart Photo Gallery */}
+          <SmartPhotoGallery
+            photos={slotPhotos}
+            annotations={slotAnnotations}
+            onUpload={handleSlotUpload}
+            onRemove={handleSlotRemove}
+            onAnnotate={setAnnotatingSlot}
+            disabled={isLocked}
+            uploading={uploadingSlot}
+          />
+
+          {/* Procedure Details */}
+          <ProcedureDetailsCard
+            chiefComplaint={chiefComplaint}
+            onChiefComplaintChange={(v) => handleStandardChange("chiefComplaint", v)}
+            areasTreated={areasTreated}
+            onAreasTreatedChange={(v) => handleStandardChange("areasTreated", v)}
+            disabled={isLocked}
+          />
+
+          {/* Template-driven fields */}
+          {chart.template && templateFields.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <ChartFormFields
+                fields={templateFields}
+                values={templateValues}
+                onChange={handleTemplateChange}
+                disabled={isLocked}
+                chartId={chart.id}
+                patientId={chart.patientId}
+              />
+            </div>
+          )}
+
+          {/* Treatment Cards — Products & Dosage for Injectable, full editor for others */}
+          {chart.treatmentCards.length > 0 && (
+            <div className="space-y-4">
+              {chart.treatmentCards.map((card) => (
+                <TreatmentCardEditor
+                  key={card.id}
+                  card={card}
+                  chartId={chart.id}
+                  patientId={chart.patientId}
+                  disabled={isLocked}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Provider Notes */}
+          {additionalNotes !== undefined && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Provider Notes</label>
+              <textarea
+                value={additionalNotes}
+                onChange={(e) => handleStandardChange("additionalNotes", e.target.value)}
+                disabled={isLocked}
+                rows={2}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
+                placeholder="Additional observations or notes..."
+              />
+            </div>
+          )}
+
+          {/* Aftercare & Consent */}
+          <CollapsibleCard
+            icon={FileTextIcon}
+            title="Aftercare & Consent"
+            subtitle="Post-treatment instructions and consent documentation"
+          >
+            <AftercareConsent consentTemplates={consentTemplates} />
+          </CollapsibleCard>
+        </div>
+
+        {/* Right Column — AI Context Panel */}
+        <ChartAiContextPanel
+          patientAllergies={chart.patient.allergies}
+          patientMedicalNotes={chart.patient.medicalNotes}
+          previousTreatment={previousTreatment}
+        />
+      </div>
+
+      {/* Floating Bottom Bar */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-full shadow-lg px-4 py-2.5">
+          <SaveStatusDot status={saveStatus} />
+
+          {/* Placeholder icon buttons */}
+          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Save">
+            <SaveIcon className="size-4" />
+          </button>
+          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Print">
+            <PrinterIcon className="size-4" />
+          </button>
+          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Copy">
+            <CopyIcon className="size-4" />
+          </button>
+          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Add">
+            <PlusIcon className="size-4" />
+          </button>
+
+          <div className="w-px h-6 bg-gray-200 mx-1" />
+
           {blockingCards.length > 0 && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg space-y-1">
-              <p className="text-sm font-medium text-red-700 flex items-center gap-1.5">
-                <AlertCircleIcon className="size-4" />
-                Cannot sign — high-risk fields incomplete:
+            <div className="max-w-sm">
+              <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                <AlertCircleIcon className="size-3.5" />
+                Incomplete: {blockingCards.map((c) => c.cardTitle).join(", ")}
               </p>
-              <ul className="text-sm text-red-600 ml-6 list-disc space-y-0.5">
-                {blockingCards.map((card) => (
-                  <li key={card.cardTitle}>
-                    <span className="font-medium">{card.cardTitle}:</span>{" "}
-                    {card.missingFields.join(", ")}
-                  </li>
-                ))}
-              </ul>
             </div>
           )}
           {signError && !blockingCards.length && (
-            <p className="text-sm text-red-600">{signError}</p>
+            <p className="text-xs text-red-600">{signError}</p>
           )}
 
-          <div className="flex items-center justify-end gap-3">
-            {providerConfirming && (
-              <button
-                onClick={() => setProviderConfirming(false)}
-                className="px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                Cancel
-              </button>
-            )}
+          {providerConfirming && (
+            <button
+              onClick={() => setProviderConfirming(false)}
+              className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-full"
+            >
+              Cancel
+            </button>
+          )}
+
+          {canProviderSign && (
             <button
               onClick={handleProviderSign}
               disabled={providerSigning}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50 transition-colors"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-full disabled:opacity-50 transition-colors"
             >
               {providerSigning ? (
                 <Loader2Icon className="size-4 animate-spin" />
@@ -544,9 +540,9 @@ export function ChartEditor({
               )}
               {providerConfirming ? "Confirm Complete & Sign" : "Complete & Sign"}
             </button>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Photo Annotator Modal */}
       {annotatingSlot && slotPhotos[annotatingSlot] && (
@@ -555,7 +551,6 @@ export function ChartEditor({
           photoUrl={`/api/photos/${slotPhotos[annotatingSlot]}`}
           initialAnnotations={slotAnnotations[annotatingSlot] ?? null}
           onClose={() => {
-            // Refresh annotations from server for this photo
             import("@/lib/actions/photos").then(({ getPhotosForChart }) => {
               getPhotosForChart(chart.id).then((photos) => {
                 const photo = photos.find((p) => p.id === slotPhotos[annotatingSlot]);
@@ -603,7 +598,7 @@ function TreatmentCardEditor({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // AI Draft state (shared between typed and voice)
+  // AI Draft state
   const [aiSummary, setAiSummary] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiDraft, setAiDraft] = useState<{
@@ -699,7 +694,7 @@ function TreatmentCardEditor({
         setAiDraft(data);
       }
     } catch {
-      // Silently fail — user can retry
+      // Silently fail
     }
     setAiLoading(false);
   };
@@ -710,7 +705,6 @@ function TreatmentCardEditor({
     setShowPreview(false);
     setAiDraft(null);
     setAiSummary("");
-    // Trigger auto-save with new data
     scheduleAutoSave(result.updatedNarrativeText, result.updatedStructuredData);
   };
 
@@ -725,9 +719,7 @@ function TreatmentCardEditor({
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
 
       mediaRecorder.onstop = () => {
@@ -743,7 +735,7 @@ function TreatmentCardEditor({
         setRecordingSeconds((s) => s + 1);
       }, 1000);
     } catch {
-      // Microphone permission denied or unavailable
+      // Microphone permission denied
     }
   };
 
@@ -751,7 +743,6 @@ function TreatmentCardEditor({
     const mediaRecorder = mediaRecorderRef.current;
     if (!mediaRecorder || mediaRecorder.state === "inactive") return;
 
-    // Stop recording
     mediaRecorder.stop();
     setIsRecording(false);
     if (recordingTimerRef.current) {
@@ -759,7 +750,6 @@ function TreatmentCardEditor({
       recordingTimerRef.current = null;
     }
 
-    // Wait for final data
     await new Promise<void>((resolve) => {
       mediaRecorder.addEventListener("stop", () => resolve(), { once: true });
       if (mediaRecorder.state === "inactive") resolve();
@@ -768,10 +758,8 @@ function TreatmentCardEditor({
     const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
     if (audioBlob.size === 0) return;
 
-    // Pipeline: upload -> transcribe -> structure
     setVoiceProcessing(true);
     try {
-      // 1. Upload
       setVoiceProcessingStep("Uploading audio...");
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
@@ -783,7 +771,6 @@ function TreatmentCardEditor({
       if (!uploadRes.ok) throw new Error(uploadData.error);
       const { draftEventId } = uploadData;
 
-      // 2. Transcribe
       setVoiceProcessingStep("Transcribing...");
       const transcribeRes = await fetch(`/api/ai-drafts/${draftEventId}/transcribe`, {
         method: "POST",
@@ -791,7 +778,6 @@ function TreatmentCardEditor({
       const transcribeData = await transcribeRes.json();
       if (!transcribeRes.ok) throw new Error(transcribeData.error);
 
-      // 3. Structure
       setVoiceProcessingStep("Analyzing...");
       const structureRes = await fetch(`/api/ai-drafts/${draftEventId}/structure`, {
         method: "POST",
@@ -801,13 +787,12 @@ function TreatmentCardEditor({
 
       setAiDraft(structureData);
     } catch {
-      // Pipeline failed - user can retry
+      // Pipeline failed
     }
     setVoiceProcessing(false);
     setVoiceProcessingStep("");
   };
 
-  // Cleanup recording timer on unmount
   useEffect(() => {
     return () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
@@ -817,15 +802,15 @@ function TreatmentCardEditor({
     };
   }, []);
 
-  // Validation for badge
   const validation = validateTreatmentCard(card.templateType, JSON.stringify(structured));
   const cardStatus = getCardStatus(validation);
 
   return (
-    <div className="border border-gray-100 rounded-lg p-4 space-y-3">
+    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+      {/* Card Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-gray-900">{card.title}</h3>
+          <h3 className="text-sm font-semibold text-gray-900">{card.title}</h3>
           <span className="px-2 py-0.5 text-xs font-medium bg-purple-50 text-purple-700 rounded-full">
             {card.templateType}
           </span>
@@ -871,6 +856,7 @@ function TreatmentCardEditor({
         />
       )}
 
+      {/* Narrative Notes */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Narrative Notes</label>
         <textarea
@@ -888,7 +874,6 @@ function TreatmentCardEditor({
         <div className="space-y-2">
           <label className="block text-sm font-medium text-gray-700">AI Draft</label>
 
-          {/* Voice Recording Controls */}
           <div className="flex items-center gap-2">
             {!isRecording && !voiceProcessing && !aiDraft && (
               <button
@@ -926,7 +911,6 @@ function TreatmentCardEditor({
             )}
           </div>
 
-          {/* Typed summary input */}
           {!isRecording && !voiceProcessing && !aiDraft && (
             <>
               <div className="flex items-center gap-2 text-xs text-gray-400">
@@ -939,12 +923,11 @@ function TreatmentCardEditor({
                 onChange={(e) => setAiSummary(e.target.value)}
                 rows={3}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                placeholder="Type a quick summary for AI... (e.g. Botox 20 units forehead, 10 units glabella, lot C1234 exp 2027-06)"
+                placeholder="Type a quick summary for AI..."
               />
             </>
           )}
 
-          {/* Action buttons */}
           <div className="flex items-center gap-2">
             {!aiDraft && !isRecording && !voiceProcessing && aiSummary.trim() && (
               <button
@@ -1090,7 +1073,6 @@ function TreatmentCardEditor({
           photoUrl={`/api/photos/${annotatingPhotoId}`}
           initialAnnotations={photos.find((p) => p.id === annotatingPhotoId)?.annotations ?? null}
           onClose={() => {
-            // Refresh annotations for this photo
             import("@/lib/actions/photos").then(({ getPhotosForTreatmentCard }) => {
               getPhotosForTreatmentCard(card.id).then((freshPhotos) => {
                 const fresh = freshPhotos.find((p) => p.id === annotatingPhotoId);

@@ -37,7 +37,7 @@ type ChartData = {
   recordHash: string | null;
   createdAt: Date;
   updatedAt: Date;
-  patient: { firstName: string; lastName: string; allergies: string | null };
+  patient: { firstName: string; lastName: string; allergies: string | null } | null;
   createdBy: { name: string } | null;
   signedBy: { name: string } | null;
   encounter: { id: string; status: string; provider: { name: string } } | null;
@@ -136,7 +136,7 @@ export function ChartDetail({ chart }: { chart: ChartData }) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Chart: {chart.patient.firstName} {chart.patient.lastName}
+            Chart: {chart.patient?.firstName} {chart.patient?.lastName}
           </h1>
           <div className="flex items-center gap-3 mt-2">
             <span className={`inline-block px-2.5 py-0.5 text-xs font-medium rounded-full ${STATUS_STYLES[effectiveStatus]}`}>
