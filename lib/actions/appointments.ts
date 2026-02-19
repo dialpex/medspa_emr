@@ -310,6 +310,12 @@ export type AppointmentDetail = {
   patientAllergies: string | null;
   patientCreatedAt: Date;
   patientVisitCount: number;
+  hasChart: boolean;
+  chartId: string | null;
+  chartStatus: string | null;
+  hasEncounter: boolean;
+  encounterId: string | null;
+  encounterStatus: string | null;
 };
 
 /**
@@ -350,6 +356,8 @@ export async function getAppointmentWithPatient(
       provider: { select: { name: true } },
       service: { select: { name: true, price: true } },
       room: { select: { name: true } },
+      chart: { select: { id: true, status: true } },
+      encounter: { select: { id: true, status: true } },
     },
   });
 
@@ -376,6 +384,12 @@ export async function getAppointmentWithPatient(
     patientAllergies: apt.patient.allergies,
     patientCreatedAt: apt.patient.createdAt,
     patientVisitCount: apt.patient._count.appointments,
+    hasChart: !!apt.chart,
+    chartId: apt.chart?.id ?? null,
+    chartStatus: apt.chart?.status ?? null,
+    hasEncounter: !!apt.encounter,
+    encounterId: apt.encounter?.id ?? null,
+    encounterStatus: apt.encounter?.status ?? null,
   };
 }
 

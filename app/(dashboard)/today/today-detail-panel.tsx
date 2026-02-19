@@ -29,14 +29,13 @@ import {
 import {
   confirmAppointment,
   checkInAppointment,
-  startSession,
+  beginService,
   completeSession,
   checkOutAppointment,
   getAppointmentTimestamps,
   type TodayPermissions,
 } from "@/lib/actions/today";
 import { derivePhase } from "@/lib/today-utils";
-import { createChart, getCharts } from "@/lib/actions/charts";
 import { cn } from "@/lib/utils";
 
 function formatPhone(phone: string): string {
@@ -463,14 +462,23 @@ export function TodayDetailPanel({
                     )}
                   </>
                 )}
-                {phase === "here" && permissions.canStartSession && (
+                {phase === "here" && permissions.canBeginService && (
                   <button
-                    onClick={() => handleAction(startSession)}
+                    onClick={() => {
+                      startTransition(async () => {
+                        const result = await beginService(detail.id);
+                        if (result.success && result.data) {
+                          router.push(`/charts/${result.data.chartId}/edit`);
+                        } else {
+                          await refreshDetail();
+                        }
+                      });
+                    }}
                     disabled={isPending}
                     className="w-full py-2 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
-                    Start Session
+                    Begin Service
                   </button>
                 )}
                 {phase === "with_provider" && permissions.canCompleteSession && (
@@ -494,35 +502,23 @@ export function TodayDetailPanel({
                   </button>
                 )}
 
-                {/* Chart button */}
+                {/* Chart button — shown when chart exists */}
                 {permissions.canOpenChart &&
+                  detail.hasChart &&
+                  detail.chartId &&
                   (phase === "with_provider" || phase === "done") && (
                     <button
-                      onClick={async () => {
-                        const existing = await getCharts({ patientId: detail.patientId });
-                        const existingChart = existing.find(
-                          (c) => c.appointmentId === detail.id
+                      onClick={() => {
+                        router.push(
+                          detail.chartStatus === "Draft"
+                            ? `/charts/${detail.chartId}/edit`
+                            : `/charts/${detail.chartId}`
                         );
-                        if (existingChart) {
-                          router.push(
-                            existingChart.status === "Draft"
-                              ? `/charts/${existingChart.id}/edit`
-                              : `/charts/${existingChart.id}`
-                          );
-                          return;
-                        }
-                        const result = await createChart({
-                          patientId: detail.patientId,
-                          appointmentId: detail.id,
-                        });
-                        if (result.success && result.data) {
-                          router.push(`/charts/${result.data.id}/edit`);
-                        }
                       }}
                       className="w-full py-2 px-4 text-sm font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 flex items-center justify-center gap-2 border border-purple-200"
                     >
                       <FileTextIcon className="h-4 w-4" />
-                      {phase === "with_provider" ? "Start Chart" : "Open Chart"}
+                      Open Chart
                     </button>
                   )}
               </div>

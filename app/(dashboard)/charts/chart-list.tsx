@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { PlusIcon, FileTextIcon } from "lucide-react";
 import { PatientAvatar } from "@/components/patient-avatar";
+import { getEffectiveStatus } from "@/lib/encounter-utils";
 
 type ChartItem = {
   id: string;
@@ -12,7 +13,8 @@ type ChartItem = {
   updatedAt: Date;
   chiefComplaint: string | null;
   patient: { firstName: string; lastName: string };
-  createdBy: { name: string };
+  createdBy: { name: string } | null;
+  encounter: { id: string; status: string; provider: { name: string } } | null;
   template: { name: string } | null;
   appointment: { startTime: Date; service: { name: string } | null } | null;
 };
@@ -34,11 +36,13 @@ export function ChartList({ initialCharts }: { initialCharts: ChartItem[] }) {
   const [search, setSearch] = useState("");
 
   const filtered = initialCharts.filter((c) => {
-    if (statusFilter && c.status !== statusFilter) return false;
+    const effectiveStatus = getEffectiveStatus(c);
+    if (statusFilter && effectiveStatus !== statusFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       const name = `${c.patient.firstName} ${c.patient.lastName}`.toLowerCase();
-      return name.includes(q) || c.createdBy.name.toLowerCase().includes(q);
+      const providerName = c.encounter?.provider.name ?? c.createdBy?.name ?? "";
+      return name.includes(q) || providerName.toLowerCase().includes(q);
     }
     return true;
   });
@@ -117,16 +121,21 @@ export function ChartList({ initialCharts }: { initialCharts: ChartItem[] }) {
                     {chart.template?.name ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    {chart.createdBy.name}
+                    {chart.encounter?.provider.name ?? chart.createdBy?.name ?? "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
-                        STATUS_STYLES[chart.status] ?? "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {STATUS_LABELS[chart.status] ?? chart.status}
-                    </span>
+                    {(() => {
+                      const effectiveStatus = getEffectiveStatus(chart);
+                      return (
+                        <span
+                          className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
+                            STATUS_STYLES[effectiveStatus] ?? "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {STATUS_LABELS[effectiveStatus] ?? effectiveStatus}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500">
                     {new Date(chart.updatedAt).toLocaleDateString("en-US", {
@@ -137,16 +146,21 @@ export function ChartList({ initialCharts }: { initialCharts: ChartItem[] }) {
                     })}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Link
-                      href={
-                        chart.status === "Draft"
-                          ? `/charts/${chart.id}/edit`
-                          : `/charts/${chart.id}`
-                      }
-                      className="text-sm text-purple-600 hover:text-purple-700"
-                    >
-                      {chart.status === "Draft" ? "Edit" : "View"}
-                    </Link>
+                    {(() => {
+                      const effectiveStatus = getEffectiveStatus(chart);
+                      return (
+                        <Link
+                          href={
+                            effectiveStatus === "Draft"
+                              ? `/charts/${chart.id}/edit`
+                              : `/charts/${chart.id}`
+                          }
+                          className="text-sm text-purple-600 hover:text-purple-700"
+                        >
+                          {effectiveStatus === "Draft" ? "Edit" : "View"}
+                        </Link>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}

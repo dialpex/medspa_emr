@@ -94,6 +94,7 @@ async function testSignChart(
 
   const chart = await prisma.chart.findUnique({
     where: { id: chartId },
+    include: { encounter: { select: { id: true, status: true } } },
   });
 
   if (!chart) {
@@ -104,7 +105,11 @@ async function testSignChart(
     return { success: false, error: "Access denied: resource belongs to different clinic" };
   }
 
-  if (chart.status !== "NeedsSignOff") {
+  // Check encounter status when available
+  const isNeedsSignOff = chart.encounter
+    ? chart.encounter.status === "PendingReview"
+    : chart.status === "NeedsSignOff";
+  if (!isNeedsSignOff) {
     return {
       success: false,
       error: "Only charts with NeedsSignOff status can be signed",
@@ -126,6 +131,14 @@ async function testSignChart(
     },
   });
 
+  // Dual-write: update encounter status
+  if (chart.encounter) {
+    await prisma.encounter.update({
+      where: { id: chart.encounter.id },
+      data: { status: "Finalized", finalizedAt: signedAt },
+    });
+  }
+
   await prisma.auditLog.create({
     data: {
       clinicId: user.clinicId,
@@ -135,6 +148,7 @@ async function testSignChart(
       entityId: chartId,
       details: JSON.stringify({
         patientId: chart.patientId,
+        encounterId: chart.encounter?.id,
         previousStatus: "NeedsSignOff",
         newStatus: "MDSigned",
         recordHash,

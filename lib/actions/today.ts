@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission, hasPermission } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 import { derivePhase } from "@/lib/today-utils";
-import type { AppointmentStatus, AuditAction, ChartStatus, Role } from "@prisma/client";
+import type { AppointmentStatus, AuditAction, ChartStatus, EncounterStatus, Role } from "@prisma/client";
 import type { JourneyPhase } from "@/lib/today-utils";
 
 // ===========================================
@@ -39,6 +39,9 @@ export type TodayAppointment = {
   hasChart: boolean;
   chartId: string | null;
   chartStatus: ChartStatus | null;
+  hasEncounter: boolean;
+  encounterId: string | null;
+  encounterStatus: EncounterStatus | null;
   hasInvoice: boolean;
 };
 
@@ -46,6 +49,7 @@ export type TodayPermissions = {
   canConfirm: boolean;
   canCheckIn: boolean;
   canStartSession: boolean;
+  canBeginService: boolean;
   canCompleteSession: boolean;
   canCheckOut: boolean;
   canOpenChart: boolean;
@@ -126,6 +130,7 @@ export async function getTodayAppointments(filters?: {
       service: { select: { name: true, price: true } },
       room: { select: { name: true } },
       chart: { select: { id: true, status: true } },
+      encounter: { select: { id: true, status: true } },
       invoice: { select: { id: true } },
     },
     orderBy: { startTime: "asc" },
@@ -156,6 +161,9 @@ export async function getTodayAppointments(filters?: {
     hasChart: !!apt.chart,
     chartId: apt.chart?.id ?? null,
     chartStatus: apt.chart?.status ?? null,
+    hasEncounter: !!apt.encounter,
+    encounterId: apt.encounter?.id ?? null,
+    encounterStatus: apt.encounter?.status ?? null,
     hasInvoice: !!apt.invoice,
   }));
 
@@ -187,10 +195,13 @@ export async function getTodayPermissions(): Promise<TodayPermissions> {
   // Provider/Admin/Owner/MD can start and complete sessions
   const isProviderPlus = ["Provider", "Admin", "Owner", "MedicalDirector"].includes(role);
 
+  const canBeginService = ["FrontDesk", "Provider", "Admin", "Owner"].includes(role);
+
   return {
     canConfirm: isFrontDeskPlus,
     canCheckIn: isFrontDeskPlus,
     canStartSession: isProviderPlus,
+    canBeginService,
     canCompleteSession: isProviderPlus,
     canCheckOut: isFrontDeskPlus,
     canOpenChart: hasPermission(role, "charts", "view"),
@@ -395,4 +406,134 @@ export async function checkOutAppointment(id: string) {
   revalidatePath("/today");
   revalidatePath("/calendar");
   return { success: true };
+}
+
+// ===========================================
+// BEGIN SERVICE (unified start session + create chart + treatment card)
+// ===========================================
+
+function deriveTreatmentCardType(serviceCategory: string | null | undefined): "Injectable" | "Laser" | "Esthetics" | "Other" {
+  if (!serviceCategory) return "Other";
+  const lower = serviceCategory.toLowerCase();
+  if (lower.includes("injectable") || lower.includes("filler") || lower.includes("neurotoxin")) return "Injectable";
+  if (lower.includes("laser") || lower.includes("energy")) return "Laser";
+  if (lower.includes("esthetic") || lower.includes("skin treatment") || lower.includes("peel") || lower.includes("microneedling")) return "Esthetics";
+  return "Other";
+}
+
+export async function beginService(appointmentId: string): Promise<{
+  success: boolean;
+  data?: { chartId: string; encounterId: string };
+  error?: string;
+}> {
+  const user = await requirePermission("appointments", "edit");
+
+  if (!["FrontDesk", "Provider", "Admin", "Owner"].includes(user.role)) {
+    return { success: false, error: "Permission denied" };
+  }
+
+  const apt = await prisma.appointment.findFirst({
+    where: { id: appointmentId, clinicId: user.clinicId, deletedAt: null },
+    include: {
+      service: { select: { category: true } },
+      chart: { select: { id: true, treatmentCards: { select: { id: true } } } },
+      encounter: { select: { id: true, chart: { select: { id: true } } } },
+    },
+  });
+
+  if (!apt) return { success: false, error: "Appointment not found" };
+
+  // Idempotency: if already InProgress, return existing encounter's chart
+  if (apt.status === "InProgress" && apt.encounter?.chart) {
+    return { success: true, data: { chartId: apt.encounter.chart.id, encounterId: apt.encounter.id } };
+  }
+
+  if (apt.status !== "CheckedIn") {
+    return { success: false, error: "Patient must be checked in first" };
+  }
+
+  const templateType = deriveTreatmentCardType(apt.service?.category);
+
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Transition appointment to InProgress
+    await tx.appointment.update({
+      where: { id: appointmentId },
+      data: { status: "InProgress", startedAt: new Date() },
+    });
+
+    // 2. Create Encounter (idempotent via appointmentId @unique)
+    let encounter = apt.encounter;
+    if (!encounter) {
+      encounter = await tx.encounter.create({
+        data: {
+          appointmentId,
+          clinicId: user.clinicId,
+          patientId: apt.patientId,
+          providerId: apt.providerId,
+          status: "Draft",
+        },
+        include: { chart: { select: { id: true } } },
+      });
+    }
+
+    // 3. Create Chart with encounterId + dual-write legacy fields
+    let chart = apt.chart ?? encounter.chart;
+    if (!chart) {
+      const newChart = await tx.chart.create({
+        data: {
+          clinicId: user.clinicId,
+          encounterId: encounter.id,
+          // Dual-write legacy fields
+          patientId: apt.patientId,
+          appointmentId: appointmentId,
+          createdById: user.id,
+          status: "Draft",
+        },
+        include: { treatmentCards: { select: { id: true } } },
+      });
+      chart = newChart;
+    }
+
+    // 4. Create initial TreatmentCard if none exists
+    const treatmentCards = 'treatmentCards' in chart ? (chart as { treatmentCards: { id: string }[] }).treatmentCards : [];
+    let treatmentCardId: string | null = null;
+    if (treatmentCards.length === 0) {
+      const card = await tx.treatmentCard.create({
+        data: {
+          chartId: chart.id,
+          templateType,
+          title: templateType,
+          narrativeText: "",
+          structuredData: "{}",
+          sortOrder: 0,
+        },
+      });
+      treatmentCardId = card.id;
+    } else {
+      treatmentCardId = treatmentCards[0].id;
+    }
+
+    // 5. Audit log
+    await tx.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "BeginService",
+        entityType: "Appointment",
+        entityId: appointmentId,
+        details: JSON.stringify({
+          appointmentId,
+          encounterId: encounter.id,
+          chartId: chart.id,
+          treatmentCardId,
+        }),
+      },
+    });
+
+    return { chartId: chart.id, encounterId: encounter.id };
+  });
+
+  revalidatePath("/today");
+  revalidatePath("/calendar");
+  return { success: true, data: result };
 }

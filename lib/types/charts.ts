@@ -57,6 +57,41 @@ export interface FreehandAnnotation {
   color: string;
 }
 
-export type Annotation = PointAnnotation | LineAnnotation | FreehandAnnotation;
+export interface ArrowAnnotation {
+  type: "arrow";
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  color: string;
+}
 
-export type AnnotationTool = "point" | "line" | "freehand";
+export interface RectAnnotation {
+  type: "rect";
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+}
+
+export interface TextAnnotation {
+  type: "text";
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+}
+
+export type Annotation =
+  | PointAnnotation
+  | LineAnnotation
+  | FreehandAnnotation
+  | ArrowAnnotation
+  | RectAnnotation
+  | TextAnnotation;
+
+export type AnnotationTool = "point" | "line" | "freehand" | "arrow" | "rect" | "text";
