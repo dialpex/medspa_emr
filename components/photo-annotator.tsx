@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { XIcon, UndoIcon, CircleDotIcon, MinusIcon, PencilIcon } from "lucide-react";
+import { XIcon, UndoIcon, CircleDotIcon, MinusIcon, PencilIcon, ArrowRightIcon, SquareIcon, TypeIcon } from "lucide-react";
 import type { Annotation, AnnotationTool } from "@/lib/types/charts";
 import { updatePhotoAnnotations } from "@/lib/actions/photos";
 
@@ -47,8 +47,18 @@ export function PhotoAnnotator({
   const [pendingPoint, setPendingPoint] = useState<PendingPoint | null>(null);
   const [pendingUnits, setPendingUnits] = useState("");
 
+  // Pending text waiting for text input
+  const [pendingText, setPendingText] = useState<PendingPoint | null>(null);
+  const [pendingTextValue, setPendingTextValue] = useState("");
+  const textInputRef = useRef<HTMLInputElement>(null);
+
   // For line tool
   const lineStartRef = useRef<{ x: number; y: number } | null>(null);
+  // For arrow tool
+  const arrowStartRef = useRef<{ x: number; y: number } | null>(null);
+  // For rect tool
+  const rectStartRef = useRef<{ x: number; y: number } | null>(null);
+  const rectCurrentRef = useRef<{ x: number; y: number } | null>(null);
   // For freehand
   const drawingRef = useRef(false);
   const freehandPointsRef = useRef<{ x: number; y: number }[]>([]);
@@ -130,7 +140,63 @@ export function PhotoAnnotator({
           ctx.lineTo(ann.points[i].x * canvas.width, ann.points[i].y * canvas.height);
         }
         ctx.stroke();
+      } else if (ann.type === "arrow") {
+        const x1 = ann.x1 * canvas.width;
+        const y1 = ann.y1 * canvas.height;
+        const x2 = ann.x2 * canvas.width;
+        const y2 = ann.y2 * canvas.height;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        // Arrowhead
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        const headLen = 16;
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+      } else if (ann.type === "rect") {
+        const rx = ann.x * canvas.width;
+        const ry = ann.y * canvas.height;
+        const rw = ann.w * canvas.width;
+        const rh = ann.h * canvas.height;
+        ctx.strokeRect(rx, ry, rw, rh);
+      } else if (ann.type === "text") {
+        const tx = ann.x * canvas.width;
+        const ty = ann.y * canvas.height;
+        ctx.font = "bold 18px sans-serif";
+        const metrics = ctx.measureText(ann.text);
+        const padding = 6;
+        ctx.fillStyle = ann.color;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.roundRect(tx - padding, ty - 16 - padding, metrics.width + padding * 2, 22 + padding * 2, 4);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = "white";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(ann.text, tx, ty);
       }
+    }
+
+    // Draw live rect preview
+    if (rectStartRef.current && rectCurrentRef.current) {
+      const rs = rectStartRef.current;
+      const rc = rectCurrentRef.current;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(
+        Math.min(rs.x, rc.x) * canvas.width,
+        Math.min(rs.y, rc.y) * canvas.height,
+        Math.abs(rc.x - rs.x) * canvas.width,
+        Math.abs(rc.y - rs.y) * canvas.height
+      );
+      ctx.setLineDash([]);
     }
 
     // Draw pending point as a ghost circle
@@ -144,7 +210,7 @@ export function PhotoAnnotator({
       ctx.fill();
       ctx.globalAlpha = 1;
     }
-  }, [annotations, imgLoaded, pendingPoint, color]);
+  }, [annotations, imgLoaded, pendingPoint, pendingText, color]);
 
   useEffect(() => { redraw(); }, [redraw]);
 
@@ -154,6 +220,13 @@ export function PhotoAnnotator({
       unitsInputRef.current.focus();
     }
   }, [pendingPoint]);
+
+  // Focus input when pending text appears
+  useEffect(() => {
+    if (pendingText && textInputRef.current) {
+      textInputRef.current.focus();
+    }
+  }, [pendingText]);
 
   const confirmPendingPoint = () => {
     if (!pendingPoint) return;
@@ -180,10 +253,38 @@ export function PhotoAnnotator({
     setPendingUnits("");
   };
 
+  const confirmPendingText = () => {
+    if (!pendingText) return;
+    const value = pendingTextValue.trim();
+    if (!value) return;
+    setAnnotations((prev) => [
+      ...prev,
+      {
+        type: "text",
+        id: `t_${Date.now()}`,
+        x: pendingText.x,
+        y: pendingText.y,
+        text: value,
+        color,
+      },
+    ]);
+    setPendingText(null);
+    setPendingTextValue("");
+  };
+
+  const cancelPendingText = () => {
+    setPendingText(null);
+    setPendingTextValue("");
+  };
+
   const handleCanvasClick = (e: React.MouseEvent) => {
-    // If there's a pending point, cancel it first
+    // If there's a pending point or text, cancel it first
     if (pendingPoint) {
       cancelPendingPoint();
+      return;
+    }
+    if (pendingText) {
+      cancelPendingText();
       return;
     }
 
@@ -217,21 +318,57 @@ export function PhotoAnnotator({
           },
         ]);
       }
+    } else if (tool === "arrow") {
+      if (!arrowStartRef.current) {
+        arrowStartRef.current = coords;
+      } else {
+        const start = arrowStartRef.current;
+        arrowStartRef.current = null;
+        setAnnotations((prev) => [
+          ...prev,
+          {
+            type: "arrow",
+            id: `a_${Date.now()}`,
+            x1: start.x,
+            y1: start.y,
+            x2: coords.x,
+            y2: coords.y,
+            color,
+          },
+        ]);
+      }
+    } else if (tool === "text") {
+      setPendingText({
+        x: coords.x,
+        y: coords.y,
+        screenX: e.clientX,
+        screenY: e.clientY,
+      });
+      setPendingTextValue("");
     }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    const coords = getNormalizedCoords(e);
+    if (!coords) return;
     if (tool === "freehand") {
       drawingRef.current = true;
-      const coords = getNormalizedCoords(e);
-      if (coords) freehandPointsRef.current = [coords];
+      freehandPointsRef.current = [coords];
+    } else if (tool === "rect") {
+      drawingRef.current = true;
+      rectStartRef.current = coords;
+      rectCurrentRef.current = coords;
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    const coords = getNormalizedCoords(e);
+    if (!coords) return;
     if (tool === "freehand" && drawingRef.current) {
-      const coords = getNormalizedCoords(e);
-      if (coords) freehandPointsRef.current.push(coords);
+      freehandPointsRef.current.push(coords);
+    } else if (tool === "rect" && drawingRef.current) {
+      rectCurrentRef.current = coords;
+      redraw();
     }
   };
 
@@ -250,6 +387,28 @@ export function PhotoAnnotator({
         ]);
       }
       freehandPointsRef.current = [];
+    } else if (tool === "rect" && drawingRef.current && rectStartRef.current && rectCurrentRef.current) {
+      drawingRef.current = false;
+      const s = rectStartRef.current;
+      const c = rectCurrentRef.current;
+      const w = Math.abs(c.x - s.x);
+      const h = Math.abs(c.y - s.y);
+      if (w > 0.01 || h > 0.01) {
+        setAnnotations((prev) => [
+          ...prev,
+          {
+            type: "rect",
+            id: `r_${Date.now()}`,
+            x: Math.min(s.x, c.x),
+            y: Math.min(s.y, c.y),
+            w,
+            h,
+            color,
+          },
+        ]);
+      }
+      rectStartRef.current = null;
+      rectCurrentRef.current = null;
     }
   };
 
@@ -279,25 +438,46 @@ export function PhotoAnnotator({
         <div className="flex items-center justify-between p-3 border-b">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { setTool("point"); lineStartRef.current = null; cancelPendingPoint(); }}
+              onClick={() => { setTool("point"); lineStartRef.current = null; arrowStartRef.current = null; cancelPendingPoint(); cancelPendingText(); }}
               className={`p-2 rounded-lg ${tool === "point" ? "bg-purple-100 text-purple-700" : "text-gray-500 hover:bg-gray-100"}`}
               title="Point (injection site)"
             >
               <CircleDotIcon className="size-5" />
             </button>
             <button
-              onClick={() => { setTool("line"); lineStartRef.current = null; cancelPendingPoint(); }}
+              onClick={() => { setTool("line"); lineStartRef.current = null; arrowStartRef.current = null; cancelPendingPoint(); cancelPendingText(); }}
               className={`p-2 rounded-lg ${tool === "line" ? "bg-purple-100 text-purple-700" : "text-gray-500 hover:bg-gray-100"}`}
               title="Line"
             >
               <MinusIcon className="size-5" />
             </button>
             <button
-              onClick={() => { setTool("freehand"); lineStartRef.current = null; cancelPendingPoint(); }}
+              onClick={() => { setTool("freehand"); lineStartRef.current = null; arrowStartRef.current = null; cancelPendingPoint(); cancelPendingText(); }}
               className={`p-2 rounded-lg ${tool === "freehand" ? "bg-purple-100 text-purple-700" : "text-gray-500 hover:bg-gray-100"}`}
               title="Freehand draw"
             >
               <PencilIcon className="size-5" />
+            </button>
+            <button
+              onClick={() => { setTool("arrow"); lineStartRef.current = null; arrowStartRef.current = null; cancelPendingPoint(); cancelPendingText(); }}
+              className={`p-2 rounded-lg ${tool === "arrow" ? "bg-purple-100 text-purple-700" : "text-gray-500 hover:bg-gray-100"}`}
+              title="Arrow"
+            >
+              <ArrowRightIcon className="size-5" />
+            </button>
+            <button
+              onClick={() => { setTool("rect"); lineStartRef.current = null; arrowStartRef.current = null; cancelPendingPoint(); cancelPendingText(); }}
+              className={`p-2 rounded-lg ${tool === "rect" ? "bg-purple-100 text-purple-700" : "text-gray-500 hover:bg-gray-100"}`}
+              title="Rectangle"
+            >
+              <SquareIcon className="size-5" />
+            </button>
+            <button
+              onClick={() => { setTool("text"); lineStartRef.current = null; arrowStartRef.current = null; cancelPendingPoint(); }}
+              className={`p-2 rounded-lg ${tool === "text" ? "bg-purple-100 text-purple-700" : "text-gray-500 hover:bg-gray-100"}`}
+              title="Text label"
+            >
+              <TypeIcon className="size-5" />
             </button>
             <div className="w-px h-6 bg-gray-200 mx-1" />
             {COLORS.map((c) => (
@@ -382,6 +562,51 @@ export function PhotoAnnotator({
             </div>
           </div>
         )}
+
+        {/* Text input popover */}
+        {pendingText && (() => {
+          const style = {
+            left: Math.min(pendingText.screenX, window.innerWidth - 200),
+            top: Math.max(pendingText.screenY - 80, 8),
+          };
+          return (
+            <div
+              className="fixed z-[70] bg-white rounded-lg shadow-xl border border-gray-200 p-3 w-48"
+              style={style}
+            >
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                Text Label
+              </label>
+              <input
+                ref={textInputRef}
+                type="text"
+                value={pendingTextValue}
+                onChange={(e) => setPendingTextValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") confirmPendingText();
+                  if (e.key === "Escape") cancelPendingText();
+                }}
+                placeholder="e.g. Botox 20u"
+                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+              />
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={confirmPendingText}
+                  disabled={!pendingTextValue.trim()}
+                  className="flex-1 py-1 text-xs font-medium text-white bg-purple-600 rounded hover:bg-purple-700 disabled:opacity-40"
+                >
+                  Place
+                </button>
+                <button
+                  onClick={cancelPendingText}
+                  className="flex-1 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 p-3 border-t">

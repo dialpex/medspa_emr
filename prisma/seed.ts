@@ -63,6 +63,7 @@ async function main() {
       email: "dr.chen@radiancemedspa.com",
       name: "Dr. Michael Chen",
       role: "MedicalDirector",
+      requiresMDReview: false,
       passwordHash: passwordHash,
     },
   });
@@ -73,6 +74,8 @@ async function main() {
       email: "jessica.np@radiancemedspa.com",
       name: "Jessica Adams, NP",
       role: "Provider",
+      requiresMDReview: true,
+      supervisingMDId: medicalDirector.id,
       passwordHash: passwordHash,
     },
   });
@@ -107,7 +110,7 @@ async function main() {
     },
   });
 
-  console.log("Created 6 users");
+  console.log("Created 6 users (1 NP with requiresMDReview=true)");
 
   // ===========================================
   // SERVICES
@@ -180,7 +183,7 @@ async function main() {
         description: "Superficial chemical peel for skin rejuvenation",
         duration: 30,
         price: 150,
-        category: "Skin Treatments",
+        category: "Esthetics",
       },
     }),
     prisma.service.create({
@@ -190,7 +193,27 @@ async function main() {
         description: "Collagen induction therapy",
         duration: 60,
         price: 350,
-        category: "Skin Treatments",
+        category: "Esthetics",
+      },
+    }),
+    prisma.service.create({
+      data: {
+        clinicId: clinic.id,
+        name: "IPL Photofacial",
+        description: "Intense pulsed light treatment for sun damage and redness",
+        duration: 45,
+        price: 400,
+        category: "Laser",
+      },
+    }),
+    prisma.service.create({
+      data: {
+        clinicId: clinic.id,
+        name: "Laser Hair Removal - Face",
+        description: "Laser hair removal for facial areas",
+        duration: 30,
+        price: 250,
+        category: "Laser",
       },
     }),
     prisma.service.create({
@@ -717,15 +740,18 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log(`Created ${membershipPlans.length} membership plans`);
 
   // ===========================================
-  // APPOINTMENTS (Various statuses)
+  // APPOINTMENTS — anchored to demo week Feb 16–20, 2026
   // ===========================================
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const lastWeek = new Date(today);
-  lastWeek.setDate(lastWeek.getDate() - 7);
+  // Fixed dates for reproducible demo data
+  const monday    = new Date("2026-02-16T00:00:00");
+  const tuesday   = new Date("2026-02-17T00:00:00");
+  const wednesday = new Date("2026-02-18T00:00:00"); // "today"
+  const thursday  = new Date("2026-02-19T00:00:00");
+  const friday    = new Date("2026-02-20T00:00:00");
+
+  // Keep these aliases for backward-compat in memberships/comms sections
+  const today = wednesday;
+  const yesterday = tuesday;
 
   // Helper to create appointment times
   const setTime = (date: Date, hours: number, minutes: number): Date => {
@@ -734,178 +760,357 @@ By signing below, I confirm my consent to proceed with treatment.`,
     return d;
   };
 
+  // Patient index reference:
+  // 0=Jennifer Williams, 1=Michael Johnson, 2=Lisa Chen, 3=David Martinez,
+  // 4=Amanda Taylor, 5=Sarah Kim, 6=Robert Davis, 7=Emily Nguyen,
+  // 8=James Wilson, 9=Maria Garcia, 10=Kevin Brown, 11=Rachel Patel
+
+  // Service index reference:
+  // 0=Botox Forehead, 1=Botox Crow's Feet, 2=Botox Glabella, 3=Juvederm Lips,
+  // 4=Juvederm Voluma Cheeks, 5=Sculptra, 6=Chemical Peel, 7=Microneedling,
+  // 8=IPL Photofacial, 9=Laser Hair Removal, 10=Consultation, 11=Follow-Up
+
   const appointments = await Promise.all([
-    // Completed appointment from last week
+    // ── MONDAY Feb 16 (past — all completed+checked out) ──
+    // [0] Jennifer Williams / Botox Forehead / provider1 (NP) → Completed+CheckedOut
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
         patientId: patients[0].id,
         providerId: provider1.id,
-        serviceId: services[0].id, // Botox Forehead
+        serviceId: services[0].id,
         roomId: rooms[0].id,
-        startTime: setTime(lastWeek, 10, 0),
-        endTime: setTime(lastWeek, 10, 30),
+        startTime: setTime(monday, 9, 0),
+        endTime: setTime(monday, 9, 30),
         status: "Completed",
-        notes: "Patient tolerated procedure well",
+        notes: "Patient tolerated procedure well. 20 units forehead.",
+        checkedInAt: setTime(monday, 8, 50),
+        startedAt: setTime(monday, 9, 2),
+        completedAt: setTime(monday, 9, 28),
+        checkedOutAt: setTime(monday, 9, 35),
       },
     }),
-    // Completed appointment from yesterday
+    // [1] Lisa Chen / Juvederm Lips / provider2 → Completed+CheckedOut
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
         patientId: patients[2].id,
-        providerId: provider1.id,
-        serviceId: services[3].id, // Juvederm Lips
-        roomId: rooms[0].id,
-        startTime: setTime(yesterday, 14, 0),
-        endTime: setTime(yesterday, 14, 45),
+        providerId: provider2.id,
+        serviceId: services[3].id,
+        roomId: rooms[1].id,
+        startTime: setTime(monday, 10, 30),
+        endTime: setTime(monday, 11, 15),
         status: "Completed",
-        notes: "1 syringe used. Patient happy with results.",
+        notes: "1 syringe Juvederm Ultra XC. Patient happy with results.",
+        checkedInAt: setTime(monday, 10, 20),
+        startedAt: setTime(monday, 10, 32),
+        completedAt: setTime(monday, 11, 10),
+        checkedOutAt: setTime(monday, 11, 18),
       },
     }),
-    // Completed appointment from yesterday (needs sign-off)
+    // [2] Amanda Taylor / Sculptra / provider2 → Completed+CheckedOut
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
         patientId: patients[4].id,
         providerId: provider2.id,
-        serviceId: services[5].id, // Sculptra
+        serviceId: services[5].id,
         roomId: rooms[1].id,
-        startTime: setTime(yesterday, 11, 0),
-        endTime: setTime(yesterday, 12, 0),
+        startTime: setTime(monday, 14, 0),
+        endTime: setTime(monday, 15, 0),
         status: "Completed",
         notes: "Full face Sculptra session 2 of 3",
+        checkedInAt: setTime(monday, 13, 50),
+        startedAt: setTime(monday, 14, 5),
+        completedAt: setTime(monday, 14, 55),
+        checkedOutAt: setTime(monday, 15, 5),
       },
     }),
-    // Today's appointments — covering all journey phases
-    // 1. Upcoming (Scheduled) — no timestamps
-    prisma.appointment.create({
-      data: {
-        clinicId: clinic.id,
-        patientId: patients[0].id,
-        providerId: provider1.id,
-        serviceId: services[1].id, // Botox Crow's feet
-        roomId: rooms[0].id,
-        startTime: setTime(today, 10, 0),
-        endTime: setTime(today, 10, 20),
-        status: "Scheduled",
-      },
-    }),
-    // 2. Upcoming (Confirmed) — no timestamps
-    prisma.appointment.create({
-      data: {
-        clinicId: clinic.id,
-        patientId: patients[3].id,
-        providerId: provider2.id,
-        serviceId: services[7].id, // Microneedling
-        roomId: rooms[1].id,
-        startTime: setTime(today, 11, 0),
-        endTime: setTime(today, 12, 0),
-        status: "Confirmed",
-      },
-    }),
-    // 3. Here (CheckedIn) — checkedInAt set
+
+    // ── TUESDAY Feb 17 (yesterday — mix of completed and pending review) ──
+    // [3] Michael Johnson / Botox Forehead / provider1 (NP) → Completed (pending MD review)
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
         patientId: patients[1].id,
         providerId: provider1.id,
-        serviceId: services[8].id, // Consultation
-        roomId: rooms[2].id,
-        startTime: setTime(today, 9, 0),
-        endTime: setTime(today, 9, 30),
-        status: "CheckedIn",
-        notes: "New patient consultation",
-        checkedInAt: setTime(today, 8, 52),
+        serviceId: services[0].id,
+        roomId: rooms[0].id,
+        startTime: setTime(tuesday, 9, 0),
+        endTime: setTime(tuesday, 9, 30),
+        status: "Completed",
+        notes: "First time Botox patient. 20 units forehead.",
+        checkedInAt: setTime(tuesday, 8, 50),
+        startedAt: setTime(tuesday, 9, 2),
+        completedAt: setTime(tuesday, 9, 28),
       },
     }),
-    // 4. With Provider (InProgress) — checkedInAt + startedAt set
+    // [4] David Martinez / Microneedling / provider2 → Completed+CheckedOut
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
-        patientId: patients[5].id,
+        patientId: patients[3].id,
         providerId: provider2.id,
-        serviceId: services[0].id, // Botox Forehead
+        serviceId: services[7].id,
         roomId: rooms[1].id,
-        startTime: setTime(today, 9, 30),
-        endTime: setTime(today, 10, 0),
-        status: "InProgress",
-        notes: "Returning patient, forehead touch-up",
-        checkedInAt: setTime(today, 9, 20),
-        startedAt: setTime(today, 9, 32),
+        startTime: setTime(tuesday, 11, 0),
+        endTime: setTime(tuesday, 12, 0),
+        status: "Completed",
+        notes: "Full face microneedling. Good tolerance.",
+        checkedInAt: setTime(tuesday, 10, 50),
+        startedAt: setTime(tuesday, 11, 5),
+        completedAt: setTime(tuesday, 11, 55),
+        checkedOutAt: setTime(tuesday, 12, 5),
       },
     }),
-    // 5. Done — checkout pending (Completed, no checkedOutAt)
+    // [5] Amanda Taylor / Juvederm Voluma Cheeks / provider1 (NP) → Completed (pending MD review)
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[4].id,
+        providerId: provider1.id,
+        serviceId: services[4].id,
+        roomId: rooms[0].id,
+        startTime: setTime(tuesday, 14, 0),
+        endTime: setTime(tuesday, 14, 45),
+        status: "Completed",
+        notes: "Cheek volume restoration. 1 syringe Voluma per side.",
+        checkedInAt: setTime(tuesday, 13, 50),
+        startedAt: setTime(tuesday, 14, 5),
+        completedAt: setTime(tuesday, 14, 42),
+      },
+    }),
+
+    // ── WEDNESDAY Feb 18 (today — full journey coverage) ──
+    // [6] Robert Davis / Chemical Peel / provider1 → Completed+CheckedOut (done early)
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
         patientId: patients[6].id,
         providerId: provider1.id,
-        serviceId: services[6].id, // Chemical Peel
+        serviceId: services[6].id,
         roomId: rooms[0].id,
-        startTime: setTime(today, 8, 0),
-        endTime: setTime(today, 8, 30),
+        startTime: setTime(wednesday, 8, 0),
+        endTime: setTime(wednesday, 8, 30),
         status: "Completed",
         notes: "Light peel completed, good tolerance",
-        checkedInAt: setTime(today, 7, 50),
-        startedAt: setTime(today, 8, 2),
-        completedAt: setTime(today, 8, 28),
+        checkedInAt: setTime(wednesday, 7, 50),
+        startedAt: setTime(wednesday, 8, 2),
+        completedAt: setTime(wednesday, 8, 28),
+        checkedOutAt: setTime(wednesday, 8, 35),
       },
     }),
-    // 6. Done — checked out (Completed, all 4 timestamps)
+    // [7] Emily Nguyen / Follow-Up / provider2 → Completed+CheckedOut (done early)
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
         patientId: patients[7].id,
         providerId: provider2.id,
-        serviceId: services[9].id, // Follow-Up Visit
+        serviceId: services[11].id,
         roomId: rooms[2].id,
-        startTime: setTime(today, 8, 30),
-        endTime: setTime(today, 8, 45),
+        startTime: setTime(wednesday, 8, 30),
+        endTime: setTime(wednesday, 8, 45),
         status: "Completed",
         notes: "2-week follow-up, healing well",
-        checkedInAt: setTime(today, 8, 22),
-        startedAt: setTime(today, 8, 30),
-        completedAt: setTime(today, 8, 42),
-        checkedOutAt: setTime(today, 8, 48),
+        checkedInAt: setTime(wednesday, 8, 22),
+        startedAt: setTime(wednesday, 8, 30),
+        completedAt: setTime(wednesday, 8, 42),
+        checkedOutAt: setTime(wednesday, 8, 48),
       },
     }),
-    // 7. Afternoon Upcoming (Scheduled)
+    // [8] Sarah Kim / Botox Crow's Feet / provider1 (NP) → InProgress
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
-        patientId: patients[4].id,
+        patientId: patients[5].id,
         providerId: provider1.id,
-        serviceId: services[4].id, // Juvederm Voluma Cheeks
+        serviceId: services[1].id,
         roomId: rooms[0].id,
-        startTime: setTime(today, 14, 0),
-        endTime: setTime(today, 14, 45),
-        status: "Scheduled",
+        startTime: setTime(wednesday, 9, 0),
+        endTime: setTime(wednesday, 9, 20),
+        status: "InProgress",
+        notes: "Crow's feet treatment",
+        checkedInAt: setTime(wednesday, 8, 50),
+        startedAt: setTime(wednesday, 9, 2),
       },
     }),
-    // Tomorrow's appointments
+    // [9] Kevin Brown / IPL Photofacial / provider2 → InProgress
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[10].id,
+        providerId: provider2.id,
+        serviceId: services[8].id,
+        roomId: rooms[1].id,
+        startTime: setTime(wednesday, 9, 30),
+        endTime: setTime(wednesday, 10, 15),
+        status: "InProgress",
+        notes: "Sun damage treatment",
+        checkedInAt: setTime(wednesday, 9, 20),
+        startedAt: setTime(wednesday, 9, 32),
+      },
+    }),
+    // [10] Maria Garcia / Chemical Peel / provider1 → CheckedIn
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[9].id,
+        providerId: provider1.id,
+        serviceId: services[6].id,
+        roomId: rooms[2].id,
+        startTime: setTime(wednesday, 10, 0),
+        endTime: setTime(wednesday, 10, 30),
+        status: "CheckedIn",
+        notes: "Light glycolic peel",
+        checkedInAt: setTime(wednesday, 9, 50),
+      },
+    }),
+    // [11] James Wilson / Laser Hair Removal / provider2 → CheckedIn
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[8].id,
+        providerId: provider2.id,
+        serviceId: services[9].id,
+        roomId: rooms[1].id,
+        startTime: setTime(wednesday, 10, 0),
+        endTime: setTime(wednesday, 10, 30),
+        status: "CheckedIn",
+        notes: "Upper lip and chin hair removal",
+        checkedInAt: setTime(wednesday, 9, 52),
+      },
+    }),
+    // [12] Jennifer Williams / Botox Glabella / provider1 (NP) → Confirmed
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[0].id,
+        providerId: provider1.id,
+        serviceId: services[2].id,
+        roomId: rooms[0].id,
+        startTime: setTime(wednesday, 11, 0),
+        endTime: setTime(wednesday, 11, 20),
+        status: "Confirmed",
+      },
+    }),
+    // [13] Rachel Patel / IPL Photofacial / provider2 → Confirmed
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[11].id,
+        providerId: provider2.id,
+        serviceId: services[8].id,
+        roomId: rooms[1].id,
+        startTime: setTime(wednesday, 11, 30),
+        endTime: setTime(wednesday, 12, 15),
+        status: "Confirmed",
+      },
+    }),
+    // [14] Lisa Chen / Follow-Up / provider1 → Scheduled
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
         patientId: patients[2].id,
         providerId: provider1.id,
-        serviceId: services[9].id, // Follow-up
+        serviceId: services[11].id,
         roomId: rooms[2].id,
-        startTime: setTime(tomorrow, 9, 0),
-        endTime: setTime(tomorrow, 9, 15),
+        startTime: setTime(wednesday, 14, 0),
+        endTime: setTime(wednesday, 14, 15),
         status: "Scheduled",
-        notes: "2-week follow-up from lip filler",
       },
     }),
+    // [15] Michael Johnson / Consultation / provider2 → Scheduled
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[1].id,
+        providerId: provider2.id,
+        serviceId: services[10].id,
+        roomId: rooms[2].id,
+        startTime: setTime(wednesday, 14, 30),
+        endTime: setTime(wednesday, 15, 0),
+        status: "Scheduled",
+      },
+    }),
+    // [16] David Martinez / Juvederm Lips / provider1 (NP) → Scheduled
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[3].id,
+        providerId: provider1.id,
+        serviceId: services[3].id,
+        roomId: rooms[0].id,
+        startTime: setTime(wednesday, 15, 0),
+        endTime: setTime(wednesday, 15, 45),
+        status: "Scheduled",
+      },
+    }),
+
+    // ── THURSDAY Feb 19 ──
+    // [17] Amanda Taylor / Botox Forehead / provider1 (NP) → Scheduled
     prisma.appointment.create({
       data: {
         clinicId: clinic.id,
         patientId: patients[4].id,
-        providerId: provider2.id,
-        serviceId: services[4].id, // Voluma Cheeks
+        providerId: provider1.id,
+        serviceId: services[0].id,
         roomId: rooms[0].id,
-        startTime: setTime(tomorrow, 14, 0),
-        endTime: setTime(tomorrow, 14, 45),
+        startTime: setTime(thursday, 9, 0),
+        endTime: setTime(thursday, 9, 30),
+        status: "Scheduled",
+      },
+    }),
+    // [18] Emily Nguyen / Microneedling / provider2 → Scheduled
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[7].id,
+        providerId: provider2.id,
+        serviceId: services[7].id,
+        roomId: rooms[1].id,
+        startTime: setTime(thursday, 10, 0),
+        endTime: setTime(thursday, 11, 0),
+        status: "Scheduled",
+      },
+    }),
+    // [19] Sarah Kim / Juvederm Voluma / provider1 → Scheduled
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[5].id,
+        providerId: provider1.id,
+        serviceId: services[4].id,
+        roomId: rooms[0].id,
+        startTime: setTime(thursday, 14, 0),
+        endTime: setTime(thursday, 14, 45),
+        status: "Scheduled",
+      },
+    }),
+
+    // ── FRIDAY Feb 20 ──
+    // [20] Robert Davis / Botox Crow's Feet / provider2 → Scheduled
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[6].id,
+        providerId: provider2.id,
+        serviceId: services[1].id,
+        roomId: rooms[1].id,
+        startTime: setTime(friday, 9, 0),
+        endTime: setTime(friday, 9, 20),
+        status: "Scheduled",
+      },
+    }),
+    // [21] Kevin Brown / Consultation / provider1 → Scheduled
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[10].id,
+        providerId: provider1.id,
+        serviceId: services[10].id,
+        roomId: rooms[2].id,
+        startTime: setTime(friday, 11, 0),
+        endTime: setTime(friday, 11, 30),
         status: "Scheduled",
       },
     }),
@@ -913,90 +1118,447 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log(`Created ${appointments.length} appointments`);
 
   // ===========================================
-  // CHARTS (Various statuses showing lifecycle)
+  // ENCOUNTERS & CHARTS — lifecycle states for demo week
   // ===========================================
 
-  // Chart 1: MDSigned - from last week's appointment
-  const chart1 = await prisma.chart.create({
+  // ── MONDAY: All finalized with MD sign-off ──
+
+  // Encounter Mon-1: Jennifer W / Botox Forehead / NP → Finalized, MDSigned (co-signed)
+  const encounterMon1 = await prisma.encounter.create({
+    data: {
+      appointmentId: appointments[0].id,
+      clinicId: clinic.id,
+      patientId: patients[0].id,
+      providerId: provider1.id,
+      status: "Finalized",
+      requiresSupervision: true,
+      finalizedAt: setTime(monday, 16, 0),
+    },
+  });
+  const chartMon1 = await prisma.chart.create({
     data: {
       clinicId: clinic.id,
+      encounterId: encounterMon1.id,
       patientId: patients[0].id,
       appointmentId: appointments[0].id,
       createdById: provider1.id,
       status: "MDSigned",
       chiefComplaint: "Forehead lines and wrinkles",
-      areasTreated: JSON.stringify(["Forehead", "Glabella"]),
-      productsUsed: JSON.stringify([
-        {
-          name: "Botox",
-          lot: "C3456A",
-          expiration: "2025-06-15",
-          units: 20,
-        },
-      ]),
+      areasTreated: JSON.stringify(["Forehead"]),
+      productsUsed: JSON.stringify([{ name: "Botox", lot: "C3456A", expiration: "2026-06-15", units: 20 }]),
       dosageUnits: "20 units",
       technique: "Standard injection technique, 5 injection points across forehead",
       aftercareNotes: "Avoid lying down for 4 hours. No strenuous exercise for 24 hours.",
       additionalNotes: "Patient tolerated well. No immediate adverse reactions.",
+      providerSignedAt: setTime(monday, 9, 30),
+      providerSignedById: provider1.id,
       signedById: medicalDirector.id,
       signedByName: medicalDirector.name,
-      signedAt: new Date(lastWeek.getTime() + 24 * 60 * 60 * 1000), // Day after appointment
-      recordHash: "sha256:a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
+      signedAt: setTime(monday, 16, 0),
+      recordHash: "sha256:mon1_cosigned_hash_demo",
+    },
+  });
+  await prisma.treatmentCard.create({
+    data: {
+      chartId: chartMon1.id,
+      templateType: "Injectable",
+      title: "Injectable",
+      narrativeText: "Botox 20 units to forehead. 5 injection points evenly distributed. No adverse reactions.",
+      structuredData: JSON.stringify({
+        productName: "Botox",
+        areas: ["Forehead"],
+        totalUnits: 20,
+        lotEntries: [{ lot: "C3456A", expiration: "2026-06-15", units: 20 }],
+        outcome: "Patient tolerated well",
+        followUpPlan: "Return in 3-4 months",
+        aftercare: "Avoid lying down for 4 hours. No strenuous exercise for 24 hours.",
+      }),
+      sortOrder: 0,
     },
   });
 
-  // Chart 2: NeedsSignOff - from yesterday's lip filler
-  const chart2 = await prisma.chart.create({
+  // Encounter Mon-2: Lisa C / Juvederm Lips / provider2 → Finalized, MDSigned (direct)
+  const encounterMon2 = await prisma.encounter.create({
     data: {
+      appointmentId: appointments[1].id,
       clinicId: clinic.id,
       patientId: patients[2].id,
+      providerId: provider2.id,
+      status: "Finalized",
+      finalizedAt: setTime(monday, 16, 30),
+    },
+  });
+  const chartMon2 = await prisma.chart.create({
+    data: {
+      clinicId: clinic.id,
+      encounterId: encounterMon2.id,
+      patientId: patients[2].id,
       appointmentId: appointments[1].id,
-      createdById: provider1.id,
-      status: "NeedsSignOff",
+      createdById: provider2.id,
+      status: "MDSigned",
       chiefComplaint: "Lip enhancement - desires fuller lips",
       areasTreated: JSON.stringify(["Upper lip", "Lower lip", "Vermillion border"]),
-      productsUsed: JSON.stringify([
-        {
-          name: "Juvederm Ultra XC",
-          lot: "J7890B",
-          expiration: "2025-08-20",
-          syringes: 1,
-        },
-      ]),
+      productsUsed: JSON.stringify([{ name: "Juvederm Ultra XC", lot: "J7890B", expiration: "2026-08-20", syringes: 1 }]),
       dosageUnits: "1 syringe (1.0mL)",
       technique: "Serial puncture and linear threading technique",
       aftercareNotes: "Ice as needed. Avoid hot beverages for 24 hours. Arnica gel recommended.",
       additionalNotes: "Achieved natural enhancement per patient preference. Symmetry achieved.",
+      signedById: provider2.id,
+      signedByName: provider2.name,
+      signedAt: setTime(monday, 16, 30),
+      recordHash: "sha256:mon2_direct_hash_demo",
+    },
+  });
+  await prisma.treatmentCard.create({
+    data: {
+      chartId: chartMon2.id,
+      templateType: "Injectable",
+      title: "Injectable",
+      narrativeText: "Juvederm Ultra XC 1 syringe to lips. Serial puncture and linear threading. Natural enhancement achieved.",
+      structuredData: JSON.stringify({
+        productName: "Juvederm Ultra XC",
+        areas: ["Upper lip", "Lower lip", "Vermillion border"],
+        totalUnits: 0,
+        lotEntries: [{ lot: "J7890B", expiration: "2026-08-20", syringes: 1 }],
+        outcome: "Natural enhancement, good symmetry",
+        followUpPlan: "Return in 2 weeks for follow-up",
+        aftercare: "Ice as needed. Avoid hot beverages for 24 hours.",
+      }),
+      sortOrder: 0,
     },
   });
 
-  // Chart 3: NeedsSignOff - from yesterday's Sculptra
-  const chart3 = await prisma.chart.create({
+  // Encounter Mon-3: Amanda T / Sculptra / provider2 → Finalized, MDSigned (direct)
+  const encounterMon3 = await prisma.encounter.create({
+    data: {
+      appointmentId: appointments[2].id,
+      clinicId: clinic.id,
+      patientId: patients[4].id,
+      providerId: provider2.id,
+      status: "Finalized",
+      finalizedAt: setTime(monday, 17, 0),
+    },
+  });
+  const chartMon3 = await prisma.chart.create({
     data: {
       clinicId: clinic.id,
+      encounterId: encounterMon3.id,
       patientId: patients[4].id,
       appointmentId: appointments[2].id,
       createdById: provider2.id,
-      status: "NeedsSignOff",
+      status: "MDSigned",
       chiefComplaint: "Volume loss in cheeks and temples - session 2 of 3",
       areasTreated: JSON.stringify(["Cheeks", "Temples", "Jawline"]),
-      productsUsed: JSON.stringify([
-        {
-          name: "Sculptra",
-          lot: "S2345C",
-          expiration: "2025-12-01",
-          vials: 2,
-        },
-      ]),
+      productsUsed: JSON.stringify([{ name: "Sculptra", lot: "S2345C", expiration: "2026-12-01", vials: 2 }]),
       dosageUnits: "2 vials reconstituted with 8mL sterile water each",
       technique: "Deep dermal/subcutaneous injection with fanning technique",
       aftercareNotes: "Massage treated areas 5 minutes, 5 times daily for 5 days. Follow-up in 6 weeks.",
       additionalNotes: "Good volume distribution achieved. Schedule session 3 in 6 weeks.",
+      signedById: provider2.id,
+      signedByName: provider2.name,
+      signedAt: setTime(monday, 17, 0),
+      recordHash: "sha256:mon3_direct_hash_demo",
+    },
+  });
+  await prisma.treatmentCard.create({
+    data: {
+      chartId: chartMon3.id,
+      templateType: "Injectable",
+      title: "Injectable",
+      narrativeText: "Sculptra 2 vials. Deep dermal/subcutaneous fanning technique to cheeks, temples, jawline.",
+      structuredData: JSON.stringify({
+        productName: "Sculptra",
+        areas: ["Cheeks", "Temples", "Jawline"],
+        totalUnits: 0,
+        lotEntries: [{ lot: "S2345C", expiration: "2026-12-01", vials: 2 }],
+        outcome: "Good volume distribution",
+        followUpPlan: "Session 3 in 6 weeks",
+        aftercare: "Massage 5 min, 5x daily for 5 days",
+      }),
+      sortOrder: 0,
     },
   });
 
-  // Chart 4: Draft - started but not complete
-  const chart4 = await prisma.chart.create({
+  // ── TUESDAY: Mix of pending review and finalized ──
+
+  // Encounter Tue-1: Michael J / Botox Forehead / NP → PendingReview (MD Review queue)
+  const encounterTue1 = await prisma.encounter.create({
+    data: {
+      appointmentId: appointments[3].id,
+      clinicId: clinic.id,
+      patientId: patients[1].id,
+      providerId: provider1.id,
+      status: "PendingReview",
+      requiresSupervision: true,
+    },
+  });
+  const chartTue1 = await prisma.chart.create({
+    data: {
+      clinicId: clinic.id,
+      encounterId: encounterTue1.id,
+      patientId: patients[1].id,
+      appointmentId: appointments[3].id,
+      createdById: provider1.id,
+      status: "NeedsSignOff",
+      chiefComplaint: "Forehead lines - first time Botox",
+      areasTreated: JSON.stringify(["Forehead"]),
+      productsUsed: JSON.stringify([{ name: "Botox", lot: "C3456A", expiration: "2026-06-15", units: 20 }]),
+      dosageUnits: "20 units",
+      technique: "Standard injection technique, 5 points across forehead",
+      aftercareNotes: "Avoid lying down for 4 hours. No exercise for 24 hours.",
+      additionalNotes: "First time patient. Tolerated well. Discussed expectations.",
+      providerSignedAt: setTime(tuesday, 9, 30),
+      providerSignedById: provider1.id,
+    },
+  });
+  await prisma.treatmentCard.create({
+    data: {
+      chartId: chartTue1.id,
+      templateType: "Injectable",
+      title: "Injectable",
+      narrativeText: "Botox 20 units to forehead. First time patient, tolerated well.",
+      structuredData: JSON.stringify({
+        productName: "Botox",
+        areas: ["Forehead"],
+        totalUnits: 20,
+        lotEntries: [{ lot: "C3456A", expiration: "2026-06-15", units: 20 }],
+        outcome: "Tolerated well, no adverse reactions",
+        followUpPlan: "Return in 2 weeks for follow-up, then 3-4 months",
+        aftercare: "Avoid lying down for 4 hours. No exercise for 24 hours.",
+      }),
+      sortOrder: 0,
+    },
+  });
+
+  // Encounter Tue-2: David M / Microneedling / provider2 → Finalized, MDSigned (direct)
+  const encounterTue2 = await prisma.encounter.create({
+    data: {
+      appointmentId: appointments[4].id,
+      clinicId: clinic.id,
+      patientId: patients[3].id,
+      providerId: provider2.id,
+      status: "Finalized",
+      finalizedAt: setTime(tuesday, 16, 0),
+    },
+  });
+  const chartTue2 = await prisma.chart.create({
+    data: {
+      clinicId: clinic.id,
+      encounterId: encounterTue2.id,
+      patientId: patients[3].id,
+      appointmentId: appointments[4].id,
+      createdById: provider2.id,
+      status: "MDSigned",
+      chiefComplaint: "Skin texture improvement - microneedling",
+      areasTreated: JSON.stringify(["Full face"]),
+      productsUsed: JSON.stringify([{ name: "Hyaluronic acid serum", lot: "HA-2026-01" }]),
+      dosageUnits: "N/A",
+      technique: "1.5mm depth, cross-hatch pattern",
+      aftercareNotes: "Avoid sun exposure for 48 hours. Use gentle cleanser only.",
+      additionalNotes: "Good skin response. Mild erythema expected 24-48 hours.",
+      signedById: provider2.id,
+      signedByName: provider2.name,
+      signedAt: setTime(tuesday, 16, 0),
+      recordHash: "sha256:tue2_direct_hash_demo",
+    },
+  });
+  await prisma.treatmentCard.create({
+    data: {
+      chartId: chartTue2.id,
+      templateType: "Esthetics",
+      title: "Esthetics",
+      narrativeText: "Full face microneedling at 1.5mm depth. HA serum applied. Good skin response.",
+      structuredData: JSON.stringify({
+        areasTreated: "Full face",
+        productsUsed: "Hyaluronic acid serum",
+        skinResponse: "Mild erythema, expected to resolve 24-48 hours",
+        outcome: "Good treatment response",
+        aftercare: "Avoid sun 48 hours. Gentle cleanser only.",
+      }),
+      sortOrder: 0,
+    },
+  });
+
+  // Encounter Tue-3: Amanda T / Juvederm Voluma Cheeks / NP → PendingReview (MD Review queue)
+  const encounterTue3 = await prisma.encounter.create({
+    data: {
+      appointmentId: appointments[5].id,
+      clinicId: clinic.id,
+      patientId: patients[4].id,
+      providerId: provider1.id,
+      status: "PendingReview",
+      requiresSupervision: true,
+    },
+  });
+  const chartTue3 = await prisma.chart.create({
+    data: {
+      clinicId: clinic.id,
+      encounterId: encounterTue3.id,
+      patientId: patients[4].id,
+      appointmentId: appointments[5].id,
+      createdById: provider1.id,
+      status: "NeedsSignOff",
+      chiefComplaint: "Cheek volume restoration",
+      areasTreated: JSON.stringify(["Right cheek", "Left cheek"]),
+      productsUsed: JSON.stringify([{ name: "Juvederm Voluma XC", lot: "V4567D", expiration: "2026-10-15", syringes: 2 }]),
+      dosageUnits: "2 syringes (2.0mL total)",
+      technique: "Deep injection with fanning technique, supraperiosteal plane",
+      aftercareNotes: "Ice 10 minutes every hour for first 4 hours. Avoid strenuous activity 24 hours.",
+      additionalNotes: "Excellent cheek projection achieved. Symmetry verified.",
+      providerSignedAt: setTime(tuesday, 14, 45),
+      providerSignedById: provider1.id,
+    },
+  });
+  await prisma.treatmentCard.create({
+    data: {
+      chartId: chartTue3.id,
+      templateType: "Injectable",
+      title: "Injectable",
+      narrativeText: "Juvederm Voluma XC 2 syringes to cheeks. Deep fanning technique. Excellent projection.",
+      structuredData: JSON.stringify({
+        productName: "Juvederm Voluma XC",
+        areas: ["Right cheek", "Left cheek"],
+        totalUnits: 0,
+        lotEntries: [{ lot: "V4567D", expiration: "2026-10-15", syringes: 2 }],
+        outcome: "Excellent cheek projection, symmetry verified",
+        followUpPlan: "Return in 2 weeks for assessment",
+        aftercare: "Ice 10 min every hour for 4 hours. No strenuous activity 24 hours.",
+      }),
+      sortOrder: 0,
+    },
+  });
+
+  // ── TODAY (Wednesday): Robert D completed, Sarah K & Kevin B in-progress ──
+
+  // Encounter Wed-1: Robert D / Chemical Peel / provider1 → Finalized, MDSigned (done early)
+  const encounterWed1 = await prisma.encounter.create({
+    data: {
+      appointmentId: appointments[6].id,
+      clinicId: clinic.id,
+      patientId: patients[6].id,
+      providerId: provider1.id,
+      status: "Finalized",
+      finalizedAt: setTime(wednesday, 8, 35),
+    },
+  });
+  const chartWed1 = await prisma.chart.create({
+    data: {
+      clinicId: clinic.id,
+      encounterId: encounterWed1.id,
+      patientId: patients[6].id,
+      appointmentId: appointments[6].id,
+      createdById: provider1.id,
+      status: "MDSigned",
+      chiefComplaint: "Light chemical peel for skin rejuvenation",
+      areasTreated: JSON.stringify(["Full face"]),
+      productsUsed: JSON.stringify([{ name: "Glycolic acid 30%", lot: "GA-2026-02" }]),
+      technique: "Even application, 3-minute contact time",
+      aftercareNotes: "SPF 50 mandatory. Avoid exfoliants for 7 days.",
+      additionalNotes: "Good tolerance. Mild erythema post-peel.",
+      signedById: provider1.id,
+      signedByName: provider1.name,
+      signedAt: setTime(wednesday, 8, 35),
+      recordHash: "sha256:wed1_direct_hash_demo",
+    },
+  });
+  await prisma.treatmentCard.create({
+    data: {
+      chartId: chartWed1.id,
+      templateType: "Esthetics",
+      title: "Esthetics",
+      narrativeText: "Light glycolic peel 30%, 3-minute contact time. Good tolerance.",
+      structuredData: JSON.stringify({
+        areasTreated: "Full face",
+        productsUsed: "Glycolic acid 30%",
+        skinResponse: "Mild erythema, good tolerance",
+        outcome: "Successful peel",
+        aftercare: "SPF 50 mandatory. No exfoliants for 7 days.",
+      }),
+      sortOrder: 0,
+    },
+  });
+
+  // Encounter Wed-2: Sarah K / Botox Crow's Feet / NP → Draft (InProgress)
+  const encounterWed2 = await prisma.encounter.create({
+    data: {
+      appointmentId: appointments[8].id,
+      clinicId: clinic.id,
+      patientId: patients[5].id,
+      providerId: provider1.id,
+      status: "Draft",
+      requiresSupervision: true,
+    },
+  });
+  const chartWed2 = await prisma.chart.create({
+    data: {
+      clinicId: clinic.id,
+      encounterId: encounterWed2.id,
+      patientId: patients[5].id,
+      appointmentId: appointments[8].id,
+      createdById: provider1.id,
+      status: "Draft",
+      chiefComplaint: "Crow's feet treatment",
+    },
+  });
+  await prisma.treatmentCard.create({
+    data: {
+      chartId: chartWed2.id,
+      templateType: "Injectable",
+      title: "Injectable",
+      narrativeText: "",
+      structuredData: JSON.stringify({
+        productName: "",
+        areas: [],
+        totalUnits: 0,
+        lotEntries: [],
+        outcome: "",
+        followUpPlan: "",
+        aftercare: "",
+      }),
+      sortOrder: 0,
+    },
+  });
+
+  // Encounter Wed-3: Kevin B / IPL Photofacial / provider2 → Draft (InProgress)
+  const encounterWed3 = await prisma.encounter.create({
+    data: {
+      appointmentId: appointments[9].id,
+      clinicId: clinic.id,
+      patientId: patients[10].id,
+      providerId: provider2.id,
+      status: "Draft",
+    },
+  });
+  const chartWed3 = await prisma.chart.create({
+    data: {
+      clinicId: clinic.id,
+      encounterId: encounterWed3.id,
+      patientId: patients[10].id,
+      appointmentId: appointments[9].id,
+      createdById: provider2.id,
+      status: "Draft",
+      chiefComplaint: "IPL for sun damage and redness",
+    },
+  });
+  await prisma.treatmentCard.create({
+    data: {
+      chartId: chartWed3.id,
+      templateType: "Laser",
+      title: "Laser",
+      narrativeText: "",
+      structuredData: JSON.stringify({
+        deviceName: "",
+        areasTreated: [],
+        parameters: { energy: "", passes: 0 },
+        outcome: "",
+        aftercare: "",
+      }),
+      sortOrder: 0,
+    },
+  });
+
+  // Chart: Standalone Draft — Michael J / provider1 (partial injectable card for AI draft testing)
+  const chartStandalone = await prisma.chart.create({
     data: {
       clinicId: clinic.id,
       patientId: patients[1].id,
@@ -1006,8 +1568,26 @@ By signing below, I confirm my consent to proceed with treatment.`,
       additionalNotes: "Patient interested in starting preventative treatments. Discussed options.",
     },
   });
+  await prisma.treatmentCard.create({
+    data: {
+      chartId: chartStandalone.id,
+      templateType: "Injectable",
+      title: "Injectable",
+      narrativeText: "",
+      structuredData: JSON.stringify({
+        productName: "Botox",
+        areas: [],
+        totalUnits: 0,
+        lotEntries: [],
+        outcome: "",
+        followUpPlan: "",
+        aftercare: "",
+      }),
+      sortOrder: 0,
+    },
+  });
 
-  console.log("Created 4 charts (1 MDSigned, 2 NeedsSignOff, 1 Draft)");
+  console.log("Created encounters + charts (3 MDSigned Mon, 1 MDSigned Tue, 2 NeedsSignOff Tue, 1 MDSigned Wed, 2 Draft Wed, 1 standalone Draft)");
 
   // ===========================================
   // PATIENT CONSENTS
@@ -1019,7 +1599,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         patientId: patients[0].id,
         templateId: consentTemplates[0].id,
         signatureData: "data:image/png;base64,signature_placeholder",
-        signedAt: lastWeek,
+        signedAt: setTime(monday, 8, 45),
         ipAddress: "192.168.1.100",
         userAgent: "Mozilla/5.0 (iPad)",
         templateSnapshot: consentTemplates[0].content,
@@ -1031,84 +1611,141 @@ By signing below, I confirm my consent to proceed with treatment.`,
         patientId: patients[2].id,
         templateId: consentTemplates[1].id,
         signatureData: "data:image/png;base64,signature_placeholder",
-        signedAt: yesterday,
+        signedAt: setTime(monday, 10, 15),
         ipAddress: "192.168.1.101",
         userAgent: "Mozilla/5.0 (iPhone)",
         templateSnapshot: consentTemplates[1].content,
+      },
+    }),
+    prisma.patientConsent.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[1].id,
+        templateId: consentTemplates[0].id,
+        signatureData: "data:image/png;base64,signature_placeholder",
+        signedAt: setTime(tuesday, 8, 45),
+        ipAddress: "192.168.1.102",
+        userAgent: "Mozilla/5.0 (iPhone)",
+        templateSnapshot: consentTemplates[0].content,
       },
     }),
   ]);
   console.log(`Created ${consents.length} patient consents`);
 
   // ===========================================
-  // INVOICES
+  // INVOICES — This week's appointments + historical
   // ===========================================
-  const invoice1 = await prisma.invoice.create({
+
+  // Monday paid invoices
+  await prisma.invoice.create({
     data: {
       clinicId: clinic.id,
       patientId: patients[0].id,
       appointmentId: appointments[0].id,
-      invoiceNumber: "INV-2025-0001",
+      invoiceNumber: "INV-2026-0001",
       status: "Paid",
       subtotal: 350,
       discountAmount: 0,
       taxAmount: 0,
       total: 350,
-      paidAt: lastWeek,
+      paidAt: setTime(monday, 9, 35),
+      createdAt: setTime(monday, 9, 35),
       items: {
-        create: [
-          {
-            clinicId: clinic.id,
-            serviceId: services[0].id,
-            description: "Botox - Forehead (20 units)",
-            quantity: 1,
-            unitPrice: 350,
-            total: 350,
-          },
-        ],
+        create: [{ clinicId: clinic.id, serviceId: services[0].id, description: "Botox - Forehead (20 units)", quantity: 1, unitPrice: 350, total: 350 }],
       },
       payments: {
-        create: [
-          {
-            clinicId: clinic.id,
-            amount: 350,
-            paymentMethod: "credit",
-            reference: "VISA-4242",
-          },
-        ],
+        create: [{ clinicId: clinic.id, amount: 350, paymentMethod: "credit", reference: "VISA-4242", createdAt: setTime(monday, 9, 35) }],
       },
     },
   });
-
-  const invoice2 = await prisma.invoice.create({
+  await prisma.invoice.create({
     data: {
       clinicId: clinic.id,
       patientId: patients[2].id,
       appointmentId: appointments[1].id,
-      invoiceNumber: "INV-2025-0002",
-      status: "Sent",
+      invoiceNumber: "INV-2026-0002",
+      status: "Paid",
       subtotal: 650,
       discountAmount: 65,
       discountPercent: 10,
       taxAmount: 0,
       total: 585,
       notes: "10% membership discount applied",
+      paidAt: setTime(monday, 11, 18),
+      createdAt: setTime(monday, 11, 18),
       items: {
-        create: [
-          {
-            clinicId: clinic.id,
-            serviceId: services[3].id,
-            description: "Juvederm Ultra - Lips (1 syringe)",
-            quantity: 1,
-            unitPrice: 650,
-            total: 650,
-          },
-        ],
+        create: [{ clinicId: clinic.id, serviceId: services[3].id, description: "Juvederm Ultra - Lips (1 syringe)", quantity: 1, unitPrice: 650, total: 650 }],
+      },
+      payments: {
+        create: [{ clinicId: clinic.id, amount: 585, paymentMethod: "credit", reference: "AMEX-3310", createdAt: setTime(monday, 11, 18) }],
+      },
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      clinicId: clinic.id,
+      patientId: patients[4].id,
+      appointmentId: appointments[2].id,
+      invoiceNumber: "INV-2026-0003",
+      status: "Paid",
+      subtotal: 950,
+      discountAmount: 0,
+      taxAmount: 0,
+      total: 950,
+      paidAt: setTime(monday, 15, 5),
+      createdAt: setTime(monday, 15, 5),
+      items: {
+        create: [{ clinicId: clinic.id, serviceId: services[5].id, description: "Sculptra - Full Face (2 vials)", quantity: 1, unitPrice: 950, total: 950 }],
+      },
+      payments: {
+        create: [{ clinicId: clinic.id, amount: 950, paymentMethod: "credit", reference: "MC-7788", createdAt: setTime(monday, 15, 5) }],
       },
     },
   });
 
-  console.log("Created 2 invoices");
+  // Tuesday paid invoices
+  await prisma.invoice.create({
+    data: {
+      clinicId: clinic.id,
+      patientId: patients[3].id,
+      appointmentId: appointments[4].id,
+      invoiceNumber: "INV-2026-0004",
+      status: "Paid",
+      subtotal: 350,
+      discountAmount: 0,
+      taxAmount: 0,
+      total: 350,
+      paidAt: setTime(tuesday, 12, 5),
+      createdAt: setTime(tuesday, 12, 5),
+      items: {
+        create: [{ clinicId: clinic.id, serviceId: services[7].id, description: "Microneedling", quantity: 1, unitPrice: 350, total: 350 }],
+      },
+      payments: {
+        create: [{ clinicId: clinic.id, amount: 350, paymentMethod: "debit", reference: "DBT-5501", createdAt: setTime(tuesday, 12, 5) }],
+      },
+    },
+  });
+
+  // Today — Sent (unpaid) invoice for early-completed appointments
+  await prisma.invoice.create({
+    data: {
+      clinicId: clinic.id,
+      patientId: patients[6].id,
+      appointmentId: appointments[6].id,
+      invoiceNumber: "INV-2026-0005",
+      status: "Sent",
+      subtotal: 150,
+      discountAmount: 0,
+      taxAmount: 0,
+      total: 150,
+      createdAt: setTime(wednesday, 8, 35),
+      items: {
+        create: [{ clinicId: clinic.id, serviceId: services[6].id, description: "Chemical Peel - Light", quantity: 1, unitPrice: 150, total: 150 }],
+      },
+    },
+  });
+
+  console.log("Created 5 weekly invoices (3 Mon paid, 1 Tue paid, 1 Wed sent)");
 
   // ===========================================
   // ADDITIONAL SALES DATA (Nov 2025 – Jan 2026)
@@ -1468,59 +2105,74 @@ By signing below, I confirm my consent to proceed with treatment.`,
   // AUDIT LOGS
   // ===========================================
   const auditLogs = await Promise.all([
-    // Chart view events
+    // Monday: NP provider signs chart, then MD co-signs
+    prisma.auditLog.create({
+      data: {
+        clinicId: clinic.id,
+        userId: provider1.id,
+        action: "ChartProviderSign",
+        entityType: "Chart",
+        entityId: chartMon1.id,
+        details: JSON.stringify({ patientId: patients[0].id, providerName: provider1.name }),
+        ipAddress: "192.168.1.100",
+        createdAt: setTime(monday, 9, 30),
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        clinicId: clinic.id,
+        userId: medicalDirector.id,
+        action: "MDCoSign",
+        entityType: "Chart",
+        entityId: chartMon1.id,
+        details: JSON.stringify({
+          patientId: patients[0].id,
+          previousStatus: "NeedsSignOff",
+          newStatus: "MDSigned",
+          recordHash: chartMon1.recordHash,
+        }),
+        ipAddress: "192.168.1.50",
+        createdAt: setTime(monday, 16, 0),
+      },
+    }),
+    // Tuesday: NP provider signs pending-review charts
+    prisma.auditLog.create({
+      data: {
+        clinicId: clinic.id,
+        userId: provider1.id,
+        action: "ChartProviderSign",
+        entityType: "Chart",
+        entityId: chartTue1.id,
+        details: JSON.stringify({ patientId: patients[1].id, providerName: provider1.name }),
+        ipAddress: "192.168.1.100",
+        createdAt: setTime(tuesday, 9, 30),
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        clinicId: clinic.id,
+        userId: provider1.id,
+        action: "ChartProviderSign",
+        entityType: "Chart",
+        entityId: chartTue3.id,
+        details: JSON.stringify({ patientId: patients[4].id, providerName: provider1.name }),
+        ipAddress: "192.168.1.100",
+        createdAt: setTime(tuesday, 14, 45),
+      },
+    }),
+    // General audit entries
     prisma.auditLog.create({
       data: {
         clinicId: clinic.id,
         userId: medicalDirector.id,
         action: "ChartView",
         entityType: "Chart",
-        entityId: chart1.id,
+        entityId: chartMon1.id,
         details: JSON.stringify({ patientId: patients[0].id }),
         ipAddress: "192.168.1.50",
+        createdAt: setTime(monday, 15, 55),
       },
     }),
-    // Chart sign event
-    prisma.auditLog.create({
-      data: {
-        clinicId: clinic.id,
-        userId: medicalDirector.id,
-        action: "ChartSign",
-        entityType: "Chart",
-        entityId: chart1.id,
-        details: JSON.stringify({
-          patientId: patients[0].id,
-          previousStatus: "NeedsSignOff",
-          newStatus: "MDSigned",
-          recordHash: chart1.recordHash,
-        }),
-        ipAddress: "192.168.1.50",
-      },
-    }),
-    // Chart create events
-    prisma.auditLog.create({
-      data: {
-        clinicId: clinic.id,
-        userId: provider1.id,
-        action: "ChartCreate",
-        entityType: "Chart",
-        entityId: chart2.id,
-        details: JSON.stringify({ patientId: patients[2].id }),
-        ipAddress: "192.168.1.100",
-      },
-    }),
-    prisma.auditLog.create({
-      data: {
-        clinicId: clinic.id,
-        userId: provider2.id,
-        action: "ChartCreate",
-        entityType: "Chart",
-        entityId: chart3.id,
-        details: JSON.stringify({ patientId: patients[4].id }),
-        ipAddress: "192.168.1.101",
-      },
-    }),
-    // Patient view events
     prisma.auditLog.create({
       data: {
         clinicId: clinic.id,
@@ -1529,9 +2181,9 @@ By signing below, I confirm my consent to proceed with treatment.`,
         entityType: "Patient",
         entityId: patients[1].id,
         ipAddress: "192.168.1.200",
+        createdAt: setTime(tuesday, 8, 45),
       },
     }),
-    // Login events
     prisma.auditLog.create({
       data: {
         clinicId: clinic.id,
@@ -1539,6 +2191,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         action: "Login",
         ipAddress: "192.168.1.1",
         userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+        createdAt: setTime(wednesday, 7, 30),
       },
     }),
   ]);
@@ -1814,24 +2467,23 @@ By signing below, I confirm my consent to proceed with treatment.`,
   );
 
   console.log("\nDatabase seeding completed successfully!");
+  console.log("\n=== Demo Week: Feb 16–20, 2026 ===");
   console.log("\nSummary:");
-  console.log("- 1 Clinic");
-  console.log("- 3 Rooms");
-  console.log("- 6 Users (Owner, MedicalDirector, 2 Providers, FrontDesk, Billing)");
-  console.log("- 10 Services");
-  console.log("- 12 Patients");
-  console.log("- 3 Consent Templates");
-  console.log("- 3 Chart Templates (Neurotoxin, Dermal Filler, IV Drip)");
-  console.log("- 3 Membership Plans");
-  console.log("- 12 Appointments");
-  console.log("- 4 Charts (1 MDSigned, 2 NeedsSignOff, 1 Draft)");
-  console.log("- 2 Patient Consents");
-  console.log("- 2 Invoices");
-  console.log("- 2 Patient Memberships");
-  console.log("- 6 Audit Log Entries");
-  console.log("- 3 Communication Preferences");
-  console.log("- 3 Conversations with 5 Messages");
-  console.log("- 4 Message Templates");
+  console.log("- 1 Clinic, 3 Rooms");
+  console.log("- 6 Users (Owner, MedicalDirector, 2 Providers [1 NP w/ MD supervision], FrontDesk, Billing)");
+  console.log("- 12 Services, 6 Products, 12 Patients");
+  console.log("- 3 Consent Templates, 3 Chart Templates, 3 Membership Plans");
+  console.log("- 22 Appointments across Mon–Fri:");
+  console.log("  Mon: 3 Completed+CheckedOut | Tue: 3 (1 CheckedOut, 2 pending MD review)");
+  console.log("  Wed: 11 (2 done, 2 InProgress, 2 CheckedIn, 2 Confirmed, 3 Scheduled)");
+  console.log("  Thu: 3 Scheduled | Fri: 2 Scheduled");
+  console.log("- 10 Charts: 4 MDSigned, 2 NeedsSignOff (MD Review queue), 3 Draft, 1 standalone Draft");
+  console.log("- Treatment cards on all charts (filled for completed, empty for in-progress)");
+  console.log("- MD Review queue: 2 charts awaiting co-sign (Michael J + Amanda T from Tuesday)");
+  console.log("- 5 Weekly invoices + historical Nov 2025–Jan 2026 sales data");
+  console.log("- 7 Audit log entries (provider signs, MD co-sign, views, login)");
+  console.log("- 3 Communication Preferences, 3 Conversations, 5 Messages");
+  console.log("- 4 Message Templates, 4 Notification Templates");
 }
 
 main()

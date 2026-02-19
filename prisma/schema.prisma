@@ -43,6 +43,7 @@ model Clinic {
   patients          Patient[]
   services          Service[]
   appointments      Appointment[]
+  encounters        Encounter[]
   charts            Chart[]
   photos            Photo[]
   consents          ConsentTemplate[]
@@ -93,11 +94,19 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // MD Review supervision
+  requiresMDReview  Boolean  @default(false)
+  supervisingMDId   String?
+  supervisingMD     User?    @relation("Supervision", fields: [supervisingMDId], references: [id])
+  supervisedUsers   User[]   @relation("Supervision")
+
   // Relations
   clinic               Clinic              @relation(fields: [clinicId], references: [id])
   appointments         Appointment[]       @relation("AppointmentProvider")
+  encounters           Encounter[]         @relation("EncounterProvider")
   charts               Chart[]             @relation("ChartCreator")
   signedCharts         Chart[]             @relation("ChartSigner")
+  providerSignedCharts Chart[]             @relation("ChartProviderSigner")
   auditLogs            AuditLog[]
   photosTaken          Photo[]
 
@@ -133,6 +142,7 @@ model Patient {
   // Relations
   clinic           Clinic            @relation(fields: [clinicId], references: [id])
   appointments     Appointment[]
+  encounters       Encounter[]
   charts           Chart[]
   photos           Photo[]
   consents         PatientConsent[]
@@ -229,8 +239,9 @@ model Appointment {
   service  Service? @relation(fields: [serviceId], references: [id])
   room     Room?     @relation(fields: [roomId], references: [id])
   resource Resource? @relation(fields: [resourceId], references: [id])
-  chart    Chart?
-  invoice  Invoice?
+  chart     Chart?
+  encounter Encounter?
+  invoice   Invoice?
 
   @@index([clinicId])
   @@index([patientId])
@@ -302,13 +313,67 @@ model Product {
 }
 
 // ===========================================
-// CLINICAL CHARTING
+// CLINICAL ENCOUNTERS & CHARTING
 // ===========================================
+
+enum EncounterStatus {
+  Draft
+  PendingReview
+  Finalized
+}
 
 enum ChartStatus {
   Draft
   NeedsSignOff
   MDSigned
+}
+
+model Encounter {
+  id                  String          @id @default(cuid())
+  appointmentId       String          @unique
+  clinicId            String
+  patientId           String
+  providerId          String
+  status              EncounterStatus @default(Draft)
+  requiresSupervision Boolean         @default(false)
+  startedAt           DateTime        @default(now())
+  finalizedAt         DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  // Relations
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  clinic      Clinic      @relation(fields: [clinicId], references: [id])
+  patient     Patient     @relation(fields: [patientId], references: [id])
+  provider    User        @relation("EncounterProvider", fields: [providerId], references: [id])
+  chart       Chart?
+  addenda     Addendum[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([providerId])
+  @@index([status])
+}
+
+model Addendum {
+  id          String   @id @default(cuid())
+  clinicId    String
+  encounterId String
+  authorId    String
+  text        String
+  createdAt   DateTime @default(now())
+
+  encounter Encounter @relation(fields: [encounterId], references: [id])
+
+  @@index([encounterId])
+  @@index([clinicId])
+}
+
+enum TreatmentCardType {
+  Injectable
+  Laser
+  Esthetics
+  Other
 }
 
 model ChartTemplate {
@@ -334,10 +399,11 @@ model ChartTemplate {
 model Chart {
   id              String      @id @default(cuid())
   clinicId        String
-  patientId       String
+  patientId       String?
   appointmentId   String?     @unique
+  encounterId     String?     @unique
   templateId      String?
-  createdById     String
+  createdById     String?
   status          ChartStatus @default(Draft)
 
   // Treatment details
@@ -348,6 +414,11 @@ model Chart {
   technique       String?
   aftercareNotes  String?
   additionalNotes String?
+
+  // Provider signature (for supervised providers)
+  providerSignedAt    DateTime?
+  providerSignedById  String?
+  providerSignedBy    User?    @relation("ChartProviderSigner", fields: [providerSignedById], references: [id])
 
   // Medical Director sign-off metadata
   signedById      String?
@@ -361,12 +432,14 @@ model Chart {
 
   // Relations
   clinic      Clinic         @relation(fields: [clinicId], references: [id])
-  patient     Patient        @relation(fields: [patientId], references: [id])
+  patient     Patient?       @relation(fields: [patientId], references: [id])
   appointment Appointment?   @relation(fields: [appointmentId], references: [id])
+  encounter   Encounter?     @relation(fields: [encounterId], references: [id])
   template    ChartTemplate? @relation(fields: [templateId], references: [id])
-  createdBy   User           @relation("ChartCreator", fields: [createdById], references: [id])
+  createdBy   User?          @relation("ChartCreator", fields: [createdById], references: [id])
   signedBy    User?          @relation("ChartSigner", fields: [signedById], references: [id])
   photos      Photo[]
+  treatmentCards TreatmentCard[]
 
   @@index([clinicId])
   @@index([patientId])
@@ -374,36 +447,81 @@ model Chart {
   @@index([createdById])
 }
 
+model TreatmentCard {
+  id             String            @id @default(cuid())
+  chartId        String
+  templateType   TreatmentCardType @default(Other)
+  title          String
+  narrativeText  String            @default("")
+  structuredData String            @default("{}") // JSON string
+  sortOrder      Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  chart          Chart          @relation(fields: [chartId], references: [id])
+  photos         Photo[]
+  aiDraftEvents  AiDraftEvent[]
+
+  @@index([chartId])
+}
+
+model AiDraftEvent {
+  id                 String    @id @default(cuid())
+  clinicId           String
+  treatmentCardId    String
+  kind               String    @default("TYPED")
+  inputSummaryText   String    @default("")
+  audioUrl           String?
+  transcriptText     String?
+  modelInfo          String    @default("{}")
+  structuredPatch    String    @default("{}")
+  narrativeDraftText String    @default("")
+  missingHighRisk    String    @default("[]")
+  conflicts          String    @default("[]")
+  warnings           String    @default("[]")
+  appliedAt          DateTime?
+  createdById        String
+  createdAt          DateTime  @default(now())
+
+  treatmentCard TreatmentCard @relation(fields: [treatmentCardId], references: [id])
+
+  @@index([treatmentCardId])
+  @@index([clinicId])
+}
+
 // ===========================================
 // CLINICAL PHOTOS
 // ===========================================
 
 model Photo {
-  id           String   @id @default(cuid())
-  clinicId     String
-  patientId    String
-  chartId      String?
-  takenById    String
-  filename     String
-  storagePath  String   // Path in storage system
-  mimeType     String
-  sizeBytes    Int
-  category     String?  // before, after, progress, etc.
-  annotations  String?  // JSON: vector overlays, points, lines
-  caption      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  deletedAt    DateTime? // Soft delete
+  id              String   @id @default(cuid())
+  clinicId        String
+  patientId       String
+  chartId         String?
+  treatmentCardId String?
+  takenById       String
+  filename        String
+  storagePath     String   // Path in storage system
+  mimeType        String
+  sizeBytes       Int
+  category        String?  // before, after, progress, etc.
+  annotations     String?  // JSON: vector overlays, points, lines
+  caption         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime? // Soft delete
 
   // Relations
-  clinic   Clinic  @relation(fields: [clinicId], references: [id])
-  patient  Patient @relation(fields: [patientId], references: [id])
-  chart    Chart?  @relation(fields: [chartId], references: [id])
-  takenBy  User    @relation(fields: [takenById], references: [id])
+  clinic        Clinic         @relation(fields: [clinicId], references: [id])
+  patient       Patient        @relation(fields: [patientId], references: [id])
+  chart         Chart?         @relation(fields: [chartId], references: [id])
+  treatmentCard TreatmentCard? @relation(fields: [treatmentCardId], references: [id])
+  takenBy       User           @relation(fields: [takenById], references: [id])
 
   @@index([clinicId])
   @@index([patientId])
   @@index([chartId])
+  @@index([treatmentCardId])
 }
 
 // ===========================================
@@ -620,6 +738,17 @@ enum AuditAction {
   MessageFailed
   ConversationView
   AiChat
+  AiDraftCreated
+  AiDraftApplied
+  VoiceDraftRecorded
+  TranscriptCreated
+  BeginService
+  EncounterCreate
+  EncounterUpdate
+  ChartProviderSign
+  MDCoSign
+  ExportPdf
+  AddendumCreated
 }
 
 model AuditLog {

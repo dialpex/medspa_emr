@@ -8,6 +8,8 @@ import {
   type AuthenticatedUser,
 } from "@/lib/rbac";
 import { createHash } from "crypto";
+import { validateTreatmentCard } from "@/lib/templates/validation";
+import { revalidatePath } from "next/cache";
 
 export interface ChartUpdateInput {
   chiefComplaint?: string;
@@ -37,7 +39,17 @@ function generateRecordHash(chart: {
 
   aftercareNotes: string | null;
   additionalNotes: string | null;
+  treatmentCards?: Array<{
+    narrativeText: string;
+    structuredData: string;
+    sortOrder: number;
+  }>;
 }): string {
+  const cards = (chart.treatmentCards ?? [])
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((c) => ({ narrative: c.narrativeText, structured: c.structuredData }));
+
   const content = JSON.stringify({
     id: chart.id,
     chiefComplaint: chart.chiefComplaint,
@@ -47,6 +59,7 @@ function generateRecordHash(chart: {
 
     aftercareNotes: chart.aftercareNotes,
     additionalNotes: chart.additionalNotes,
+    treatmentCards: cards,
   });
   return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
@@ -118,6 +131,7 @@ export async function getCharts(filters?: {
     include: {
       patient: { select: { firstName: true, lastName: true } },
       createdBy: { select: { name: true } },
+      encounter: { select: { id: true, status: true, provider: { select: { name: true } } } },
       template: { select: { name: true } },
       appointment: { select: { startTime: true, service: { select: { name: true } } } },
     },
@@ -137,10 +151,30 @@ export async function getChartWithPhotos(chartId: string) {
       patient: { select: { firstName: true, lastName: true, allergies: true } },
       createdBy: { select: { name: true } },
       signedBy: { select: { name: true } },
+      providerSignedBy: { select: { name: true } },
+      encounter: {
+        select: {
+          id: true,
+          status: true,
+          startedAt: true,
+          finalizedAt: true,
+          provider: { select: { name: true } },
+          patient: { select: { firstName: true, lastName: true } },
+        },
+      },
       template: true,
       photos: {
         where: { deletedAt: null },
         orderBy: { createdAt: "asc" },
+      },
+      treatmentCards: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          photos: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: "asc" },
+          },
+        },
       },
       appointment: {
         select: { startTime: true, service: { select: { name: true } } },
@@ -233,6 +267,7 @@ export async function updateChart(
 
     const chart = await prisma.chart.findUnique({
       where: { id: chartId },
+      include: { encounter: { select: { status: true } } },
     });
 
     if (!chart) {
@@ -241,9 +276,20 @@ export async function updateChart(
 
     enforceTenantIsolation(user, chart.clinicId);
 
-    // Cannot edit signed charts
-    if (chart.status === "MDSigned") {
-      return { success: false, error: "Cannot edit a signed chart" };
+    // Cannot edit non-draft charts (covers NeedsSignOff/PendingReview and MDSigned/Finalized)
+    const effectiveStatus = chart.encounter
+      ? (chart.encounter.status === "Draft" ? "Draft" : "Locked")
+      : (chart.status === "Draft" ? "Draft" : "Locked");
+    if (effectiveStatus !== "Draft") {
+      const isFinalized = chart.encounter
+        ? chart.encounter.status === "Finalized"
+        : chart.status === "MDSigned";
+      return {
+        success: false,
+        error: isFinalized
+          ? "Encounter finalized. Changes require addendum."
+          : "Cannot edit a non-draft chart",
+      };
     }
 
     await prisma.chart.update({
@@ -276,6 +322,90 @@ export async function updateChart(
 }
 
 /**
+ * Update a treatment card's narrative text
+ */
+export async function updateTreatmentCard(
+  cardId: string,
+  data: { narrativeText?: string; structuredData?: string }
+): Promise<ActionResult> {
+  try {
+    const user = await requirePermission("charts", "edit");
+
+    const card = await prisma.treatmentCard.findUnique({
+      where: { id: cardId },
+      include: {
+        chart: {
+          select: {
+            id: true,
+            clinicId: true,
+            status: true,
+            encounter: { select: { status: true } },
+          },
+        },
+      },
+    });
+
+    if (!card) {
+      return { success: false, error: "Treatment card not found" };
+    }
+
+    enforceTenantIsolation(user, card.chart.clinicId);
+
+    // Check encounter status when available, fall back to chart status
+    const isDraft = card.chart.encounter
+      ? card.chart.encounter.status === "Draft"
+      : card.chart.status === "Draft";
+    if (!isDraft) {
+      const isFinalized = card.chart.encounter
+        ? card.chart.encounter.status === "Finalized"
+        : card.chart.status === "MDSigned";
+      return {
+        success: false,
+        error: isFinalized
+          ? "Encounter finalized. Changes require addendum."
+          : "Cannot edit treatment cards on a non-draft chart",
+      };
+    }
+
+    // Validate structuredData is parseable JSON when provided
+    if (data.structuredData !== undefined) {
+      try {
+        JSON.parse(data.structuredData);
+      } catch {
+        return { success: false, error: "Invalid JSON in structuredData" };
+      }
+    }
+
+    const updateData: { narrativeText?: string; structuredData?: string } = {};
+    if (data.narrativeText !== undefined) updateData.narrativeText = data.narrativeText;
+    if (data.structuredData !== undefined) updateData.structuredData = data.structuredData;
+
+    await prisma.treatmentCard.update({
+      where: { id: cardId },
+      data: updateData,
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "ChartUpdate",
+        entityType: "TreatmentCard",
+        entityId: cardId,
+        details: JSON.stringify({ chartId: card.chart.id, fields: Object.keys(data) }),
+      },
+    });
+
+    return { success: true };
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return { success: false, error: error.message };
+    }
+    throw error;
+  }
+}
+
+/**
  * Submit chart for Medical Director review
  */
 export async function submitChartForReview(chartId: string): Promise<ActionResult> {
@@ -284,6 +414,7 @@ export async function submitChartForReview(chartId: string): Promise<ActionResul
 
     const chart = await prisma.chart.findUnique({
       where: { id: chartId },
+      include: { encounter: { select: { id: true, status: true } } },
     });
 
     if (!chart) {
@@ -292,10 +423,15 @@ export async function submitChartForReview(chartId: string): Promise<ActionResul
 
     enforceTenantIsolation(user, chart.clinicId);
 
-    if (chart.status !== "Draft") {
+    // Check encounter status when available
+    const isDraft = chart.encounter
+      ? chart.encounter.status === "Draft"
+      : chart.status === "Draft";
+    if (!isDraft) {
       return { success: false, error: "Only draft charts can be submitted for review" };
     }
 
+    // Dual-write: update chart status AND encounter status
     await prisma.chart.update({
       where: { id: chartId },
       data: {
@@ -303,6 +439,13 @@ export async function submitChartForReview(chartId: string): Promise<ActionResul
         updatedAt: new Date(),
       },
     });
+
+    if (chart.encounter) {
+      await prisma.encounter.update({
+        where: { id: chart.encounter.id },
+        data: { status: "PendingReview" },
+      });
+    }
 
     return { success: true };
   } catch (error) {
@@ -323,6 +466,7 @@ export async function signChart(chartId: string): Promise<ActionResult> {
 
     const chart = await prisma.chart.findUnique({
       where: { id: chartId },
+      include: { encounter: { select: { id: true, status: true } } },
     });
 
     if (!chart) {
@@ -331,7 +475,11 @@ export async function signChart(chartId: string): Promise<ActionResult> {
 
     enforceTenantIsolation(user, chart.clinicId);
 
-    if (chart.status !== "NeedsSignOff") {
+    // Check encounter status when available
+    const isNeedsSignOff = chart.encounter
+      ? chart.encounter.status === "PendingReview"
+      : chart.status === "NeedsSignOff";
+    if (!isNeedsSignOff) {
       return {
         success: false,
         error: "Only charts with NeedsSignOff status can be signed",
@@ -342,6 +490,7 @@ export async function signChart(chartId: string): Promise<ActionResult> {
     const recordHash = generateRecordHash(chart);
     const signedAt = new Date();
 
+    // Dual-write: update chart signing fields AND encounter status
     await prisma.chart.update({
       where: { id: chartId },
       data: {
@@ -354,6 +503,13 @@ export async function signChart(chartId: string): Promise<ActionResult> {
       },
     });
 
+    if (chart.encounter) {
+      await prisma.encounter.update({
+        where: { id: chart.encounter.id },
+        data: { status: "Finalized", finalizedAt: signedAt },
+      });
+    }
+
     // Log chart signing
     await prisma.auditLog.create({
       data: {
@@ -364,6 +520,7 @@ export async function signChart(chartId: string): Promise<ActionResult> {
         entityId: chartId,
         details: JSON.stringify({
           patientId: chart.patientId,
+          encounterId: chart.encounter?.id,
           previousStatus: "NeedsSignOff",
           newStatus: "MDSigned",
           recordHash,
@@ -400,6 +557,7 @@ export async function signChartWithUser(
 
     const chart = await prisma.chart.findUnique({
       where: { id: chartId },
+      include: { encounter: { select: { id: true, status: true } } },
     });
 
     if (!chart) {
@@ -408,7 +566,10 @@ export async function signChartWithUser(
 
     enforce(user, chart.clinicId);
 
-    if (chart.status !== "NeedsSignOff") {
+    const isNeedsSignOff = chart.encounter
+      ? chart.encounter.status === "PendingReview"
+      : chart.status === "NeedsSignOff";
+    if (!isNeedsSignOff) {
       return {
         success: false,
         error: "Only charts with NeedsSignOff status can be signed",
@@ -430,6 +591,13 @@ export async function signChartWithUser(
       },
     });
 
+    if (chart.encounter) {
+      await prisma.encounter.update({
+        where: { id: chart.encounter.id },
+        data: { status: "Finalized", finalizedAt: signedAt },
+      });
+    }
+
     await prisma.auditLog.create({
       data: {
         clinicId: user.clinicId,
@@ -439,6 +607,7 @@ export async function signChartWithUser(
         entityId: chartId,
         details: JSON.stringify({
           patientId: chart.patientId,
+          encounterId: chart.encounter?.id,
           previousStatus: "NeedsSignOff",
           newStatus: "MDSigned",
           recordHash,
@@ -476,6 +645,7 @@ export async function updateChartWithUser(
 
     const chart = await prisma.chart.findUnique({
       where: { id: chartId },
+      include: { encounter: { select: { status: true } } },
     });
 
     if (!chart) {
@@ -484,8 +654,19 @@ export async function updateChartWithUser(
 
     enforce(user, chart.clinicId);
 
-    if (chart.status === "MDSigned") {
-      return { success: false, error: "Cannot edit a signed chart" };
+    const isDraft = chart.encounter
+      ? chart.encounter.status === "Draft"
+      : chart.status === "Draft";
+    if (!isDraft) {
+      const isFinalized = chart.encounter
+        ? chart.encounter.status === "Finalized"
+        : chart.status === "MDSigned";
+      return {
+        success: false,
+        error: isFinalized
+          ? "Encounter finalized. Changes require addendum."
+          : "Cannot edit a non-draft chart",
+      };
     }
 
     await prisma.chart.update({
@@ -514,4 +695,342 @@ export async function updateChartWithUser(
     }
     throw error;
   }
+}
+
+/**
+ * Provider Sign & Lock — transitions Draft → MDSigned/Finalized directly.
+ * Validates all treatment cards for high-risk blocking fields before signing.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function providerSignChart(chartId: string): Promise<ActionResult<any>> {
+  try {
+    const user = await requirePermission("charts", "edit");
+    return _providerSign(chartId, user);
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return { success: false, error: error.message };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Test variant — bypasses session-based auth.
+ */
+export async function providerSignChartWithUser(
+  chartId: string,
+  user: AuthenticatedUser
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<ActionResult<any>> {
+  const { hasPermission } = await import("@/lib/rbac");
+  if (!hasPermission(user.role, "charts", "edit")) {
+    return { success: false, error: `Permission denied: ${user.role} cannot edit charts` };
+  }
+  return _providerSign(chartId, user);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function _providerSign(
+  chartId: string,
+  user: AuthenticatedUser
+): Promise<ActionResult<any>> {
+  const chart = await prisma.chart.findUnique({
+    where: { id: chartId },
+    include: {
+      encounter: { select: { id: true, status: true } },
+      treatmentCards: { orderBy: { sortOrder: "asc" } },
+    },
+  });
+
+  if (!chart) {
+    return { success: false, error: "Chart not found" };
+  }
+
+  enforceTenantIsolation(user, chart.clinicId);
+
+  // Must be Draft
+  const isDraft = chart.encounter
+    ? chart.encounter.status === "Draft"
+    : chart.status === "Draft";
+  if (!isDraft) {
+    const isFinalized = chart.encounter
+      ? chart.encounter.status === "Finalized"
+      : chart.status === "MDSigned";
+    return {
+      success: false,
+      error: isFinalized
+        ? "Encounter finalized. Changes require addendum."
+        : "Only draft charts can be signed",
+    };
+  }
+
+  // Validate all treatment cards
+  const blockingErrors: Array<{ cardId: string; cardTitle: string; missingFields: string[] }> = [];
+  for (const card of chart.treatmentCards) {
+    const result = validateTreatmentCard(card.templateType, card.structuredData);
+    if (result.isSignBlocking) {
+      blockingErrors.push({
+        cardId: card.id,
+        cardTitle: card.title,
+        missingFields: result.missingHighRiskFields,
+      });
+    }
+  }
+
+  if (blockingErrors.length > 0) {
+    return {
+      success: false,
+      error: "High-risk fields are incomplete on one or more treatment cards",
+      data: { blockingErrors },
+    };
+  }
+
+  // Load full user record to check supervision requirement
+  const fullUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { requiresMDReview: true },
+  });
+
+  const signedAt = new Date();
+  const recordHash = generateRecordHash({ ...chart, treatmentCards: chart.treatmentCards });
+
+  if (fullUser?.requiresMDReview) {
+    // Supervised provider: submit for MD review
+    await prisma.$transaction(async (tx) => {
+      await tx.chart.update({
+        where: { id: chartId },
+        data: {
+          status: "NeedsSignOff",
+          providerSignedAt: signedAt,
+          providerSignedById: user.id,
+          recordHash,
+          updatedAt: signedAt,
+        },
+      });
+
+      if (chart.encounter) {
+        await tx.encounter.update({
+          where: { id: chart.encounter.id },
+          data: { status: "PendingReview" },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          clinicId: user.clinicId,
+          userId: user.id,
+          action: "ChartProviderSign",
+          entityType: "Chart",
+          entityId: chartId,
+          details: JSON.stringify({
+            patientId: chart.patientId,
+            encounterId: chart.encounter?.id,
+            submittedForReview: true,
+            recordHash,
+          }),
+        },
+      });
+    });
+  } else {
+    // Non-supervised provider: finalize directly
+    await prisma.$transaction(async (tx) => {
+      await tx.chart.update({
+        where: { id: chartId },
+        data: {
+          status: "MDSigned",
+          signedById: user.id,
+          signedByName: user.name,
+          signedAt,
+          recordHash,
+          updatedAt: signedAt,
+        },
+      });
+
+      if (chart.encounter) {
+        await tx.encounter.update({
+          where: { id: chart.encounter.id },
+          data: { status: "Finalized", finalizedAt: signedAt },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          clinicId: user.clinicId,
+          userId: user.id,
+          action: "ChartProviderSign",
+          entityType: "Chart",
+          entityId: chartId,
+          details: JSON.stringify({
+            patientId: chart.patientId,
+            encounterId: chart.encounter?.id,
+            finalizedDirectly: true,
+            recordHash,
+          }),
+        },
+      });
+    });
+  }
+
+  revalidatePath(`/charts/${chartId}`);
+  return { success: true };
+}
+
+/**
+ * Test variant of updateTreatmentCard — bypasses session-based auth.
+ */
+export async function updateTreatmentCardWithUser(
+  cardId: string,
+  data: { narrativeText?: string; structuredData?: string },
+  user: AuthenticatedUser
+): Promise<ActionResult> {
+  const { hasPermission, enforceTenantIsolation: enforce } = await import("@/lib/rbac");
+  if (!hasPermission(user.role, "charts", "edit")) {
+    return { success: false, error: `Permission denied: ${user.role} cannot edit charts` };
+  }
+
+  const card = await prisma.treatmentCard.findUnique({
+    where: { id: cardId },
+    include: {
+      chart: {
+        select: { id: true, clinicId: true, status: true, encounter: { select: { status: true } } },
+      },
+    },
+  });
+
+  if (!card) return { success: false, error: "Treatment card not found" };
+
+  enforce(user, card.chart.clinicId);
+
+  const isDraft = card.chart.encounter
+    ? card.chart.encounter.status === "Draft"
+    : card.chart.status === "Draft";
+  if (!isDraft) {
+    const isFinalized = card.chart.encounter
+      ? card.chart.encounter.status === "Finalized"
+      : card.chart.status === "MDSigned";
+    return {
+      success: false,
+      error: isFinalized
+        ? "Encounter finalized. Changes require addendum."
+        : "Cannot edit treatment cards on a non-draft chart",
+    };
+  }
+
+  if (data.structuredData !== undefined) {
+    try { JSON.parse(data.structuredData); } catch {
+      return { success: false, error: "Invalid JSON in structuredData" };
+    }
+  }
+
+  const updateData: { narrativeText?: string; structuredData?: string } = {};
+  if (data.narrativeText !== undefined) updateData.narrativeText = data.narrativeText;
+  if (data.structuredData !== undefined) updateData.structuredData = data.structuredData;
+
+  await prisma.treatmentCard.update({ where: { id: cardId }, data: updateData });
+  return { success: true };
+}
+
+/**
+ * MD Co-sign — transitions PendingReview/NeedsSignOff → Finalized/MDSigned
+ * Only allowed for users with chart sign permission (MedicalDirector, Owner, Admin)
+ */
+export async function coSignChart(chartId: string): Promise<ActionResult> {
+  try {
+    const user = await requirePermission("charts", "sign");
+    return _coSign(chartId, user);
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return { success: false, error: error.message };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Test variant — bypasses session-based auth.
+ */
+export async function coSignChartWithUser(
+  chartId: string,
+  user: AuthenticatedUser
+): Promise<ActionResult> {
+  const { hasPermission } = await import("@/lib/rbac");
+  if (!hasPermission(user.role, "charts", "sign")) {
+    return { success: false, error: `Permission denied: ${user.role} cannot co-sign charts` };
+  }
+  return _coSign(chartId, user);
+}
+
+async function _coSign(
+  chartId: string,
+  user: AuthenticatedUser
+): Promise<ActionResult> {
+  const chart = await prisma.chart.findUnique({
+    where: { id: chartId },
+    include: {
+      encounter: { select: { id: true, status: true } },
+      treatmentCards: { orderBy: { sortOrder: "asc" } },
+    },
+  });
+
+  if (!chart) {
+    return { success: false, error: "Chart not found" };
+  }
+
+  enforceTenantIsolation(user, chart.clinicId);
+
+  // Must be NeedsSignOff / PendingReview
+  const isNeedsSignOff = chart.encounter
+    ? chart.encounter.status === "PendingReview"
+    : chart.status === "NeedsSignOff";
+  if (!isNeedsSignOff) {
+    return { success: false, error: "Only charts pending review can be co-signed" };
+  }
+
+  // Provider must have already signed
+  if (!chart.providerSignedAt) {
+    return { success: false, error: "Chart has not been provider-signed yet" };
+  }
+
+  const signedAt = new Date();
+  const recordHash = generateRecordHash({ ...chart, treatmentCards: chart.treatmentCards });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.chart.update({
+      where: { id: chartId },
+      data: {
+        status: "MDSigned",
+        signedById: user.id,
+        signedByName: user.name,
+        signedAt,
+        recordHash,
+        updatedAt: signedAt,
+      },
+    });
+
+    if (chart.encounter) {
+      await tx.encounter.update({
+        where: { id: chart.encounter.id },
+        data: { status: "Finalized", finalizedAt: signedAt },
+      });
+    }
+
+    await tx.auditLog.create({
+      data: {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "MDCoSign",
+        entityType: "Chart",
+        entityId: chartId,
+        details: JSON.stringify({
+          patientId: chart.patientId,
+          encounterId: chart.encounter?.id,
+          providerSignedById: chart.providerSignedById,
+          recordHash,
+        }),
+      },
+    });
+  });
+
+  revalidatePath(`/charts/${chartId}`);
+  return { success: true };
 }

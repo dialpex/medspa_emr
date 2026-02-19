@@ -49,9 +49,10 @@ export type PatientTimeline = {
     status: string;
     chiefComplaint: string | null;
     createdAt: Date;
-    createdBy: { name: string };
+    createdBy: { name: string } | null;
     signedBy: { name: string } | null;
     signedAt: Date | null;
+    encounter: { id: string; status: string; provider: { name: string } } | null;
   }[];
   photos: {
     id: string;
@@ -243,6 +244,7 @@ export async function getPatientTimeline(patientId: string): Promise<PatientTime
         createdBy: { select: { name: true } },
         signedBy: { select: { name: true } },
         signedAt: true,
+        encounter: { select: { id: true, status: true, provider: { select: { name: true } } } },
       },
     }),
     prisma.photo.findMany({

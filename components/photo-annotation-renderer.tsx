@@ -71,6 +71,45 @@ export function PhotoAnnotationRenderer({
           ctx.lineTo(ann.points[i].x * canvas.width, ann.points[i].y * canvas.height);
         }
         ctx.stroke();
+      } else if (ann.type === "arrow") {
+        const x1 = ann.x1 * canvas.width;
+        const y1 = ann.y1 * canvas.height;
+        const x2 = ann.x2 * canvas.width;
+        const y2 = ann.y2 * canvas.height;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        const headLen = 16;
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+      } else if (ann.type === "rect") {
+        const rx = ann.x * canvas.width;
+        const ry = ann.y * canvas.height;
+        const rw = ann.w * canvas.width;
+        const rh = ann.h * canvas.height;
+        ctx.strokeRect(rx, ry, rw, rh);
+      } else if (ann.type === "text") {
+        const tx = ann.x * canvas.width;
+        const ty = ann.y * canvas.height;
+        ctx.font = "bold 18px sans-serif";
+        const metrics = ctx.measureText(ann.text);
+        const padding = 6;
+        ctx.fillStyle = ann.color;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.roundRect(tx - padding, ty - 16 - padding, metrics.width + padding * 2, 22 + padding * 2, 4);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = "white";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(ann.text, tx, ty);
       }
     }
   }, [imgLoaded, parsedAnnotations]);

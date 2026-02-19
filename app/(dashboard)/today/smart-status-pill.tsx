@@ -7,7 +7,7 @@ import type { JourneyPhase, TodayAppointment, TodayPermissions } from "@/lib/act
 import {
   confirmAppointment,
   checkInAppointment,
-  startSession,
+  beginService,
   completeSession,
   checkOutAppointment,
 } from "@/lib/actions/today";
@@ -103,10 +103,10 @@ function getAvailableActions(
       }
       break;
     case "here":
-      if (permissions.canStartSession) {
+      if (permissions.canBeginService) {
         actions.push({
-          label: "Start Session",
-          action: () => startSession(appointment.id),
+          label: "Begin Service",
+          action: () => beginService(appointment.id),
         });
       }
       break;
