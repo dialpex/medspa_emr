@@ -148,7 +148,18 @@ export async function getChartWithPhotos(chartId: string) {
   const chart = await prisma.chart.findUnique({
     where: { id: chartId },
     include: {
-      patient: { select: { firstName: true, lastName: true, allergies: true } },
+      patient: {
+        select: {
+          id: true, firstName: true, lastName: true, allergies: true,
+          dateOfBirth: true, tags: true, medicalNotes: true,
+          appointments: {
+            where: { deletedAt: null },
+            orderBy: { startTime: "desc" as const },
+            take: 1,
+            select: { startTime: true },
+          },
+        },
+      },
       createdBy: { select: { name: true } },
       signedBy: { select: { name: true } },
       providerSignedBy: { select: { name: true } },
@@ -1033,4 +1044,91 @@ async function _coSign(
 
   revalidatePath(`/charts/${chartId}`);
   return { success: true };
+}
+
+/**
+ * Get the most recent previous treatment for a patient (excluding the current chart).
+ * Used to display context in the chart editor.
+ */
+export interface PreviousTreatmentSummary {
+  chartId: string;
+  date: Date;
+  cards: Array<{
+    title: string;
+    templateType: string;
+    details: string;
+  }>;
+}
+
+export async function getPreviousTreatment(
+  patientId: string,
+  currentChartId: string,
+  clinicId: string
+): Promise<PreviousTreatmentSummary | null> {
+  const chart = await prisma.chart.findFirst({
+    where: {
+      patientId,
+      clinicId,
+      id: { not: currentChartId },
+      deletedAt: null,
+      OR: [
+        { status: "MDSigned" },
+        { encounter: { status: "Finalized" } },
+      ],
+    },
+    orderBy: { updatedAt: "desc" },
+    include: {
+      treatmentCards: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          title: true,
+          templateType: true,
+          structuredData: true,
+        },
+      },
+    },
+  });
+
+  if (!chart) return null;
+
+  return {
+    chartId: chart.id,
+    date: chart.updatedAt,
+    cards: chart.treatmentCards.map((card) => ({
+      title: card.title,
+      templateType: card.templateType,
+      details: summarizeStructuredData(card.templateType, card.structuredData),
+    })),
+  };
+}
+
+function summarizeStructuredData(templateType: string, structuredData: string): string {
+  try {
+    const data = JSON.parse(structuredData);
+    switch (templateType) {
+      case "Injectable": {
+        const parts: string[] = [];
+        if (data.product) parts.push(data.product);
+        if (data.areas && data.totalUnits) parts.push(`${data.areas} ${data.totalUnits}u`);
+        else if (data.areas) parts.push(data.areas);
+        return parts.join(" — ") || "No details";
+      }
+      case "Laser": {
+        const parts: string[] = [];
+        if (data.device) parts.push(data.device);
+        if (data.areas) parts.push(data.areas);
+        return parts.join(" — ") || "No details";
+      }
+      case "Esthetics": {
+        const parts: string[] = [];
+        if (data.treatmentType) parts.push(data.treatmentType);
+        if (data.areas) parts.push(data.areas);
+        return parts.join(" — ") || "No details";
+      }
+      default:
+        return "No details";
+    }
+  } catch {
+    return "No details";
+  }
 }
