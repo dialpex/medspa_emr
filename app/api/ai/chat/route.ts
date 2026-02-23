@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac";
+import { requireFeature } from "@/lib/feature-flags";
+import { FeatureNotAvailableError } from "@/lib/feature-flags-core";
 import { getAiProvider } from "@/lib/ai/providers";
 import { prisma } from "@/lib/prisma";
 import type { ChatMessage } from "@/lib/ai/providers/types";
 
 export async function POST(request: NextRequest) {
   try {
+    await requireFeature("ai_chat");
     const user = await requirePermission("ai", "create");
 
     const body = await request.json();
@@ -49,6 +52,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
+    if (error instanceof FeatureNotAvailableError) {
+      return NextResponse.json({ error: "feature_not_available", feature: error.feature }, { status: 403 });
+    }
     console.error("[AI Chat] Error:", error);
     const message = error instanceof Error ? error.message : "AI chat failed";
     if (message.includes("Permission denied") || message.includes("Authentication required")) {

@@ -1,8 +1,19 @@
 import Link from "next/link";
 import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon, BoxIcon, BellIcon } from "lucide-react";
 import { PageCard } from "@/components/ui/page-card";
+import { auth } from "@/lib/auth";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+import { FeatureFlagsButton } from "./feature-flags-button";
+import type { FeatureFlag } from "@/lib/feature-flags-core";
+import type { Role } from "@prisma/client";
 
-const settingsItems = [
+const settingsItems: Array<{
+  label: string;
+  description: string;
+  href: string;
+  icon: typeof FileTextIcon;
+  feature?: FeatureFlag;
+}> = [
   {
     label: "Forms & Charts",
     description: "Manage chart templates and form configurations",
@@ -32,6 +43,7 @@ const settingsItems = [
     description: "Appointment reminders & follow-ups",
     href: "/settings/notifications",
     icon: BellIcon,
+    feature: "notification_automation",
   },
   {
     label: "Location Details",
@@ -47,12 +59,25 @@ const settingsItems = [
   },
 ];
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const [notificationsEnabled, session] = await Promise.all([
+    isFeatureEnabled("notification_automation"),
+    auth(),
+  ]);
+  const visibleItems = settingsItems.filter(
+    (item) => !item.feature || (item.feature === "notification_automation" && notificationsEnabled)
+  );
+
+  const canManageFlags = ["Owner", "Admin"].includes(session?.user?.role as Role);
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <PageCard title="Settings">
+      <PageCard
+        title="Settings"
+        headerAction={canManageFlags ? <FeatureFlagsButton /> : undefined}
+      >
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {settingsItems.map((item) => (
+          {visibleItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}

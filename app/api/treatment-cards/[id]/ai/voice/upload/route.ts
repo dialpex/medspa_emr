@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { requirePermission } from "@/lib/rbac";
+import { requireFeature } from "@/lib/feature-flags";
+import { FeatureNotAvailableError } from "@/lib/feature-flags-core";
 import { prisma } from "@/lib/prisma";
 
 function generateId(): string {
@@ -24,6 +26,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireFeature("ai_voice_draft");
     const user = await requirePermission("ai", "create");
     const { id: treatmentCardId } = await params;
 
@@ -105,6 +108,9 @@ export async function POST(
 
     return NextResponse.json({ draftEventId: event.id });
   } catch (error) {
+    if (error instanceof FeatureNotAvailableError) {
+      return NextResponse.json({ error: "feature_not_available", feature: error.feature }, { status: 403 });
+    }
     const message = error instanceof Error ? error.message : "Voice upload failed";
     if (message.includes("Permission denied") || message.includes("Authentication required")) {
       return NextResponse.json({ error: message }, { status: 403 });

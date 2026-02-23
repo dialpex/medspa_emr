@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/rbac";
+import { requireFeature } from "@/lib/feature-flags";
 import { revalidatePath } from "next/cache";
 import type { NotificationTrigger, TimingUnit } from "@prisma/client";
 
@@ -46,6 +47,7 @@ export type ClinicPreviewData = {
 };
 
 export async function getClinicPreviewData(): Promise<ClinicPreviewData> {
+  await requireFeature("notification_automation");
   const user = await requirePermission("messaging", "view");
 
   const clinic = await prisma.clinic.findUniqueOrThrow({
@@ -66,6 +68,7 @@ export async function getClinicPreviewData(): Promise<ClinicPreviewData> {
 export async function getNotificationTemplates(): Promise<
   NotificationTemplateItem[]
 > {
+  await requireFeature("notification_automation");
   const user = await requirePermission("messaging", "view");
 
   const templates = await prisma.notificationTemplate.findMany({
@@ -94,6 +97,7 @@ export async function getNotificationTemplates(): Promise<
 export async function createNotificationTemplate(
   input: NotificationInput
 ): Promise<ActionResult> {
+  await requireFeature("notification_automation");
   const user = await requirePermission("messaging", "create");
 
   const trimmedName = input.name.trim();
@@ -126,6 +130,7 @@ export async function updateNotificationTemplate(
   id: string,
   input: NotificationInput
 ): Promise<ActionResult> {
+  await requireFeature("notification_automation");
   const user = await requirePermission("messaging", "create");
 
   const existing = await prisma.notificationTemplate.findFirst({

@@ -9,6 +9,40 @@ const DEFAULT_PASSWORD = "password123";
 async function main() {
   console.log("Seeding database...");
 
+  // ── Clean up existing data (delete in FK-safe order) ──
+  console.log("Clearing existing data...");
+  await prisma.auditLog.deleteMany();
+  await prisma.message.deleteMany();
+  await prisma.conversation.deleteMany();
+  await prisma.patientCommunicationPreference.deleteMany();
+  await prisma.messageTemplate.deleteMany();
+  await prisma.notificationTemplate.deleteMany();
+  await prisma.payment.deleteMany();
+  await prisma.invoiceItem.deleteMany();
+  await prisma.invoice.deleteMany();
+  await prisma.patientMembership.deleteMany();
+  await prisma.membershipPlan.deleteMany();
+  await prisma.patientConsent.deleteMany();
+  await prisma.consentTemplate.deleteMany();
+  await prisma.aiDraftEvent.deleteMany();
+  await prisma.photo.deleteMany();
+  await prisma.treatmentCard.deleteMany();
+  await prisma.chart.deleteMany();
+  await prisma.addendum.deleteMany();
+  await prisma.encounter.deleteMany();
+  await prisma.appointment.deleteMany();
+  await prisma.serviceTemplate.deleteMany();
+  await prisma.service.deleteMany();
+  await prisma.product.deleteMany();
+  await prisma.room.deleteMany();
+  await prisma.resource.deleteMany();
+  await prisma.chartTemplate.deleteMany();
+  await prisma.clinicFeatureOverride.deleteMany();
+  await prisma.patient.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.clinic.deleteMany();
+  console.log("Cleared all existing data");
+
   // Generate password hash for demo users
   const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
   console.log("Generated password hash for demo users");
@@ -24,6 +58,7 @@ async function main() {
       phone: "(555) 123-4567",
       email: "info@radiancemedspa.com",
       timezone: "America/New_York",
+      tier: "Pro",
     },
   });
   console.log(`Created clinic: ${clinic.name}`);

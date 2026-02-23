@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { getChartWithPhotos, getPreviousTreatment } from "@/lib/actions/charts";
 import { getConsentTemplatesForClinic } from "@/lib/actions/consent";
 import { getEffectiveStatus } from "@/lib/encounter-utils";
@@ -22,9 +23,10 @@ export default async function ChartEditPage({
     redirect(`/charts/${id}`);
   }
 
-  const [previousTreatment, consentTemplates] = await Promise.all([
+  const [previousTreatment, consentTemplates, voiceDraftEnabled] = await Promise.all([
     getPreviousTreatment(chart.patientId!, chart.id, user.clinicId),
     getConsentTemplatesForClinic(user.clinicId),
+    isFeatureEnabled("ai_voice_draft"),
   ]);
 
   return (
@@ -33,6 +35,7 @@ export default async function ChartEditPage({
       currentUserRole={user.role}
       previousTreatment={previousTreatment}
       consentTemplates={consentTemplates}
+      voiceDraftEnabled={voiceDraftEnabled}
     />
   );
 }

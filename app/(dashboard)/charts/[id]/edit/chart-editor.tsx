@@ -146,11 +146,13 @@ export function ChartEditor({
   currentUserRole,
   previousTreatment,
   consentTemplates,
+  voiceDraftEnabled = true,
 }: {
   chart: ChartData;
   currentUserRole: Role;
   previousTreatment: PreviousTreatmentSummary | null;
   consentTemplates: Array<{ id: string; name: string }>;
+  voiceDraftEnabled?: boolean;
 }) {
   const router = useRouter();
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
@@ -509,6 +511,7 @@ export function ChartEditor({
                   chartId={chart.id}
                   patientId={chart.patientId}
                   disabled={isLocked}
+                  voiceDraftEnabled={voiceDraftEnabled}
                 />
               ))}
             </div>
@@ -652,6 +655,7 @@ function TreatmentCardEditor({
   chartId,
   patientId,
   disabled,
+  voiceDraftEnabled = true,
 }: {
   card: {
     id: string;
@@ -670,6 +674,7 @@ function TreatmentCardEditor({
   chartId: string;
   patientId: string;
   disabled: boolean;
+  voiceDraftEnabled?: boolean;
 }) {
   const [narrative, setNarrative] = useState(card.narrativeText);
   const [structured, setStructured] = useState(() =>
@@ -955,7 +960,7 @@ function TreatmentCardEditor({
           <label className="block text-sm font-medium text-gray-700">AI Draft</label>
 
           <div className="flex items-center gap-2">
-            {!isRecording && !voiceProcessing && !aiDraft && (
+            {voiceDraftEnabled && !isRecording && !voiceProcessing && !aiDraft && (
               <button
                 type="button"
                 onClick={handleStartRecording}
@@ -966,7 +971,7 @@ function TreatmentCardEditor({
                 Record Voice Note
               </button>
             )}
-            {isRecording && (
+            {voiceDraftEnabled && isRecording && (
               <button
                 type="button"
                 onClick={handleStopRecording}
@@ -983,7 +988,7 @@ function TreatmentCardEditor({
                 </span>
               </button>
             )}
-            {voiceProcessing && (
+            {voiceDraftEnabled && voiceProcessing && (
               <div className="flex items-center gap-2 px-3 py-1.5 text-sm text-purple-700">
                 <Loader2Icon className="size-4 animate-spin" />
                 {voiceProcessingStep}

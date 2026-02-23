@@ -23,27 +23,29 @@ import {
   LogOut,
 } from "lucide-react";
 import type { Role } from "@prisma/client";
+import type { FeatureFlag } from "@/lib/feature-flags-core";
 
 type NavItem = {
   label: string;
   href: string;
   icon: React.ReactNode;
   roles?: Role[];
+  feature?: FeatureFlag;
   badge?: number;
   dividerAfter?: boolean;
   sectionBefore?: string;
 };
 
 const navItems: NavItem[] = [
-  { label: "AI Copilot", href: "/ai-assist", icon: <Sparkles className="size-5" />, roles: ["Owner", "Admin", "Provider", "FrontDesk", "Billing", "MedicalDirector"] },
+  { label: "AI Copilot", href: "/ai-assist", icon: <Sparkles className="size-5" />, roles: ["Owner", "Admin", "Provider", "FrontDesk", "Billing", "MedicalDirector"], feature: "ai_chat" },
   { label: "Daily Dashboard", href: "/today", icon: <ClipboardList className="size-5" /> },
   { label: "Scheduler", href: "/calendar", icon: <Calendar className="size-5" />, sectionBefore: "Clinical" },
   { label: "Patient Directory", href: "/patients", icon: <Users className="size-5" /> },
   { label: "MD Review", href: "/md-review", icon: <ShieldCheck className="size-5" />, roles: ["MedicalDirector", "Owner", "Admin"] },
   { label: "Revenue & Sales", href: "/sales", icon: <Tag className="size-5" />, roles: ["Owner", "Admin", "Billing"] },
-  { label: "Communications", href: "/inbox", icon: <Bell className="size-5" />, roles: ["Owner", "Admin", "FrontDesk", "Provider"] },
+  { label: "Communications", href: "/inbox", icon: <Bell className="size-5" />, roles: ["Owner", "Admin", "FrontDesk", "Provider"], feature: "sms_messaging" },
   { label: "Analytics", href: "/reports", icon: <BarChart3 className="size-5" />, sectionBefore: "Management", roles: ["Owner", "Admin", "Billing", "MedicalDirector"] },
-  { label: "Marketing Center", href: "/marketing", icon: <TrendingUp className="size-5" /> },
+  { label: "Marketing Center", href: "/marketing", icon: <TrendingUp className="size-5" />, feature: "marketing_tools" },
   { label: "System Config", href: "/settings", icon: <Settings className="size-5" /> },
 ];
 
@@ -54,11 +56,13 @@ export function Sidebar({
   inboxUnreadCount,
   clinicLogo,
   clinicName,
+  enabledFeatures,
 }: {
   user: { name: string; role: Role };
   inboxUnreadCount?: number;
   clinicLogo?: string | null;
   clinicName: string;
+  enabledFeatures?: FeatureFlag[];
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -72,6 +76,7 @@ export function Sidebar({
 
   const visibleItems = navItems
     .filter((item) => !item.roles || item.roles.includes(user.role))
+    .filter((item) => !item.feature || !enabledFeatures || enabledFeatures.includes(item.feature))
     .map((item) => {
       if (item.href === "/inbox" && inboxUnreadCount) {
         return { ...item, badge: inboxUnreadCount };

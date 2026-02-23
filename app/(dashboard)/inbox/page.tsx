@@ -4,6 +4,8 @@ import {
   getMessagingPermissions,
   getMessageTemplates,
 } from "@/lib/actions/messaging";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+import { FeatureGate } from "@/components/feature-gate";
 import { ConversationList } from "./conversation-list";
 import { MessageThread } from "./message-thread";
 
@@ -12,6 +14,10 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ conversationId?: string; q?: string }>;
 }) {
+  if (!(await isFeatureEnabled("sms_messaging"))) {
+    return <FeatureGate feature="sms_messaging" />;
+  }
+
   const params = await searchParams;
   const [conversations, permissions, templates] = await Promise.all([
     getConversations(params.q),

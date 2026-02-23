@@ -30,6 +30,7 @@ model Clinic {
   state        String?
   zipCode      String?
   country      String   @default("US")
+  tier         ClinicTier @default(Standard)
   website      String?
   locationHours    String?  // JSON: { mon: { enabled, start, end }, ... }
   socialAccounts   String?  // JSON: { yelp, facebook, instagram, ... }
@@ -62,11 +63,17 @@ model Clinic {
   conversations     Conversation[]
   messageTemplates  MessageTemplate[]
   notificationTemplates NotificationTemplate[]
+  featureOverrides  ClinicFeatureOverride[]
 }
 
 // ===========================================
 // USERS & ROLES
 // ===========================================
+
+enum ClinicTier {
+  Standard
+  Pro
+}
 
 enum Role {
   Owner
@@ -954,4 +961,22 @@ model NotificationTemplate {
   @@unique([clinicId, key])
   @@index([clinicId])
   @@index([clinicId, systemKey])
+}
+
+// ===========================================
+// FEATURE FLAGS
+// ===========================================
+
+model ClinicFeatureOverride {
+  id        String   @id @default(cuid())
+  clinicId  String
+  feature   String
+  enabled   Boolean
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id])
+
+  @@unique([clinicId, feature])
+  @@index([clinicId])
 }

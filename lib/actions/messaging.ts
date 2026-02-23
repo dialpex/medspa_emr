@@ -6,6 +6,7 @@ import {
   enforceTenantIsolation,
   hasPermission,
 } from "@/lib/rbac";
+import { requireFeature } from "@/lib/feature-flags";
 import { revalidatePath } from "next/cache";
 import { sendMessage, normalizeToE164 } from "@/lib/messaging/service";
 import type { MessagePurpose, MessageChannel } from "@prisma/client";
@@ -20,6 +21,7 @@ export interface ActionResult<T = void> {
  * Get all conversations for the current clinic
  */
 export async function getConversations(search?: string) {
+  await requireFeature("sms_messaging");
   const user = await requirePermission("messaging", "view");
 
   const where: Record<string, unknown> = { clinicId: user.clinicId };
@@ -52,6 +54,7 @@ export async function getConversations(search?: string) {
  * Get messages for a conversation
  */
 export async function getConversationMessages(conversationId: string) {
+  await requireFeature("sms_messaging");
   const user = await requirePermission("messaging", "view");
 
   const conversation = await prisma.conversation.findUnique({
@@ -100,6 +103,7 @@ export async function sendMessageAction(input: {
   mediaUrls?: string[];
   appointmentId?: string;
 }): Promise<ActionResult<{ messageId: string }>> {
+  await requireFeature("sms_messaging");
   const user = await requirePermission("messaging", "create");
 
   // Find conversation and verify tenant isolation
