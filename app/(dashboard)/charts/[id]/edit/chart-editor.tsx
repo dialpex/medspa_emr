@@ -67,6 +67,7 @@ type ChartData = {
     id: string;
     filename: string;
     category: string | null;
+    caption: string | null;
     annotations: string | null;
     createdAt: Date;
   }>;
@@ -182,6 +183,18 @@ export function ChartEditor({
   });
   const [annotatingSlot, setAnnotatingSlot] = useState<string | null>(null);
 
+  // Extra photos (non-standard-slot)
+  const STANDARD_SLOTS = ["frontal", "angle-right", "angle-left", "profile"];
+  const [extraPhotos, setExtraPhotos] = useState(() =>
+    chart.photos
+      .filter((p) => p.category && !STANDARD_SLOTS.includes(p.category))
+      .map((p) => ({
+        id: p.id,
+        label: p.caption ?? p.category ?? "Untitled",
+        annotations: p.annotations,
+      }))
+  );
+
   // Template custom fields
   const [templateValues, setTemplateValues] = useState<Record<string, string>>(() => {
     if (chart.template && chart.additionalNotes) {
@@ -260,6 +273,36 @@ export function ChartEditor({
       delete next[slotKey];
       return next;
     });
+  };
+
+  const handleExtraPhotoUpload = async (file: File, label: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("patientId", chart.patientId);
+    formData.append("chartId", chart.id);
+    formData.append("category", `custom-${Date.now()}`);
+    formData.append("caption", label);
+
+    const res = await fetch("/api/photos/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    if (data.success && data.photo) {
+      setExtraPhotos((prev) => [
+        ...prev,
+        { id: data.photo.id, label, annotations: null },
+      ]);
+    }
+  };
+
+  const handleExtraPhotoRemove = async (photoId: string) => {
+    const { deletePhoto } = await import("@/lib/actions/photos");
+    const result = await deletePhoto(photoId);
+    if (result.success) {
+      setExtraPhotos((prev) => prev.filter((p) => p.id !== photoId));
+    }
+  };
+
+  const handleExtraPhotoAnnotate = (photoId: string) => {
+    setAnnotatingSlot(photoId);
   };
 
   useEffect(() => {
@@ -427,6 +470,10 @@ export function ChartEditor({
             onAnnotate={setAnnotatingSlot}
             disabled={isLocked}
             uploading={uploadingSlot}
+            extraPhotos={extraPhotos}
+            onAddExtraPhoto={handleExtraPhotoUpload}
+            onRemoveExtraPhoto={handleExtraPhotoRemove}
+            onAnnotateExtraPhoto={handleExtraPhotoAnnotate}
           />
 
           {/* Procedure Details */}
@@ -559,24 +606,43 @@ export function ChartEditor({
       </div>
 
       {/* Photo Annotator Modal */}
-      {annotatingSlot && slotPhotos[annotatingSlot] && (
-        <PhotoAnnotator
-          photoId={slotPhotos[annotatingSlot]}
-          photoUrl={`/api/photos/${slotPhotos[annotatingSlot]}`}
-          initialAnnotations={slotAnnotations[annotatingSlot] ?? null}
-          onClose={() => {
-            import("@/lib/actions/photos").then(({ getPhotosForChart }) => {
-              getPhotosForChart(chart.id).then((photos) => {
-                const photo = photos.find((p) => p.id === slotPhotos[annotatingSlot]);
-                if (photo) {
-                  setSlotAnnotations((prev) => ({ ...prev, [annotatingSlot]: photo.annotations }));
-                }
-                setAnnotatingSlot(null);
+      {annotatingSlot && (() => {
+        const isSlot = !!slotPhotos[annotatingSlot];
+        const extraPhoto = extraPhotos.find((p) => p.id === annotatingSlot);
+        const photoId = isSlot ? slotPhotos[annotatingSlot] : extraPhoto?.id;
+        const initialAnnotations = isSlot
+          ? (slotAnnotations[annotatingSlot] ?? null)
+          : (extraPhoto?.annotations ?? null);
+
+        if (!photoId) return null;
+
+        return (
+          <PhotoAnnotator
+            photoId={photoId}
+            photoUrl={`/api/photos/${photoId}`}
+            initialAnnotations={initialAnnotations}
+            onClose={() => {
+              import("@/lib/actions/photos").then(({ getPhotosForChart }) => {
+                getPhotosForChart(chart.id).then((photos) => {
+                  const photo = photos.find((p) => p.id === photoId);
+                  if (photo) {
+                    if (isSlot) {
+                      setSlotAnnotations((prev) => ({ ...prev, [annotatingSlot]: photo.annotations }));
+                    } else {
+                      setExtraPhotos((prev) =>
+                        prev.map((ep) =>
+                          ep.id === photoId ? { ...ep, annotations: photo.annotations } : ep
+                        )
+                      );
+                    }
+                  }
+                  setAnnotatingSlot(null);
+                });
               });
-            });
-          }}
-        />
-      )}
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
