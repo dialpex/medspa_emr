@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef } from "react";
-import { CameraIcon, SparklesIcon, XIcon, PencilIcon, ImageIcon } from "lucide-react";
+import { useRef, useState } from "react";
+import { CameraIcon, XIcon, PencilIcon, ImageIcon, UploadIcon } from "lucide-react";
 import { PhotoAnnotationRenderer } from "@/components/photo-annotation-renderer";
 
 const PHOTO_SLOTS = [
@@ -11,6 +11,12 @@ const PHOTO_SLOTS = [
   { key: "profile", label: "PROFILE" },
 ] as const;
 
+export type ExtraPhoto = {
+  id: string;
+  label: string;
+  annotations: string | null;
+};
+
 interface SmartPhotoGalleryProps {
   photos: Record<string, string>;
   annotations: Record<string, string | null>;
@@ -19,6 +25,10 @@ interface SmartPhotoGalleryProps {
   onAnnotate: (slotKey: string) => void;
   disabled?: boolean;
   uploading: string | null;
+  extraPhotos: ExtraPhoto[];
+  onAddExtraPhoto: (file: File, label: string) => void;
+  onRemoveExtraPhoto: (photoId: string) => void;
+  onAnnotateExtraPhoto: (photoId: string) => void;
 }
 
 function PhotoSlot({
@@ -124,14 +134,9 @@ function PhotoSlot({
           </button>
         )}
       </div>
-      <div className="flex items-center gap-1">
-        <span className="text-[11px] font-semibold text-gray-500 tracking-wide">
-          {label}
-        </span>
-        {slotKey === "frontal" && (
-          <SparklesIcon className="size-3 text-purple-400" />
-        )}
-      </div>
+      <span className="text-[11px] font-semibold text-gray-500 tracking-wide">
+        {label}
+      </span>
       <input
         ref={inputRef}
         type="file"
@@ -147,6 +152,126 @@ function PhotoSlot({
   );
 }
 
+function AddPhotoModal({
+  onSubmit,
+  onClose,
+}: {
+  onSubmit: (file: File, label: string) => void;
+  onClose: () => void;
+}) {
+  const [label, setLabel] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (f: File) => {
+    setFile(f);
+    const url = URL.createObjectURL(f);
+    setPreview(url);
+  };
+
+  const handleSubmit = () => {
+    if (!file || !label.trim()) return;
+    onSubmit(file, label.trim());
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-gray-900">Add Photo</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
+          >
+            <XIcon className="size-5" />
+          </button>
+        </div>
+
+        {/* Label input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Label</label>
+          <input
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="e.g. Close-up, Post-treatment"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+            autoFocus
+          />
+        </div>
+
+        {/* Upload area */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Photo</label>
+          {preview ? (
+            <div className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-gray-200 bg-gray-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={preview}
+                alt="Preview"
+                className="w-full h-full object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setFile(null);
+                  setPreview(null);
+                }}
+                className="absolute top-2 right-2 p-1 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+              >
+                <XIcon className="size-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50/30 transition-all"
+            >
+              <CameraIcon className="size-10" />
+              <span className="text-sm font-medium">Click to select photo</span>
+            </button>
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/jpeg,image/png"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFileChange(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!file || !label.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <UploadIcon className="size-4" />
+            Upload
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SmartPhotoGallery({
   photos,
   annotations,
@@ -155,7 +280,13 @@ export function SmartPhotoGallery({
   onAnnotate,
   disabled,
   uploading,
+  extraPhotos,
+  onAddExtraPhoto,
+  onRemoveExtraPhoto,
+  onAnnotateExtraPhoto,
 }: SmartPhotoGalleryProps) {
+  const [showAddModal, setShowAddModal] = useState(false);
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
       {/* Header */}
@@ -174,16 +305,19 @@ export function SmartPhotoGallery({
             <ImageIcon className="size-3.5" />
             View Previous
           </button>
-          <button
-            type="button"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
-          >
-            + Import Photos
-          </button>
+          {!disabled && (
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+            >
+              + Add More Photos
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Photo Grid */}
+      {/* Standard Photo Grid */}
       <div className="grid grid-cols-4 gap-4">
         {PHOTO_SLOTS.map((slot) => (
           <PhotoSlot
@@ -201,6 +335,39 @@ export function SmartPhotoGallery({
           />
         ))}
       </div>
+
+      {/* Extra Photos */}
+      {extraPhotos.length > 0 && (
+        <div className="border-t border-gray-200 pt-4 space-y-3">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Additional Photos
+          </h3>
+          <div className="grid grid-cols-4 gap-4">
+            {extraPhotos.map((photo) => (
+              <PhotoSlot
+                key={photo.id}
+                slotKey={photo.id}
+                label={photo.label}
+                photoId={photo.id}
+                slotAnnotations={photo.annotations}
+                onUpload={() => {}}
+                onRemove={() => onRemoveExtraPhoto(photo.id)}
+                onAnnotate={() => onAnnotateExtraPhoto(photo.id)}
+                disabled={disabled}
+                uploading={false}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add Photo Modal */}
+      {showAddModal && (
+        <AddPhotoModal
+          onSubmit={onAddExtraPhoto}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
     </div>
   );
 }

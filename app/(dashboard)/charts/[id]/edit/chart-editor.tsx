@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   CheckCircleIcon, Loader2Icon, AlertCircleIcon, XIcon,
   PencilIcon, PlusIcon, SparklesIcon, MicIcon, SquareIcon,
-  ArrowLeftIcon, SaveIcon, PrinterIcon, CopyIcon, FileTextIcon,
+  ArrowLeftIcon, SaveIcon, FileTextIcon,
 } from "lucide-react";
 import { updateChart, updateTreatmentCard, providerSignChart } from "@/lib/actions/charts";
 import { getEffectiveStatus } from "@/lib/encounter-utils";
@@ -67,6 +67,7 @@ type ChartData = {
     id: string;
     filename: string;
     category: string | null;
+    caption: string | null;
     annotations: string | null;
     createdAt: Date;
   }>;
@@ -182,6 +183,18 @@ export function ChartEditor({
   });
   const [annotatingSlot, setAnnotatingSlot] = useState<string | null>(null);
 
+  // Extra photos (non-standard-slot)
+  const STANDARD_SLOTS = ["frontal", "angle-right", "angle-left", "profile"];
+  const [extraPhotos, setExtraPhotos] = useState(() =>
+    chart.photos
+      .filter((p) => p.category && !STANDARD_SLOTS.includes(p.category))
+      .map((p) => ({
+        id: p.id,
+        label: p.caption ?? p.category ?? "Untitled",
+        annotations: p.annotations,
+      }))
+  );
+
   // Template custom fields
   const [templateValues, setTemplateValues] = useState<Record<string, string>>(() => {
     if (chart.template && chart.additionalNotes) {
@@ -194,18 +207,33 @@ export function ChartEditor({
     ? JSON.parse(chart.template.fieldsConfig)
     : [];
 
+  const pendingSaveRef = useRef<Record<string, string | undefined>>({});
+
   const autoSave = useCallback(
     (data: Record<string, string | undefined>) => {
+      pendingSaveRef.current = { ...pendingSaveRef.current, ...data };
       setSaveStatus("unsaved");
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
+        const toSave = { ...pendingSaveRef.current };
+        pendingSaveRef.current = {};
         setSaveStatus("saving");
-        const result = await updateChart(chart.id, data);
+        const result = await updateChart(chart.id, toSave);
         setSaveStatus(result.success ? "saved" : "error");
       }, 2000);
     },
     [chart.id]
   );
+
+  const flushSave = useCallback(async () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const toSave = { ...pendingSaveRef.current };
+    pendingSaveRef.current = {};
+    if (Object.keys(toSave).length === 0 && saveStatus === "saved") return;
+    setSaveStatus("saving");
+    const result = await updateChart(chart.id, toSave);
+    setSaveStatus(result.success ? "saved" : "error");
+  }, [chart.id, saveStatus]);
 
   const handleStandardChange = (field: string, value: string) => {
     const setters: Record<string, (v: string) => void> = {
@@ -245,6 +273,36 @@ export function ChartEditor({
       delete next[slotKey];
       return next;
     });
+  };
+
+  const handleExtraPhotoUpload = async (file: File, label: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("patientId", chart.patientId);
+    formData.append("chartId", chart.id);
+    formData.append("category", `custom-${Date.now()}`);
+    formData.append("caption", label);
+
+    const res = await fetch("/api/photos/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    if (data.success && data.photo) {
+      setExtraPhotos((prev) => [
+        ...prev,
+        { id: data.photo.id, label, annotations: null },
+      ]);
+    }
+  };
+
+  const handleExtraPhotoRemove = async (photoId: string) => {
+    const { deletePhoto } = await import("@/lib/actions/photos");
+    const result = await deletePhoto(photoId);
+    if (result.success) {
+      setExtraPhotos((prev) => prev.filter((p) => p.id !== photoId));
+    }
+  };
+
+  const handleExtraPhotoAnnotate = (photoId: string) => {
+    setAnnotatingSlot(photoId);
   };
 
   useEffect(() => {
@@ -412,6 +470,10 @@ export function ChartEditor({
             onAnnotate={setAnnotatingSlot}
             disabled={isLocked}
             uploading={uploadingSlot}
+            extraPhotos={extraPhotos}
+            onAddExtraPhoto={handleExtraPhotoUpload}
+            onRemoveExtraPhoto={handleExtraPhotoRemove}
+            onAnnotateExtraPhoto={handleExtraPhotoAnnotate}
           />
 
           {/* Procedure Details */}
@@ -488,20 +550,19 @@ export function ChartEditor({
       {/* Floating Bottom Bar */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
         <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-full shadow-lg px-4 py-2.5">
-          <SaveStatusDot status={saveStatus} />
-
-          {/* Placeholder icon buttons */}
-          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Save">
-            <SaveIcon className="size-4" />
-          </button>
-          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Print">
-            <PrinterIcon className="size-4" />
-          </button>
-          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Copy">
-            <CopyIcon className="size-4" />
-          </button>
-          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Add">
-            <PlusIcon className="size-4" />
+          <button
+            type="button"
+            onClick={flushSave}
+            disabled={saveStatus === "saving"}
+            className="relative flex items-center gap-1.5 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50"
+            title="Save now"
+          >
+            {saveStatus === "saving" ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <SaveIcon className="size-4" />
+            )}
+            <SaveStatusDot status={saveStatus} />
           </button>
 
           <div className="w-px h-6 bg-gray-200 mx-1" />
@@ -545,24 +606,43 @@ export function ChartEditor({
       </div>
 
       {/* Photo Annotator Modal */}
-      {annotatingSlot && slotPhotos[annotatingSlot] && (
-        <PhotoAnnotator
-          photoId={slotPhotos[annotatingSlot]}
-          photoUrl={`/api/photos/${slotPhotos[annotatingSlot]}`}
-          initialAnnotations={slotAnnotations[annotatingSlot] ?? null}
-          onClose={() => {
-            import("@/lib/actions/photos").then(({ getPhotosForChart }) => {
-              getPhotosForChart(chart.id).then((photos) => {
-                const photo = photos.find((p) => p.id === slotPhotos[annotatingSlot]);
-                if (photo) {
-                  setSlotAnnotations((prev) => ({ ...prev, [annotatingSlot]: photo.annotations }));
-                }
-                setAnnotatingSlot(null);
+      {annotatingSlot && (() => {
+        const isSlot = !!slotPhotos[annotatingSlot];
+        const extraPhoto = extraPhotos.find((p) => p.id === annotatingSlot);
+        const photoId = isSlot ? slotPhotos[annotatingSlot] : extraPhoto?.id;
+        const initialAnnotations = isSlot
+          ? (slotAnnotations[annotatingSlot] ?? null)
+          : (extraPhoto?.annotations ?? null);
+
+        if (!photoId) return null;
+
+        return (
+          <PhotoAnnotator
+            photoId={photoId}
+            photoUrl={`/api/photos/${photoId}`}
+            initialAnnotations={initialAnnotations}
+            onClose={() => {
+              import("@/lib/actions/photos").then(({ getPhotosForChart }) => {
+                getPhotosForChart(chart.id).then((photos) => {
+                  const photo = photos.find((p) => p.id === photoId);
+                  if (photo) {
+                    if (isSlot) {
+                      setSlotAnnotations((prev) => ({ ...prev, [annotatingSlot]: photo.annotations }));
+                    } else {
+                      setExtraPhotos((prev) =>
+                        prev.map((ep) =>
+                          ep.id === photoId ? { ...ep, annotations: photo.annotations } : ep
+                        )
+                      );
+                    }
+                  }
+                  setAnnotatingSlot(null);
+                });
               });
-            });
-          }}
-        />
-      )}
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }

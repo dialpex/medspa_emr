@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
     const chartId = formData.get("chartId") as string | null;
     const treatmentCardId = formData.get("treatmentCardId") as string | null;
     const category = formData.get("category") as string | null;
+    const caption = formData.get("caption") as string | null;
 
     if (!file || !patientId) {
       return NextResponse.json(
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest) {
         mimeType: file.type,
         sizeBytes: file.size,
         category,
+        caption,
       },
     });
 

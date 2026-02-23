@@ -46,6 +46,7 @@ type ChartData = {
     id: string;
     filename: string;
     category: string | null;
+    caption: string | null;
     annotations: string | null;
   }>;
   treatmentCards: Array<{
@@ -329,35 +330,79 @@ export function ChartDetail({ chart }: { chart: ChartData }) {
       )}
 
       {/* Photos */}
-      {chart.photos.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Photos</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {chart.photos.map((photo) => (
-              <div key={photo.id} className="relative">
-                {photo.annotations ? (
-                  <PhotoAnnotationRenderer
-                    photoUrl={`/api/photos/${photo.id}`}
-                    annotations={photo.annotations}
-                  />
-                ) : (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={`/api/photos/${photo.id}`}
-                    alt={photo.filename}
-                    className="w-full rounded-lg"
-                  />
-                )}
-                {photo.category && (
-                  <span className="absolute top-2 left-2 px-2 py-0.5 text-xs font-medium bg-black/60 text-white rounded-full">
-                    {photo.category}
-                  </span>
-                )}
+      {chart.photos.length > 0 && (() => {
+        const STANDARD_SLOTS = ["frontal", "angle-right", "angle-left", "profile"];
+        const standardPhotos = chart.photos.filter(
+          (p) => p.category && STANDARD_SLOTS.includes(p.category)
+        );
+        const extraPhotos = chart.photos.filter(
+          (p) => !p.category || !STANDARD_SLOTS.includes(p.category)
+        );
+
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+            {standardPhotos.length > 0 && (
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900 mb-4">Photos</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {standardPhotos.map((photo) => (
+                    <div key={photo.id} className="relative">
+                      {photo.annotations ? (
+                        <PhotoAnnotationRenderer
+                          photoUrl={`/api/photos/${photo.id}`}
+                          annotations={photo.annotations}
+                        />
+                      ) : (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={`/api/photos/${photo.id}`}
+                          alt={photo.filename}
+                          className="w-full rounded-lg"
+                        />
+                      )}
+                      {photo.category && (
+                        <span className="absolute top-2 left-2 px-2 py-0.5 text-xs font-medium bg-black/60 text-white rounded-full">
+                          {photo.category}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
+
+            {extraPhotos.length > 0 && (
+              <div className={standardPhotos.length > 0 ? "border-t border-gray-200 pt-4" : ""}>
+                <h2 className="text-sm font-semibold text-gray-900 mb-4">
+                  {standardPhotos.length > 0 ? "Additional Photos" : "Photos"}
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {extraPhotos.map((photo) => (
+                    <div key={photo.id} className="relative">
+                      {photo.annotations ? (
+                        <PhotoAnnotationRenderer
+                          photoUrl={`/api/photos/${photo.id}`}
+                          annotations={photo.annotations}
+                        />
+                      ) : (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={`/api/photos/${photo.id}`}
+                          alt={photo.caption ?? photo.filename}
+                          className="w-full rounded-lg"
+                        />
+                      )}
+                      <span className="absolute top-2 left-2 px-2 py-0.5 text-xs font-medium bg-black/60 text-white rounded-full">
+                        {photo.caption ?? photo.category ?? "Photo"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
