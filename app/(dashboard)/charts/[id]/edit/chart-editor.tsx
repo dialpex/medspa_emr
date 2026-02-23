@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   CheckCircleIcon, Loader2Icon, AlertCircleIcon, XIcon,
   PencilIcon, PlusIcon, SparklesIcon, MicIcon, SquareIcon,
-  ArrowLeftIcon, SaveIcon, PrinterIcon, CopyIcon, FileTextIcon,
+  ArrowLeftIcon, SaveIcon, FileTextIcon,
 } from "lucide-react";
 import { updateChart, updateTreatmentCard, providerSignChart } from "@/lib/actions/charts";
 import { getEffectiveStatus } from "@/lib/encounter-utils";
@@ -194,18 +194,33 @@ export function ChartEditor({
     ? JSON.parse(chart.template.fieldsConfig)
     : [];
 
+  const pendingSaveRef = useRef<Record<string, string | undefined>>({});
+
   const autoSave = useCallback(
     (data: Record<string, string | undefined>) => {
+      pendingSaveRef.current = { ...pendingSaveRef.current, ...data };
       setSaveStatus("unsaved");
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
+        const toSave = { ...pendingSaveRef.current };
+        pendingSaveRef.current = {};
         setSaveStatus("saving");
-        const result = await updateChart(chart.id, data);
+        const result = await updateChart(chart.id, toSave);
         setSaveStatus(result.success ? "saved" : "error");
       }, 2000);
     },
     [chart.id]
   );
+
+  const flushSave = useCallback(async () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const toSave = { ...pendingSaveRef.current };
+    pendingSaveRef.current = {};
+    if (Object.keys(toSave).length === 0 && saveStatus === "saved") return;
+    setSaveStatus("saving");
+    const result = await updateChart(chart.id, toSave);
+    setSaveStatus(result.success ? "saved" : "error");
+  }, [chart.id, saveStatus]);
 
   const handleStandardChange = (field: string, value: string) => {
     const setters: Record<string, (v: string) => void> = {
@@ -488,20 +503,19 @@ export function ChartEditor({
       {/* Floating Bottom Bar */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
         <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-full shadow-lg px-4 py-2.5">
-          <SaveStatusDot status={saveStatus} />
-
-          {/* Placeholder icon buttons */}
-          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Save">
-            <SaveIcon className="size-4" />
-          </button>
-          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Print">
-            <PrinterIcon className="size-4" />
-          </button>
-          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Copy">
-            <CopyIcon className="size-4" />
-          </button>
-          <button type="button" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Add">
-            <PlusIcon className="size-4" />
+          <button
+            type="button"
+            onClick={flushSave}
+            disabled={saveStatus === "saving"}
+            className="relative flex items-center gap-1.5 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50"
+            title="Save now"
+          >
+            {saveStatus === "saving" ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <SaveIcon className="size-4" />
+            )}
+            <SaveStatusDot status={saveStatus} />
           </button>
 
           <div className="w-px h-6 bg-gray-200 mx-1" />
