@@ -10,63 +10,139 @@ import type {
   SourceInvoice,
 } from "./types";
 
-const BOULEVARD_API = "https://dashboard.boulevard.io/api/2020-01/";
-
-// TODO: Replace with actual Boulevard login endpoint once user provides DevTools data
-// Expected: POST https://dashboard.boulevard.io/auth/login (or similar)
-const BOULEVARD_LOGIN_URL = "https://dashboard.boulevard.io/auth/login";
+const BOULEVARD_BASE = "https://dashboard.boulevard.io";
+const BOULEVARD_SESSION_URL = `${BOULEVARD_BASE}/auth/sessions`;
+const BOULEVARD_IDENTITY_URL = `${BOULEVARD_BASE}/auth/identities`;
+const BOULEVARD_GRAPH_URL = `${BOULEVARD_BASE}/api/v1.0/graph`;
 
 interface GraphQLResponse {
   data?: Record<string, unknown>;
   errors?: Array<{ message: string }>;
 }
 
+/**
+ * Parse Set-Cookie headers from a fetch Response and merge into existing cookie string.
+ * Node.js fetch returns Set-Cookie as a comma-separated string via getSetCookie() or
+ * headers.getSetCookie(). We extract cookie name=value pairs from each.
+ */
+function extractCookies(res: Response, existingCookies: string): string {
+  const cookieMap = new Map<string, string>();
+
+  // Parse existing cookies into map
+  if (existingCookies) {
+    for (const pair of existingCookies.split("; ")) {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx > 0) {
+        cookieMap.set(pair.substring(0, eqIdx), pair.substring(eqIdx + 1));
+      }
+    }
+  }
+
+  // Extract new cookies from Set-Cookie headers
+  const setCookieHeaders = res.headers.getSetCookie?.() ?? [];
+  for (const header of setCookieHeaders) {
+    // Each Set-Cookie header: "name=value; path=/; ..."
+    const nameValue = header.split(";")[0].trim();
+    const eqIdx = nameValue.indexOf("=");
+    if (eqIdx > 0) {
+      cookieMap.set(nameValue.substring(0, eqIdx), nameValue.substring(eqIdx + 1));
+    }
+  }
+
+  // Rebuild cookie string
+  return Array.from(cookieMap.entries())
+    .map(([k, v]) => `${k}=${v}`)
+    .join("; ");
+}
+
 export class BoulevardProvider implements MigrationProvider {
   readonly source = "Boulevard";
-  private sessionToken: string | null = null;
+  private sessionCookies: string = "";
+  private csrfToken: string = "";
   private credentials: MigrationCredentials | null = null;
+  private authenticated = false;
 
   private async authenticate(credentials: MigrationCredentials): Promise<void> {
     if (!credentials.email || !credentials.password) {
       throw new Error("Boulevard requires email and password credentials");
     }
 
-    // TODO: Replace with actual Boulevard login once DevTools data is provided.
-    // The login endpoint URL, request format, and response format (JWT? cookie? session?)
-    // are all pending user's Chrome DevTools inspection of Boulevard's dashboard.
-    //
-    // Expected flow:
-    //   1. POST to login endpoint with { email, password }
-    //   2. Extract session/auth token from response
-    //   3. Use token in Authorization header for subsequent GraphQL queries
-    //
-    // For now, attempt the login and fall back gracefully if it fails.
-    try {
-      const res = await fetch(BOULEVARD_LOGIN_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: credentials.email,
-          password: credentials.password,
-        }),
-      });
+    this.sessionCookies = "";
+    this.csrfToken = "";
+    this.authenticated = false;
 
-      if (res.ok) {
-        const data = await res.json();
-        // TODO: Extract actual token field once response format is known
-        this.sessionToken = data.token || data.accessToken || data.session_token || null;
-      }
-    } catch {
-      // Login endpoint not yet configured — will fall back to error in query()
+    // Step 1: POST to /auth/sessions with { email, password }
+    // Returns 204 No Content with Set-Cookie containing _sched_cookie
+    const sessionRes = await fetch(BOULEVARD_SESSION_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Origin: BOULEVARD_BASE,
+        Referer: `${BOULEVARD_BASE}/login-v2/`,
+      },
+      body: JSON.stringify({
+        email: credentials.email,
+        password: credentials.password,
+      }),
+      redirect: "manual",
+    });
+
+    if (sessionRes.status !== 204 && sessionRes.status !== 200) {
+      const text = await sessionRes.text().catch(() => "");
+      throw new Error(
+        `Boulevard login failed (${sessionRes.status}): ${text || "Invalid credentials"}`
+      );
+    }
+
+    this.sessionCookies = extractCookies(sessionRes, this.sessionCookies);
+
+    // Step 2: GET /auth/identities to validate session and get csrf-token
+    const identityRes = await fetch(BOULEVARD_IDENTITY_URL, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Cookie: this.sessionCookies,
+      },
+      redirect: "manual",
+    });
+
+    if (identityRes.status === 401) {
+      throw new Error("Boulevard login failed: invalid email or password");
+    }
+
+    this.sessionCookies = extractCookies(identityRes, this.sessionCookies);
+
+    // Extract csrf-token from cookies
+    const csrfMatch = this.sessionCookies.match(/csrf-token=([^;]+)/);
+    if (csrfMatch) {
+      this.csrfToken = decodeURIComponent(csrfMatch[1]);
     }
 
     this.credentials = credentials;
+    this.authenticated = true;
   }
 
   private async ensureAuthenticated(credentials: MigrationCredentials): Promise<void> {
-    if (!this.sessionToken || this.credentials?.email !== credentials.email) {
+    if (!this.authenticated || this.credentials?.email !== credentials.email) {
       await this.authenticate(credentials);
     }
+  }
+
+  private buildGraphHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json;charset=UTF-8",
+      Accept: "application/json, text/plain, */*",
+      Cookie: this.sessionCookies,
+      Origin: BOULEVARD_BASE,
+      Referer: `${BOULEVARD_BASE}/home`,
+    };
+
+    if (this.csrfToken) {
+      headers["csrf-token"] = this.csrfToken;
+    }
+
+    return headers;
   }
 
   private async query(
@@ -76,44 +152,27 @@ export class BoulevardProvider implements MigrationProvider {
   ): Promise<GraphQLResponse> {
     await this.ensureAuthenticated(credentials);
 
-    if (!this.sessionToken) {
-      throw new Error(
-        "Boulevard authentication failed. Session token not available. " +
-        "The Boulevard provider is pending DevTools data to configure the login flow."
-      );
-    }
-
-    const res = await fetch(BOULEVARD_API, {
+    const res = await fetch(BOULEVARD_GRAPH_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.sessionToken}`,
-        ...(credentials.businessId
-          ? { "X-Boulevard-Business-Id": credentials.businessId }
-          : {}),
-      },
+      headers: this.buildGraphHeaders(),
       body: JSON.stringify({ query: queryStr, variables }),
     });
 
-    if (res.status === 401) {
-      // Session expired — re-authenticate and retry once
-      this.sessionToken = null;
-      await this.authenticate(credentials);
-      if (!this.sessionToken) {
-        throw new Error("Boulevard re-authentication failed after session expiry");
-      }
+    // Update cookies from response (session refresh)
+    this.sessionCookies = extractCookies(res, this.sessionCookies);
 
-      const retryRes = await fetch(BOULEVARD_API, {
+    if (res.status === 401 || res.status === 403) {
+      // Session expired — re-authenticate and retry once
+      this.authenticated = false;
+      await this.authenticate(credentials);
+
+      const retryRes = await fetch(BOULEVARD_GRAPH_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.sessionToken}`,
-          ...(credentials.businessId
-            ? { "X-Boulevard-Business-Id": credentials.businessId }
-            : {}),
-        },
+        headers: this.buildGraphHeaders(),
         body: JSON.stringify({ query: queryStr, variables }),
       });
+
+      this.sessionCookies = extractCookies(retryRes, this.sessionCookies);
 
       if (!retryRes.ok) {
         const text = await retryRes.text();
@@ -135,16 +194,7 @@ export class BoulevardProvider implements MigrationProvider {
     try {
       await this.authenticate(credentials);
 
-      if (!this.sessionToken) {
-        return {
-          connected: false,
-          errorMessage:
-            "Could not authenticate with Boulevard. " +
-            "This provider is pending configuration — the login endpoint details " +
-            "need to be captured from Boulevard's dashboard using Chrome DevTools.",
-        };
-      }
-
+      // Query business info to verify full API access
       const result = await this.query(
         credentials,
         `query { business { id name } }`
