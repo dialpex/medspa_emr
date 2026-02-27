@@ -13,6 +13,7 @@ describe("getTierDefault", () => {
     expect(getTierDefault("Standard", "sms_messaging")).toBe(false);
     expect(getTierDefault("Standard", "notification_automation")).toBe(false);
     expect(getTierDefault("Standard", "ai_voice_draft")).toBe(false);
+    expect(getTierDefault("Standard", "e_prescribe")).toBe(false);
   });
 
   it("Standard tier: all-tier features are on", () => {

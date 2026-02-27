@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Sparkles,
   ShieldCheck,
+  Pill,
   ChevronLeft,
   ChevronRight,
   User,
@@ -37,13 +38,14 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { label: "AI Copilot", href: "/ai-assist", icon: <Sparkles className="size-5" />, roles: ["Owner", "Admin", "Provider", "FrontDesk", "Billing", "MedicalDirector"], feature: "ai_chat" },
-  { label: "Daily Dashboard", href: "/today", icon: <ClipboardList className="size-5" /> },
-  { label: "Scheduler", href: "/calendar", icon: <Calendar className="size-5" />, sectionBefore: "Clinical" },
-  { label: "Patient Directory", href: "/patients", icon: <Users className="size-5" /> },
-  { label: "MD Review", href: "/md-review", icon: <ShieldCheck className="size-5" />, roles: ["MedicalDirector", "Owner", "Admin"] },
-  { label: "Revenue & Sales", href: "/sales", icon: <Tag className="size-5" />, roles: ["Owner", "Admin", "Billing"] },
+  { label: "Smart Assist", href: "/ai-assist", icon: <Sparkles className="size-5" />, roles: ["Owner", "Admin", "Provider", "FrontDesk", "Billing", "MedicalDirector"], feature: "ai_chat" },
+  { label: "Daily Dashboard", href: "/today", icon: <ClipboardList className="size-5" />, sectionBefore: "Practice" },
+  { label: "Scheduler", href: "/calendar", icon: <Calendar className="size-5" /> },
   { label: "Communications", href: "/inbox", icon: <Bell className="size-5" />, roles: ["Owner", "Admin", "FrontDesk", "Provider"], feature: "sms_messaging" },
+  { label: "Revenue & Sales", href: "/sales", icon: <Tag className="size-5" />, roles: ["Owner", "Admin", "Billing"] },
+  { label: "Patient Directory", href: "/patients", icon: <Users className="size-5" />, sectionBefore: "Clinical" },
+  { label: "MD Review", href: "/md-review", icon: <ShieldCheck className="size-5" />, roles: ["MedicalDirector", "Owner", "Admin"] },
+  { label: "E-Prescribe", href: "/prescribe", icon: <Pill className="size-5" />, roles: ["Owner", "Provider"], feature: "e_prescribe" },
   { label: "Analytics", href: "/reports", icon: <BarChart3 className="size-5" />, sectionBefore: "Management", roles: ["Owner", "Admin", "Billing", "MedicalDirector"] },
   { label: "Marketing Center", href: "/marketing", icon: <TrendingUp className="size-5" />, feature: "marketing_tools" },
   { label: "System Config", href: "/settings", icon: <Settings className="size-5" /> },
