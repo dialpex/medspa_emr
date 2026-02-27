@@ -8,6 +8,7 @@ export const FEATURES = [
   "ai_chat",
   "marketing_tools",
   "e_prescribe",
+  "lab_results",
 ] as const;
 
 export type FeatureFlag = (typeof FEATURES)[number];
@@ -21,6 +22,7 @@ const TIER_FEATURES: Record<ClinicTier, Record<FeatureFlag, boolean>> = {
     ai_chat: true,
     marketing_tools: true,
     e_prescribe: false,
+    lab_results: false,
   },
   Pro: {
     sms_messaging: true,
@@ -29,6 +31,7 @@ const TIER_FEATURES: Record<ClinicTier, Record<FeatureFlag, boolean>> = {
     ai_chat: true,
     marketing_tools: true,
     e_prescribe: true,
+    lab_results: true,
   },
 };
 
@@ -40,6 +43,7 @@ export const FEATURE_LABELS: Record<FeatureFlag, string> = {
   ai_chat: "AI Chat Copilot",
   marketing_tools: "Marketing Tools",
   e_prescribe: "E-Prescribe",
+  lab_results: "Lab Results",
 };
 
 /** Get the tier default for a feature */
