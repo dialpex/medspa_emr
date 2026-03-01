@@ -342,7 +342,7 @@ export class GenericCSVAdapter implements VendorAdapter {
 
         yield {
           entityType: entityMapping.targetEntity,
-          record: canonical as CanonicalRecord,
+          record: canonical as unknown as CanonicalRecord,
         };
       }
     }

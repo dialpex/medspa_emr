@@ -217,10 +217,7 @@ async function promoteAppointment(
   let provider = await prisma.user.findFirst({
     where: {
       clinicId,
-      OR: [
-        { firstName: providerName.split(" ")[0], lastName: providerName.split(" ").slice(1).join(" ") || undefined },
-        { firstName: providerName },
-      ],
+      name: { contains: providerName.split(" ")[0] },
     },
   });
 
@@ -258,10 +255,11 @@ async function promoteInvoice(
     data: {
       clinicId,
       patientId,
-      status: (payload.status as string) || "paid",
+      invoiceNumber: (payload.invoiceNumber as string) || `MIG-${Date.now()}`,
+      status: "Paid",
       subtotal: (payload.subtotal as number) || (payload.total as number) || 0,
       taxAmount: (payload.taxAmount as number) || 0,
-      totalAmount: (payload.total as number) || 0,
+      total: (payload.total as number) || 0,
       notes: (payload.notes as string) || null,
       paidAt: payload.paidAt ? new Date(payload.paidAt as string) : null,
       items: {
@@ -270,7 +268,7 @@ async function promoteInvoice(
           description: (item.description as string) || "Migrated item",
           quantity: (item.quantity as number) || 1,
           unitPrice: (item.unitPrice as number) || 0,
-          totalPrice: (item.total as number) || 0,
+          total: (item.total as number) || 0,
         })),
       },
     },

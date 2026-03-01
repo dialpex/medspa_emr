@@ -9,7 +9,7 @@ type PatientChart = {
   chiefComplaint: string | null;
   createdAt: Date;
   updatedAt: Date;
-  createdBy: { name: string };
+  createdBy: { name: string } | null;
   template: { name: string } | null;
 };
 
@@ -49,7 +49,7 @@ export function PatientCharts({ charts }: { charts: PatientChart[] }) {
                 {chart.chiefComplaint ?? "No chief complaint"}
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                {chart.createdBy.name}
+                {chart.createdBy?.name ?? "Unknown"}
                 {chart.template && ` · ${chart.template.name}`}
                 {" · "}
                 {new Date(chart.updatedAt).toLocaleDateString("en-US", {

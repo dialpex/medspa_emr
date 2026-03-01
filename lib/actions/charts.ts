@@ -216,7 +216,7 @@ export async function getChartWithPhotos(chartId: string) {
 export async function getChart(chartId: string): Promise<ActionResult<{
   id: string;
   clinicId: string;
-  patientId: string;
+  patientId: string | null;
   status: string;
   chiefComplaint: string | null;
   areasTreated: string | null;

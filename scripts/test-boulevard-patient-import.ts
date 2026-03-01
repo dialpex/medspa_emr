@@ -531,7 +531,7 @@ async function main() {
       try {
         const res = await fetch(url, { headers: { Cookie: cookies } });
         if (res.ok) {
-          let buffer = Buffer.from(await res.arrayBuffer());
+          let buffer: Buffer = Buffer.from(await res.arrayBuffer());
           let mimeType = res.headers.get("content-type") || "image/jpeg";
 
           // Flatten RGBA PNGs to JPEG — Boulevard serves some photos as PNGs
@@ -541,7 +541,7 @@ async function main() {
             buffer = await sharp(buffer)
               .flatten({ background: { r: 0, g: 0, b: 0 } })
               .jpeg({ quality: 90 })
-              .toBuffer();
+              .toBuffer() as Buffer;
             mimeType = "image/jpeg";
           }
 

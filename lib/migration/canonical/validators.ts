@@ -318,7 +318,7 @@ export function validateReferentialIntegrity(
 
   // Check references
   for (const { entityType, record } of records) {
-    const r = record as Record<string, unknown>;
+    const r = record as unknown as Record<string, unknown>;
     const canonicalId = r.canonicalId as string;
 
     if (entityType !== "patient" && r.canonicalPatientId) {

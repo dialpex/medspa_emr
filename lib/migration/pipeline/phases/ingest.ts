@@ -122,7 +122,7 @@ async function executeApiIngest(
     // Paginate through all records
     do {
       const result = await (cursor
-        ? (provider as Record<string, Function>)[`fetch${fetcher.name.charAt(0).toUpperCase() + fetcher.name.slice(1)}`](creds, { cursor })
+        ? (provider as unknown as Record<string, Function>)[`fetch${fetcher.name.charAt(0).toUpperCase() + fetcher.name.slice(1)}`](creds, { cursor })
         : fetcher.fetch());
       allRecords.push(...result.data);
       cursor = result.nextCursor;

@@ -339,7 +339,7 @@ function mockInjectableDraft(
   const conflicts = computeConflicts(current, patch as Record<string, unknown>);
 
   // Compute missing high-risk using validation
-  const mergedForValidation = { ...parseStructuredData("Injectable", JSON.stringify(current)), ...patch };
+  const mergedForValidation = { ...parseStructuredData<Record<string, unknown>>("Injectable", JSON.stringify(current)), ...patch };
   const validation = validateTreatmentCard("Injectable", JSON.stringify(mergedForValidation));
   const missingHighRisk = validation.missingHighRiskFields.map((f) => ({
     field: f,
@@ -399,7 +399,7 @@ function mockLaserDraft(
     : original;
 
   const conflicts = computeConflicts(current, patch as Record<string, unknown>);
-  const mergedForValidation = { ...parseStructuredData("Laser", JSON.stringify(current)), ...patch };
+  const mergedForValidation = { ...parseStructuredData<Record<string, unknown>>("Laser", JSON.stringify(current)), ...patch };
   const validation = validateTreatmentCard("Laser", JSON.stringify(mergedForValidation));
 
   return {

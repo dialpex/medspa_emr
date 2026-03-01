@@ -54,7 +54,7 @@ export function executeValidate(input: ValidateInput): ValidateResult {
       requiredFieldPresence[entityType] = {};
     }
 
-    const r = record as Record<string, unknown>;
+    const r = record as unknown as Record<string, unknown>;
     for (const [key, value] of Object.entries(r)) {
       if (value !== null && value !== undefined && value !== "") {
         requiredFieldPresence[entityType][key] =

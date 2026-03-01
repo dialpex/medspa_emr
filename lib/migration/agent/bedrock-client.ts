@@ -5,6 +5,7 @@
 import type { SafeContext } from "./safe-context-builder";
 import type { MappingSpec } from "../canonical/mapping-spec";
 import { validateMappingSpec } from "../canonical/mapping-spec";
+import type { AllowedTransform } from "../canonical/transforms";
 import { MAPPING_SYSTEM_PROMPT, ENUM_MAPPING_PROMPT } from "./prompts";
 
 interface BedrockConfig {
@@ -66,8 +67,9 @@ export class BedrockClaudeClient {
   private async invokeModel(systemPrompt: string, userMessage: string): Promise<string> {
     // Check if AWS SDK is available
     try {
+      const bedrockModule = "@aws-sdk/client-bedrock-runtime";
       const { BedrockRuntimeClient, InvokeModelCommand } = await import(
-        "@aws-sdk/client-bedrock-runtime"
+        /* webpackIgnore: true */ bedrockModule
       );
 
       const client = new BedrockRuntimeClient({ region: this.config.region });
@@ -220,7 +222,7 @@ export class BedrockClaudeClient {
   private suggestTransform(
     sourceField: { inferredType: string; name: string },
     targetField: string
-  ): string | null {
+  ): AllowedTransform | null {
     if (targetField === "dateOfBirth" || targetField === "startTime" || targetField === "endTime" || targetField === "signedAt" || targetField === "paidAt" || targetField === "takenAt") {
       return "normalizeDate";
     }

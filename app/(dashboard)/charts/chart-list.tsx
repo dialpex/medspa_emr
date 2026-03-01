@@ -12,7 +12,7 @@ type ChartItem = {
   createdAt: Date;
   updatedAt: Date;
   chiefComplaint: string | null;
-  patient: { firstName: string; lastName: string };
+  patient: { firstName: string; lastName: string } | null;
   createdBy: { name: string } | null;
   encounter: { id: string; status: string; provider: { name: string } } | null;
   template: { name: string } | null;
@@ -40,7 +40,7 @@ export function ChartList({ initialCharts }: { initialCharts: ChartItem[] }) {
     if (statusFilter && effectiveStatus !== statusFilter) return false;
     if (search) {
       const q = search.toLowerCase();
-      const name = `${c.patient.firstName} ${c.patient.lastName}`.toLowerCase();
+      const name = `${c.patient?.firstName ?? ""} ${c.patient?.lastName ?? ""}`.toLowerCase();
       const providerName = c.encounter?.provider.name ?? c.createdBy?.name ?? "";
       return name.includes(q) || providerName.toLowerCase().includes(q);
     }
@@ -104,10 +104,10 @@ export function ChartList({ initialCharts }: { initialCharts: ChartItem[] }) {
                 <tr key={chart.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <PatientAvatar firstName={chart.patient.firstName} lastName={chart.patient.lastName} />
+                      <PatientAvatar firstName={chart.patient?.firstName ?? ""} lastName={chart.patient?.lastName ?? ""} />
                       <div>
                         <div className="font-medium text-gray-900">
-                          {chart.patient.firstName} {chart.patient.lastName}
+                          {chart.patient?.firstName} {chart.patient?.lastName}
                         </div>
                         {chart.chiefComplaint && (
                           <div className="text-xs text-gray-500 truncate max-w-xs">

@@ -38,7 +38,7 @@ export async function executeTransform(
     store,
     input.mappingSpec
   )) {
-    const canonical = record as Record<string, unknown>;
+    const canonical = record as unknown as Record<string, unknown>;
     const canonicalId = canonical.canonicalId as string;
     const sourceRecordId = canonical.sourceRecordId as string;
     const checksum = createHash("sha256")

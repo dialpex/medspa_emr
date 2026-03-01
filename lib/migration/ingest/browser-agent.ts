@@ -54,7 +54,8 @@ export class StagehandBrowserAgent implements BrowserIngestAgent {
 
     try {
       // Dynamic import — Stagehand is an optional dependency
-      const { Stagehand } = await import("@browserbasehq/stagehand");
+      const stagehandModule = "@browserbasehq/stagehand";
+      const { Stagehand } = await import(/* webpackIgnore: true */ stagehandModule);
 
       this.stagehand = new Stagehand({
         env: "LOCAL",
