@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient, type Role } from "@prisma/client";
 import { hasPermission } from "@/lib/rbac-core";
 
@@ -197,6 +197,13 @@ describe("Addendum + Immutability Enforcement", () => {
   let clinicId: string;
   let patientId: string;
 
+  // Track created entities for cleanup
+  const createdAppointmentIds: string[] = [];
+  const createdEncounterIds: string[] = [];
+  const createdChartIds: string[] = [];
+  const createdClinicIds: string[] = [];
+  const createdUserIds: string[] = [];
+
   beforeAll(async () => {
     const regular = await prisma.user.findFirst({
       where: { role: "Provider", requiresMDReview: false },
@@ -219,6 +226,18 @@ describe("Addendum + Immutability Enforcement", () => {
     patientId = patient.id;
   });
 
+  afterAll(async () => {
+    await prisma.auditLog.deleteMany({ where: { entityId: { in: [...createdEncounterIds, ...createdChartIds] } } });
+    await prisma.addendum.deleteMany({ where: { encounterId: { in: createdEncounterIds } } });
+    await prisma.photo.deleteMany({ where: { chartId: { in: createdChartIds } } });
+    await prisma.treatmentCard.deleteMany({ where: { chartId: { in: createdChartIds } } });
+    await prisma.chart.deleteMany({ where: { id: { in: createdChartIds } } });
+    await prisma.encounter.deleteMany({ where: { id: { in: createdEncounterIds } } });
+    await prisma.appointment.deleteMany({ where: { id: { in: createdAppointmentIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    await prisma.clinic.deleteMany({ where: { id: { in: createdClinicIds } } });
+  });
+
   async function createFinalizedEncounter(providerId: string) {
     const appointment = await prisma.appointment.create({
       data: {
@@ -230,6 +249,7 @@ describe("Addendum + Immutability Enforcement", () => {
         status: "Completed",
       },
     });
+    createdAppointmentIds.push(appointment.id);
     const encounter = await prisma.encounter.create({
       data: {
         appointmentId: appointment.id,
@@ -240,6 +260,7 @@ describe("Addendum + Immutability Enforcement", () => {
         finalizedAt: new Date(),
       },
     });
+    createdEncounterIds.push(encounter.id);
     const chart = await prisma.chart.create({
       data: {
         clinicId,
@@ -254,6 +275,7 @@ describe("Addendum + Immutability Enforcement", () => {
         signedAt: new Date(),
       },
     });
+    createdChartIds.push(chart.id);
     const card = await prisma.treatmentCard.create({
       data: {
         chartId: chart.id,
@@ -389,6 +411,7 @@ describe("Addendum + Immutability Enforcement", () => {
         status: "InProgress",
       },
     });
+    createdAppointmentIds.push(appointment.id);
     const encounter = await prisma.encounter.create({
       data: {
         appointmentId: appointment.id,
@@ -398,6 +421,7 @@ describe("Addendum + Immutability Enforcement", () => {
         status: "Draft",
       },
     });
+    createdEncounterIds.push(encounter.id);
 
     const result = await testCreateAddendum(encounter.id, "Not yet finalized", provider);
     expect(result.success).toBe(false);
@@ -426,6 +450,7 @@ describe("Addendum + Immutability Enforcement", () => {
     const otherClinic = await prisma.clinic.create({
       data: { name: "Other Addendum Clinic", slug: `other-addendum-${Date.now()}` },
     });
+    createdClinicIds.push(otherClinic.id);
     const otherUser = await prisma.user.create({
       data: {
         clinicId: otherClinic.id,
@@ -434,6 +459,7 @@ describe("Addendum + Immutability Enforcement", () => {
         role: "Provider",
       },
     });
+    createdUserIds.push(otherUser.id);
     const crossClinic: TestUser = {
       id: otherUser.id,
       email: otherUser.email,

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { validateTreatmentCard, getCardStatus } from "../lib/templates/validation";
 import { PrismaClient } from "@prisma/client";
 
@@ -311,6 +311,15 @@ describe("Integration: Provider Sign", () => {
   let cardId: string;
   let provider: { id: string; clinicId: string; role: string; name: string };
 
+  // Track created entities for cleanup
+  const createdChartIds: string[] = [];
+
+  afterAll(async () => {
+    await prisma.auditLog.deleteMany({ where: { entityId: { in: createdChartIds } } });
+    await prisma.treatmentCard.deleteMany({ where: { chartId: { in: createdChartIds } } });
+    await prisma.chart.deleteMany({ where: { id: { in: createdChartIds } } });
+  });
+
   beforeAll(async () => {
     // Use the seeded data — find the Draft chart with treatment cards
     const clinic = await prisma.clinic.findFirst();
@@ -336,6 +345,7 @@ describe("Integration: Provider Sign", () => {
       },
     });
     chartId = chart.id;
+    createdChartIds.push(chart.id);
 
     const card = await prisma.treatmentCard.create({
       data: {
@@ -379,6 +389,7 @@ describe("Integration: Provider Sign", () => {
         chiefComplaint: "Incomplete chart",
       },
     });
+    createdChartIds.push(chart2.id);
 
     await prisma.treatmentCard.create({
       data: {

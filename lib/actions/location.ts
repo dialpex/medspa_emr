@@ -33,9 +33,10 @@ export type LocationData = {
 
 export async function getLocationData(): Promise<LocationData> {
   const user = await requirePermission("patients", "view");
-  const clinic = await prisma.clinic.findUniqueOrThrow({
+  const clinic = await prisma.clinic.findUnique({
     where: { id: user.clinicId },
   });
+  if (!clinic) throw new Error("Clinic not found — please sign out and back in");
 
   const defaultHours: Record<string, { enabled: boolean; start: string; end: string }> = {};
   for (const day of ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]) {

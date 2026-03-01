@@ -29,10 +29,11 @@ export type ActionResult<T = void> = {
 export async function getFeatureFlagsAdmin(): Promise<FeatureFlagsData> {
   const user = await requirePermission("users", "edit"); // Owner/Admin only
 
-  const clinic = await prisma.clinic.findUniqueOrThrow({
+  const clinic = await prisma.clinic.findUnique({
     where: { id: user.clinicId },
     select: { tier: true },
   });
+  if (!clinic) throw new Error("Clinic not found — please sign out and back in");
 
   const overrides = await prisma.clinicFeatureOverride.findMany({
     where: { clinicId: user.clinicId },
@@ -61,10 +62,11 @@ export async function toggleFeatureFlag(
 ): Promise<ActionResult> {
   const user = await requirePermission("users", "edit");
 
-  const clinic = await prisma.clinic.findUniqueOrThrow({
+  const clinic = await prisma.clinic.findUnique({
     where: { id: user.clinicId },
     select: { tier: true },
   });
+  if (!clinic) return { success: false, error: "Clinic not found — please sign out and back in" };
 
   const tierDefault = getTierDefault(clinic.tier, feature);
 

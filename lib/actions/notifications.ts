@@ -50,10 +50,11 @@ export async function getClinicPreviewData(): Promise<ClinicPreviewData> {
   await requireFeature("notification_automation");
   const user = await requirePermission("messaging", "view");
 
-  const clinic = await prisma.clinic.findUniqueOrThrow({
+  const clinic = await prisma.clinic.findUnique({
     where: { id: user.clinicId },
     select: { name: true, socialAccounts: true },
   });
+  if (!clinic) return { clinicName: "", reviewLink: "" };
 
   const social = clinic.socialAccounts
     ? JSON.parse(clinic.socialAccounts)

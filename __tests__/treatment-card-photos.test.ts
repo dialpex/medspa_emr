@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -85,6 +85,15 @@ beforeAll(async () => {
     },
   });
   otherClinicId = otherClinic.id;
+});
+
+afterAll(async () => {
+  // Clean up in FK-safe order
+  await prisma.photo.deleteMany({ where: { chartId: { in: [chartId, signedChartId] } } });
+  await prisma.treatmentCard.deleteMany({ where: { chartId: { in: [chartId, signedChartId] } } });
+  await prisma.chart.deleteMany({ where: { id: { in: [chartId, signedChartId] } } });
+  await prisma.user.deleteMany({ where: { email: "other-clinic-photo-test@test.com" } });
+  await prisma.clinic.deleteMany({ where: { slug: "other-clinic-photo-test" } });
 });
 
 describe("Treatment Card Photos", () => {

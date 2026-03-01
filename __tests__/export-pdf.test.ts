@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient, type Role } from "@prisma/client";
 import { hasPermission } from "@/lib/rbac-core";
 
@@ -106,6 +106,13 @@ describe("Export PDF", () => {
   let clinicId: string;
   let patientId: string;
 
+  // Track created entities for cleanup
+  const createdAppointmentIds: string[] = [];
+  const createdEncounterIds: string[] = [];
+  const createdChartIds: string[] = [];
+  const createdClinicIds: string[] = [];
+  const createdUserIds: string[] = [];
+
   beforeAll(async () => {
     const md = await prisma.user.findFirst({ where: { role: "MedicalDirector" } });
     if (!md) throw new Error("MedicalDirector not found");
@@ -168,6 +175,15 @@ describe("Export PDF", () => {
     patientId = patient.id;
   });
 
+  afterAll(async () => {
+    await prisma.auditLog.deleteMany({ where: { entityId: { in: [...createdEncounterIds, ...createdChartIds] } } });
+    await prisma.chart.deleteMany({ where: { id: { in: createdChartIds } } });
+    await prisma.encounter.deleteMany({ where: { id: { in: createdEncounterIds } } });
+    await prisma.appointment.deleteMany({ where: { id: { in: createdAppointmentIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    await prisma.clinic.deleteMany({ where: { id: { in: createdClinicIds } } });
+  });
+
   async function createFinalizedEncounter(providerId: string) {
     const appointment = await prisma.appointment.create({
       data: {
@@ -179,6 +195,7 @@ describe("Export PDF", () => {
         status: "Completed",
       },
     });
+    createdAppointmentIds.push(appointment.id);
 
     const encounter = await prisma.encounter.create({
       data: {
@@ -190,6 +207,7 @@ describe("Export PDF", () => {
         finalizedAt: new Date(),
       },
     });
+    createdEncounterIds.push(encounter.id);
 
     const chart = await prisma.chart.create({
       data: {
@@ -205,6 +223,7 @@ describe("Export PDF", () => {
         signedAt: new Date(),
       },
     });
+    createdChartIds.push(chart.id);
 
     return { encounter, chart, appointment };
   }
@@ -220,6 +239,7 @@ describe("Export PDF", () => {
         status: "InProgress",
       },
     });
+    createdAppointmentIds.push(appointment.id);
 
     const encounter = await prisma.encounter.create({
       data: {
@@ -230,8 +250,9 @@ describe("Export PDF", () => {
         status: "Draft",
       },
     });
+    createdEncounterIds.push(encounter.id);
 
-    await prisma.chart.create({
+    const chart = await prisma.chart.create({
       data: {
         clinicId,
         encounterId: encounter.id,
@@ -242,6 +263,7 @@ describe("Export PDF", () => {
         chiefComplaint: "Draft test",
       },
     });
+    createdChartIds.push(chart.id);
 
     return encounter;
   }
@@ -301,6 +323,7 @@ describe("Export PDF", () => {
         status: "InProgress",
       },
     });
+    createdAppointmentIds.push(appointment.id);
 
     const encounter = await prisma.encounter.create({
       data: {
@@ -311,8 +334,9 @@ describe("Export PDF", () => {
         status: "PendingReview",
       },
     });
+    createdEncounterIds.push(encounter.id);
 
-    await prisma.chart.create({
+    const chart = await prisma.chart.create({
       data: {
         clinicId,
         encounterId: encounter.id,
@@ -322,6 +346,7 @@ describe("Export PDF", () => {
         status: "NeedsSignOff",
       },
     });
+    createdChartIds.push(chart.id);
 
     const result = await testExportPdf(encounter.id, regularProvider);
     expect(result.success).toBe(false);
@@ -334,6 +359,7 @@ describe("Export PDF", () => {
     const otherClinic = await prisma.clinic.create({
       data: { name: "Other PDF Clinic", slug: `other-pdf-clinic-${Date.now()}` },
     });
+    createdClinicIds.push(otherClinic.id);
 
     const otherUser = await prisma.user.create({
       data: {
@@ -343,6 +369,7 @@ describe("Export PDF", () => {
         role: "Owner",
       },
     });
+    createdUserIds.push(otherUser.id);
 
     const crossClinicUser: TestUser = {
       id: otherUser.id,

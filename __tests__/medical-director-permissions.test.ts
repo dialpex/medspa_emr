@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient, type Role } from "@prisma/client";
 import { createHash } from "crypto";
 
@@ -165,6 +165,14 @@ describe("MedicalDirector Permissions", () => {
   let draftChartId: string;
   let clinicId: string;
 
+  // Track created entities for cleanup
+  const createdChartIds: string[] = [];
+
+  afterAll(async () => {
+    await prisma.auditLog.deleteMany({ where: { entityId: { in: createdChartIds } } });
+    await prisma.chart.deleteMany({ where: { id: { in: createdChartIds } } });
+  });
+
   beforeAll(async () => {
     // Get the seeded Medical Director user
     const mdUser = await prisma.user.findFirst({
@@ -226,6 +234,7 @@ describe("MedicalDirector Permissions", () => {
           chiefComplaint: "Test draft chart",
         },
       });
+      createdChartIds.push(draftChart.id);
     }
 
     draftChartId = draftChart.id;
@@ -307,6 +316,7 @@ describe("MedicalDirector Permissions", () => {
           chiefComplaint: "Test chart for signing",
         },
       });
+      createdChartIds.push(newChart.id);
 
       const result = await testSignChart(newChart.id, medicalDirector);
       expect(result.success).toBe(true);
@@ -354,6 +364,7 @@ describe("MedicalDirector Permissions", () => {
           chiefComplaint: "Test chart - provider should not be able to sign",
         },
       });
+      createdChartIds.push(chart.id);
 
       const result = await testSignChart(chart.id, provider);
 

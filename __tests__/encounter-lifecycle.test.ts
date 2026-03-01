@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient, type Role } from "@prisma/client";
 import { createHash } from "crypto";
 import { hasPermission } from "@/lib/rbac-core";
@@ -219,6 +219,23 @@ describe("Encounter Lifecycle", () => {
   let patientId: string;
   let serviceId: string;
 
+  // Track all clinic IDs for cascade cleanup
+  const createdClinicIds: string[] = [];
+
+  afterAll(async () => {
+    for (const cId of createdClinicIds) {
+      await prisma.auditLog.deleteMany({ where: { clinicId: cId } });
+      await prisma.treatmentCard.deleteMany({ where: { chart: { clinicId: cId } } });
+      await prisma.chart.deleteMany({ where: { clinicId: cId } });
+      await prisma.encounter.deleteMany({ where: { clinicId: cId } });
+      await prisma.appointment.deleteMany({ where: { clinicId: cId } });
+      await prisma.service.deleteMany({ where: { clinicId: cId } });
+      await prisma.patient.deleteMany({ where: { clinicId: cId } });
+      await prisma.user.deleteMany({ where: { clinicId: cId } });
+      await prisma.clinic.delete({ where: { id: cId } }).catch(() => {});
+    }
+  });
+
   beforeAll(async () => {
     clinic = await prisma.clinic.create({
       data: {
@@ -226,6 +243,7 @@ describe("Encounter Lifecycle", () => {
         slug: `test-encounter-${Date.now()}`,
       },
     });
+    createdClinicIds.push(clinic.id);
 
     const provider = await prisma.user.create({
       data: {
@@ -375,6 +393,7 @@ describe("Encounter Lifecycle", () => {
     const otherClinic = await prisma.clinic.create({
       data: { name: "Other Clinic", slug: `other-enc-${Date.now()}` },
     });
+    createdClinicIds.push(otherClinic.id);
     const otherProvider = await prisma.user.create({
       data: {
         clinicId: otherClinic.id,

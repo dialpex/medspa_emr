@@ -236,7 +236,7 @@ function TabsContent({ children, value, className, ...props }: TabsContentProps)
   const isActive = activeValue === value
   return (
     <motion.div
-      animate={{ filter: isActive ? "blur(0px)" : "blur(4px)" }}
+      animate={{ filter: "blur(0px)" }}
       className={cn("overflow-hidden", className)}
       data-slot="tabs-content"
       exit={{ filter: "blur(0px)" }}

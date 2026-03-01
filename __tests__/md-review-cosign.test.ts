@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient, type Role } from "@prisma/client";
 import { createHash } from "crypto";
 import { hasPermission } from "@/lib/rbac-core";
@@ -303,6 +303,14 @@ describe("MD Review + Co-sign", () => {
   let clinicId: string;
   let patientId: string;
 
+  // Track created entities for cleanup
+  const createdAppointmentIds: string[] = [];
+  const createdEncounterIds: string[] = [];
+  const createdChartIds: string[] = [];
+  const createdTreatmentCardIds: string[] = [];
+  const createdClinicIds: string[] = [];
+  const createdUserIds: string[] = [];
+
   beforeAll(async () => {
     const md = await prisma.user.findFirst({ where: { role: "MedicalDirector" } });
     if (!md) throw new Error("MedicalDirector not found");
@@ -331,6 +339,17 @@ describe("MD Review + Co-sign", () => {
     patientId = patient.id;
   });
 
+  afterAll(async () => {
+    // Clean up in FK-safe order
+    await prisma.auditLog.deleteMany({ where: { entityId: { in: createdChartIds } } });
+    await prisma.treatmentCard.deleteMany({ where: { id: { in: createdTreatmentCardIds } } });
+    await prisma.chart.deleteMany({ where: { id: { in: createdChartIds } } });
+    await prisma.encounter.deleteMany({ where: { id: { in: createdEncounterIds } } });
+    await prisma.appointment.deleteMany({ where: { id: { in: createdAppointmentIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+    await prisma.clinic.deleteMany({ where: { id: { in: createdClinicIds } } });
+  });
+
   async function createDraftChartWithEncounter(providerId: string) {
     const appointment = await prisma.appointment.create({
       data: {
@@ -342,6 +361,7 @@ describe("MD Review + Co-sign", () => {
         status: "InProgress",
       },
     });
+    createdAppointmentIds.push(appointment.id);
 
     const encounter = await prisma.encounter.create({
       data: {
@@ -352,6 +372,7 @@ describe("MD Review + Co-sign", () => {
         status: "Draft",
       },
     });
+    createdEncounterIds.push(encounter.id);
 
     const chart = await prisma.chart.create({
       data: {
@@ -364,6 +385,7 @@ describe("MD Review + Co-sign", () => {
         chiefComplaint: "Test chart for MD review",
       },
     });
+    createdChartIds.push(chart.id);
 
     return { chart, encounter, appointment };
   }
@@ -446,6 +468,7 @@ describe("MD Review + Co-sign", () => {
         sortOrder: 0,
       },
     });
+    createdTreatmentCardIds.push(card.id);
 
     await testProviderSign(chart.id, npProvider);
 
@@ -511,6 +534,7 @@ describe("MD Review + Co-sign", () => {
     const otherClinic = await prisma.clinic.create({
       data: { name: "Other Clinic", slug: `other-clinic-cosign-${Date.now()}` },
     });
+    createdClinicIds.push(otherClinic.id);
     const otherMD: TestUser = {
       id: `other-md-${Date.now()}`,
       email: `other-md-${Date.now()}@test.com`,
@@ -519,7 +543,7 @@ describe("MD Review + Co-sign", () => {
       clinicId: otherClinic.id,
     };
 
-    await prisma.user.create({
+    const createdUser = await prisma.user.create({
       data: {
         id: otherMD.id,
         clinicId: otherClinic.id,
@@ -528,6 +552,7 @@ describe("MD Review + Co-sign", () => {
         role: "MedicalDirector",
       },
     });
+    createdUserIds.push(createdUser.id);
 
     const result = await testCoSign(chart.id, otherMD);
     expect(result.success).toBe(false);

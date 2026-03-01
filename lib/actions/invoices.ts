@@ -481,9 +481,12 @@ export type ClinicInfo = {
 
 export async function getClinicInfo(): Promise<ClinicInfo> {
   const user = await requirePermission("invoices", "view");
-  const clinic = await prisma.clinic.findUniqueOrThrow({
+  const clinic = await prisma.clinic.findUnique({
     where: { id: user.clinicId },
     select: { name: true, logoUrl: true, address: true, city: true, state: true, zipCode: true, phone: true, email: true, website: true, defaultTaxRate: true },
   });
+  if (!clinic) {
+    return { name: "", logoUrl: null, address: null, city: null, state: null, zipCode: null, phone: null, email: null, website: null, defaultTaxRate: null };
+  }
   return clinic;
 }

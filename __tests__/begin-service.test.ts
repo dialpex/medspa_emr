@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient, type Role } from "@prisma/client";
 import { hasPermission } from "@/lib/rbac-core";
 
@@ -163,6 +163,26 @@ describe("Begin Service", () => {
   let injectableServiceId: string;
   let consultationServiceId: string;
 
+  // Track all clinic IDs for cascade cleanup
+  const createdClinicIds: string[] = [];
+
+  afterAll(async () => {
+    // Delete all data created by these test clinics in FK-safe order
+    for (const cId of createdClinicIds) {
+      await prisma.auditLog.deleteMany({ where: { clinicId: cId } });
+      await prisma.photo.deleteMany({ where: { clinicId: cId } });
+      await prisma.addendum.deleteMany({ where: { clinicId: cId } });
+      await prisma.treatmentCard.deleteMany({ where: { chart: { clinicId: cId } } });
+      await prisma.chart.deleteMany({ where: { clinicId: cId } });
+      await prisma.encounter.deleteMany({ where: { clinicId: cId } });
+      await prisma.appointment.deleteMany({ where: { clinicId: cId } });
+      await prisma.service.deleteMany({ where: { clinicId: cId } });
+      await prisma.patient.deleteMany({ where: { clinicId: cId } });
+      await prisma.user.deleteMany({ where: { clinicId: cId } });
+      await prisma.clinic.delete({ where: { id: cId } }).catch(() => {});
+    }
+  });
+
   beforeAll(async () => {
     // Create test clinic
     clinic = await prisma.clinic.create({
@@ -171,6 +191,7 @@ describe("Begin Service", () => {
         slug: `test-begin-service-${Date.now()}`,
       },
     });
+    createdClinicIds.push(clinic.id);
 
     // Create users
     const provider = await prisma.user.create({
@@ -228,6 +249,7 @@ describe("Begin Service", () => {
         slug: `other-clinic-bs-${Date.now()}`,
       },
     });
+    createdClinicIds.push(otherClinic.id);
     const otherUser = await prisma.user.create({
       data: {
         clinicId: otherClinic.id,
