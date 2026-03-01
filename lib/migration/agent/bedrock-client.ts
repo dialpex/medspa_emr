@@ -97,6 +97,8 @@ export class BedrockClaudeClient {
       const message = error instanceof Error ? error.message : String(error);
       if (
         message.includes("Cannot find module") ||
+        message.includes("Cannot find package") ||
+        message.includes("ERR_MODULE_NOT_FOUND") ||
         message.includes("credentials") ||
         message.includes("Could not load")
       ) {
@@ -122,36 +124,42 @@ export class BedrockClaudeClient {
   }
 
   private generateMockMappingSpec(context: SafeContext): MappingSpec {
-    const entityMappings = context.sourceProfile.entities.map((entity) => {
-      // Find matching canonical entity
-      const targetEntity = this.matchCanonicalEntity(entity.type);
-      const targetEntityDesc = context.targetSchema.find((s) => s.entityType === targetEntity);
+    const entityMappings = context.sourceProfile.entities
+      .map((entity) => {
+        // Find matching canonical entity
+        const targetEntity = this.matchCanonicalEntity(entity.type);
+        if (!targetEntity) return null; // Skip unmappable entities (services, forms, etc.)
 
-      const fieldMappings = entity.fields
-        .map((field) => {
-          const targetField = this.matchCanonicalField(field.name, targetEntityDesc);
-          if (!targetField) return null;
+        const targetEntityDesc = context.targetSchema.find((s) => s.entityType === targetEntity);
 
-          const transform = this.suggestTransform(field, targetField);
-          const confidence = this.estimateConfidence(field.name, targetField);
+        const fieldMappings = entity.fields
+          .map((field) => {
+            const targetField = this.matchCanonicalField(field.name, targetEntityDesc);
+            if (!targetField) return null;
 
-          return {
-            sourceField: field.name,
-            targetField,
-            transform,
-            confidence,
-            requiresApproval: confidence < 0.8,
-          };
-        })
-        .filter((fm): fm is NonNullable<typeof fm> => fm !== null);
+            const transform = this.suggestTransform(field, targetField);
+            const confidence = this.estimateConfidence(field.name, targetField);
 
-      return {
-        sourceEntity: entity.type,
-        targetEntity,
-        fieldMappings,
-        enumMaps: {} as Record<string, Record<string, string>>,
-      };
-    });
+            return {
+              sourceField: field.name,
+              targetField,
+              transform,
+              confidence,
+              requiresApproval: confidence < 0.8,
+            };
+          })
+          .filter((fm): fm is NonNullable<typeof fm> => fm !== null);
+
+        if (fieldMappings.length === 0) return null; // Skip entities with no field mappings
+
+        return {
+          sourceEntity: entity.type,
+          targetEntity,
+          fieldMappings,
+          enumMaps: {} as Record<string, Record<string, string>>,
+        };
+      })
+      .filter((em): em is NonNullable<typeof em> => em !== null);
 
     return {
       version: 1,
@@ -160,7 +168,7 @@ export class BedrockClaudeClient {
     };
   }
 
-  private matchCanonicalEntity(sourceType: string): MappingSpec["entityMappings"][0]["targetEntity"] {
+  private matchCanonicalEntity(sourceType: string): MappingSpec["entityMappings"][0]["targetEntity"] | null {
     const lower = sourceType.toLowerCase();
     const map: Record<string, MappingSpec["entityMappings"][0]["targetEntity"]> = {
       patients: "patient", patient: "patient", clients: "patient", client: "patient",
@@ -172,7 +180,7 @@ export class BedrockClaudeClient {
       documents: "document", document: "document",
       invoices: "invoice", invoice: "invoice",
     };
-    return map[lower] || "patient";
+    return map[lower] || null;
   }
 
   private matchCanonicalField(
@@ -196,21 +204,28 @@ export class BedrockClaudeClient {
       phone_number: "phone", mobile: "phone", cell: "phone",
       email_address: "email", mail: "email",
       provider: "providerName", provider_name: "providerName", doctor: "providerName",
-      service: "serviceName", service_name: "serviceName",
+      providername: "providerName",
+      service: "serviceName", service_name: "serviceName", servicename: "serviceName",
       start: "startTime", start_time: "startTime", start_date: "startTime",
-      end: "endTime", end_time: "endTime", end_date: "endTime",
-      id: "sourceRecordId", source_id: "sourceRecordId",
-      patient_id: "canonicalPatientId", client_id: "canonicalPatientId", patientid: "canonicalPatientId",
-      appointment_id: "canonicalAppointmentId",
-      chief_complaint: "chiefComplaint",
-      template_name: "templateName",
-      signed_at: "signedAt",
-      invoice_number: "invoiceNumber",
-      paid_at: "paidAt",
-      tax_amount: "taxAmount",
+      starttime: "startTime",
+      end: "endTime", end_time: "endTime", end_date: "endTime", endtime: "endTime",
+      id: "sourceRecordId", source_id: "sourceRecordId", sourceid: "sourceRecordId",
+      patient_id: "canonicalPatientId", client_id: "canonicalPatientId",
+      patientid: "canonicalPatientId", clientid: "canonicalPatientId",
+      patientsourceid: "canonicalPatientId", patient_source_id: "canonicalPatientId",
+      appointment_id: "canonicalAppointmentId", appointmentid: "canonicalAppointmentId",
+      appointmentsourceid: "canonicalAppointmentId", appointment_source_id: "canonicalAppointmentId",
+      chief_complaint: "chiefComplaint", chiefcomplaint: "chiefComplaint",
+      template_name: "templateName", templatename: "templateName",
+      signed_at: "signedAt", signedat: "signedAt",
+      invoice_number: "invoiceNumber", invoicenumber: "invoiceNumber",
+      paid_at: "paidAt", paidat: "paidAt",
+      tax_amount: "taxAmount", taxamount: "taxAmount",
       file_name: "filename", name: "filename",
-      mime_type: "mimeType", content_type: "mimeType",
-      taken_at: "takenAt",
+      mime_type: "mimeType", content_type: "mimeType", mimetype: "mimeType",
+      taken_at: "takenAt", takenat: "takenAt",
+      url: "artifactKey",  // photos/docs: URL → artifact reference
+      lineitems: "lineItems", line_items: "lineItems",
     };
 
     const alias = aliases[lower];

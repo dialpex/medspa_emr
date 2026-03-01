@@ -329,7 +329,13 @@ export class GenericCSVAdapter implements VendorAdapter {
 
           let value = srcRecord[fm.sourceField];
 
-          if (fm.transform) {
+          // Cross-reference resolution: convert source IDs to canonical IDs
+          if (
+            (fm.targetField === "canonicalPatientId" || fm.targetField === "canonicalAppointmentId") &&
+            value
+          ) {
+            value = generateCanonicalId(this.tenantId, this.vendorKey, String(value));
+          } else if (fm.transform) {
             const enumMap = entityMapping.enumMaps[fm.sourceField];
             value = executeTransform(fm.transform as AllowedTransform, value as string, {
               enumMap,

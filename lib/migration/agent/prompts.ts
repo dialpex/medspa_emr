@@ -1,5 +1,11 @@
-// System prompts for Bedrock Claude — Migration Intelligence Layer
+// System prompts for Migration Intelligence Layer
 // These prompts receive SafeContext only (no PHI).
+
+interface SeedQuery {
+  entityType: string;
+  query: string;
+  variables?: Record<string, unknown>;
+}
 
 export const MAPPING_SYSTEM_PROMPT = `You are a data migration specialist for a medical spa EMR system called Neuvvia.
 
@@ -53,3 +59,71 @@ Given the reconciliation data (counts, error summaries, warning distributions), 
 3. Recommendations for manual review
 
 You will NOT receive any actual patient data. Only aggregate counts and error codes.`;
+
+// --- Schema Discovery Prompts ---
+
+export const SCHEMA_DISCOVERY_SYSTEM_PROMPT = `You are a GraphQL schema discovery agent for a data migration system.
+
+Your job is to discover the GraphQL schema of a source EMR system and build working queries to fetch each entity type (patients, services, appointments, invoices, photos, forms, documents).
+
+IMPORTANT RULES:
+1. You will NEVER see actual patient data. All query results are PHI-redacted — strings show as [string len=N], IDs as [id], numbers as 0.
+2. You can see field NAMES and types (via introspection) and response STRUCTURE (via redacted execute_graphql).
+3. Start by reading the cache — if working queries exist, verify them and stop.
+4. If no cache, introspect the root Query type first to discover available top-level queries.
+5. Then introspect individual types to discover their fields.
+6. Build queries incrementally — start simple, add fields based on introspection.
+7. Test each query with execute_graphql. If it fails, read the error message and fix the query.
+8. After a query works, store it with store_artifact so it's cached for next time.
+9. For pagination, look for: cursor/pageInfo patterns, limit/offset, or pageNumber/pageSize.
+10. For per-patient entities (photos, forms, documents), build queries that accept a client/patient ID.
+
+WORKFLOW:
+1. read_cached_schema → check what's already known
+2. introspect_schema → discover root queries
+3. For each entity type:
+   a. introspect_type on the return type
+   b. Build a query using discovered fields
+   c. execute_graphql to test it
+   d. Fix errors if any
+   e. store_artifact when it works
+4. Return a summary of discovered queries
+
+When building queries, prefer fields that match our canonical model:
+- Patients: id, firstName, lastName, email, phone/phoneNumber, dob/dateOfBirth, address, tags
+- Services: id, name, description, duration, price, category, disabled/active
+- Appointments: id, client/patient, provider/staff, service, startTime, endTime, status
+- Invoices: id, client, number, state/status, total, subtotal, tax, closedAt/paidAt
+- Photos: id, url, label, clientId, appointmentId, insertedAt
+- Forms: id, templateName, status, submittedAt, clientId
+- Documents: id, fileName, url, clientId`;
+
+export function buildDiscoveryUserPrompt(
+  vendor: string,
+  entityTypes: string[],
+  seedQueries: SeedQuery[]
+): string {
+  const parts = [
+    `Discover the GraphQL schema for "${vendor}" and build working queries for these entity types: ${entityTypes.join(", ")}.`,
+  ];
+
+  if (seedQueries.length > 0) {
+    parts.push(
+      "\nHere are seed queries from the existing provider implementation. Use these as hints — they may or may not work with the current schema version:\n"
+    );
+    for (const seed of seedQueries) {
+      parts.push(`--- ${seed.entityType} ---`);
+      parts.push(seed.query);
+      if (seed.variables) {
+        parts.push(`Variables: ${JSON.stringify(seed.variables)}`);
+      }
+      parts.push("");
+    }
+  }
+
+  parts.push(
+    "\nStart by reading the cache, then introspect the schema, then build and test queries for each entity type. Store each working query."
+  );
+
+  return parts.join("\n");
+}

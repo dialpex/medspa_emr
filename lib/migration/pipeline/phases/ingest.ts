@@ -7,6 +7,9 @@ import type { MigrationProvider, MigrationCredentials } from "../../providers/ty
 import type { IngestStrategy, RawRecord } from "../../ingest/types";
 import { resolveStrategy } from "../../ingest/strategy-resolver";
 import { StagehandBrowserAgent } from "../../ingest/browser-agent";
+import { AnthropicClient } from "../../agent/anthropic-client";
+import { AgentEnhancedProvider } from "../../agent/enhanced-provider";
+import { BoulevardProvider } from "../../providers/boulevard";
 
 export interface IngestInput {
   runId: string;
@@ -84,59 +87,147 @@ async function executeUploadIngest(
 async function executeApiIngest(
   input: IngestInput,
   store: ArtifactStore,
-  provider: MigrationProvider
+  baseProvider: MigrationProvider
 ): Promise<IngestResult> {
   const artifacts: ArtifactRef[] = [];
   const entityCounts: Record<string, number> = {};
   const creds = input.credentials!;
 
-  // Fetch each entity type and store as JSON artifacts
-  const entityFetchers: Array<{
-    name: string;
-    fetch: () => Promise<{ data: unknown[]; nextCursor?: string }>;
-  }> = [
-    { name: "patients", fetch: () => provider.fetchPatients(creds) },
-    { name: "services", fetch: () => provider.fetchServices(creds) },
-    { name: "appointments", fetch: () => provider.fetchAppointments(creds) },
-    { name: "invoices", fetch: () => provider.fetchInvoices(creds) },
+  // Wrap with agent-enhanced provider if available
+  let provider = baseProvider;
+  if (AnthropicClient.isAvailable() && baseProvider instanceof BoulevardProvider) {
+    console.log(`  [ingest] Wrapping ${baseProvider.source} with AgentEnhancedProvider`);
+    const enhanced = new AgentEnhancedProvider({
+      baseProvider,
+      getExecutor: () => baseProvider.getGraphQLExecutor(),
+      getSeedQueries: () => baseProvider.getSeedQueries(),
+    });
+    provider = enhanced;
+  }
+
+  const perPatient = new Set(provider.perPatientEntities || []);
+
+  console.log(`  [ingest] vendor=${input.vendor} credentials=${creds ? "present" : "MISSING"} perPatient=[${[...perPatient].join(",")}]`);
+
+  // --- Step 1: Fetch top-level entities (paginated) ---
+
+  // Always fetch patients first — needed for per-patient entity fetching
+  const allPatients = await fetchAllPaginated(provider, "fetchPatients", creds);
+  if (allPatients.length > 0) {
+    const data = Buffer.from(JSON.stringify(allPatients, null, 2));
+    const ref = await store.put(input.runId, "patients.json", data);
+    artifacts.push(ref);
+    entityCounts.patients = allPatients.length;
+  }
+
+  // Top-level entities (not per-patient)
+  const topLevelFetchers: Array<{ name: string; method: string }> = [
+    { name: "services", method: "fetchServices" },
+    { name: "appointments", method: "fetchAppointments" },
+    { name: "invoices", method: "fetchInvoices" },
   ];
 
-  // Optional entity types
-  if (provider.fetchPhotos) {
-    entityFetchers.push({ name: "photos", fetch: () => provider.fetchPhotos!(creds) });
+  // Optional top-level entities
+  if (provider.fetchCharts && !perPatient.has("charts")) {
+    topLevelFetchers.push({ name: "charts", method: "fetchCharts" });
   }
-  if (provider.fetchForms) {
-    entityFetchers.push({ name: "forms", fetch: () => provider.fetchForms!(creds) });
+  if (provider.fetchPhotos && !perPatient.has("photos")) {
+    topLevelFetchers.push({ name: "photos", method: "fetchPhotos" });
   }
-  if (provider.fetchCharts) {
-    entityFetchers.push({ name: "charts", fetch: () => provider.fetchCharts!(creds) });
+  if (provider.fetchForms && !perPatient.has("forms")) {
+    topLevelFetchers.push({ name: "forms", method: "fetchForms" });
   }
-  if (provider.fetchDocuments) {
-    entityFetchers.push({ name: "documents", fetch: () => provider.fetchDocuments!(creds) });
+  if (provider.fetchDocuments && !perPatient.has("documents")) {
+    topLevelFetchers.push({ name: "documents", method: "fetchDocuments" });
   }
 
-  for (const fetcher of entityFetchers) {
-    const allRecords: unknown[] = [];
-    let cursor: string | undefined;
-
-    // Paginate through all records
-    do {
-      const result = await (cursor
-        ? (provider as unknown as Record<string, Function>)[`fetch${fetcher.name.charAt(0).toUpperCase() + fetcher.name.slice(1)}`](creds, { cursor })
-        : fetcher.fetch());
-      allRecords.push(...result.data);
-      cursor = result.nextCursor;
-    } while (cursor);
-
-    if (allRecords.length > 0) {
-      const data = Buffer.from(JSON.stringify(allRecords, null, 2));
+  for (const fetcher of topLevelFetchers) {
+    const records = await fetchAllPaginated(provider, fetcher.method, creds);
+    if (records.length > 0) {
+      const data = Buffer.from(JSON.stringify(records, null, 2));
       const ref = await store.put(input.runId, `${fetcher.name}.json`, data);
       artifacts.push(ref);
-      entityCounts[fetcher.name] = allRecords.length;
+      entityCounts[fetcher.name] = records.length;
+    }
+  }
+
+  // --- Step 2: Fetch per-patient entities ---
+  // Some providers (e.g., Boulevard) scope photos/forms/docs to a patient ID.
+  // We iterate all patients and aggregate results.
+
+  if (perPatient.size > 0 && allPatients.length > 0) {
+    const patientIds = allPatients.map(
+      (p) => (p as Record<string, unknown>).sourceId as string
+    );
+
+    for (const entityType of perPatient) {
+      const methodName = `fetch${entityType.charAt(0).toUpperCase() + entityType.slice(1)}`;
+      const fetchFn = (provider as unknown as Record<string, Function>)[methodName];
+      if (!fetchFn) continue;
+
+      const allRecords: unknown[] = [];
+      let fetched = 0;
+
+      for (const patientId of patientIds) {
+        // Per-patient entities use cursor to pass the patient ID
+        let cursor: string = entityType === "documents" && provider.locationId
+          ? `${patientId}:${provider.locationId}`
+          : patientId;
+
+        const result = await fetchFn.call(provider, creds, { cursor });
+        if (result.data?.length > 0) {
+          allRecords.push(...result.data);
+          fetched++;
+        }
+      }
+
+      if (allRecords.length > 0) {
+        const data = Buffer.from(JSON.stringify(allRecords, null, 2));
+        const ref = await store.put(input.runId, `${entityType}.json`, data);
+        artifacts.push(ref);
+        entityCounts[entityType] = allRecords.length;
+        console.log(`  [ingest] ${entityType}: ${allRecords.length} records from ${fetched}/${patientIds.length} patients`);
+      }
     }
   }
 
   return { strategy: "api", artifacts, entityCounts };
+}
+
+/** Paginate through all records for a top-level fetcher */
+async function fetchAllPaginated(
+  provider: MigrationProvider,
+  methodName: string,
+  creds: MigrationCredentials
+): Promise<unknown[]> {
+  const fetchFn = (provider as unknown as Record<string, Function>)[methodName];
+  if (!fetchFn) {
+    console.log(`  [ingest] ${methodName}: method not found on provider`);
+    return [];
+  }
+
+  const allRecords: unknown[] = [];
+  let cursor: string | undefined;
+  let page = 0;
+
+  try {
+    do {
+      const result = await fetchFn.call(
+        provider,
+        creds,
+        cursor ? { cursor } : undefined
+      );
+      allRecords.push(...result.data);
+      cursor = result.nextCursor;
+      page++;
+    } while (cursor);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`  [ingest] ${methodName} failed on page ${page}: ${msg}`);
+  }
+
+  console.log(`  [ingest] ${methodName}: ${allRecords.length} records (${page} pages)`);
+  return allRecords;
 }
 
 async function executeBrowserIngest(

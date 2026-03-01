@@ -12,6 +12,7 @@ interface StrategyInput {
 // Known vendor → strategy mappings
 const VENDOR_STRATEGIES: Record<string, IngestStrategy> = {
   boulevard: "api",     // Boulevard has a known GraphQL API
+  mock: "api",          // Mock provider for testing
   csv: "upload",
   generic: "upload",
   json: "upload",

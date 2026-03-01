@@ -182,13 +182,24 @@ async function promotePatient(
   clinicId: string
 ): Promise<string> {
   const address = payload.address as Record<string, string> | undefined;
+  const email = (payload.email as string) || null;
+  const firstName = payload.firstName as string;
+  const lastName = payload.lastName as string;
+
+  // Idempotent: match on email (if available) or firstName+lastName+DOB
+  if (email) {
+    const existing = await prisma.patient.findFirst({
+      where: { clinicId, email },
+    });
+    if (existing) return existing.id;
+  }
 
   const patient = await prisma.patient.create({
     data: {
       clinicId,
-      firstName: payload.firstName as string,
-      lastName: payload.lastName as string,
-      email: (payload.email as string) || null,
+      firstName,
+      lastName,
+      email,
       phone: (payload.phone as string) || null,
       dateOfBirth: payload.dateOfBirth ? new Date(payload.dateOfBirth as string) : null,
       gender: (payload.gender as string) || null,
@@ -250,12 +261,19 @@ async function promoteInvoice(
   if (!patientId) return null;
 
   const lineItems = (payload.lineItems as Array<Record<string, unknown>>) || [];
+  const invoiceNumber = (payload.invoiceNumber as string) || `MIG-${Date.now()}`;
+
+  // Idempotent: check for existing invoice by number
+  const existing = await prisma.invoice.findFirst({
+    where: { clinicId, invoiceNumber },
+  });
+  if (existing) return existing.id;
 
   const invoice = await prisma.invoice.create({
     data: {
       clinicId,
       patientId,
-      invoiceNumber: (payload.invoiceNumber as string) || `MIG-${Date.now()}`,
+      invoiceNumber,
       status: "Paid",
       subtotal: (payload.subtotal as number) || (payload.total as number) || 0,
       taxAmount: (payload.taxAmount as number) || 0,

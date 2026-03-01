@@ -184,6 +184,18 @@ export interface FetchResult<T> {
 export interface MigrationProvider {
   readonly source: string;
 
+  /**
+   * Entity types that require per-patient fetching (e.g., Boulevard photos/forms/docs
+   * are scoped to a client ID). The ingest phase will iterate patients for these.
+   */
+  readonly perPatientEntities?: string[];
+
+  /**
+   * Location ID required for per-patient fetching (e.g., Boulevard documents need
+   * both clientId and locationId). Set after testConnection().
+   */
+  locationId?: string;
+
   testConnection(credentials: MigrationCredentials): Promise<ConnectionTestResult>;
 
   fetchPatients(

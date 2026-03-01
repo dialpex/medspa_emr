@@ -291,8 +291,18 @@ function extractCookies(res: Response, existingCookies: string): string {
     .join("; ");
 }
 
+export interface BoulevardGraphQLExecutor {
+  (
+    credentials: MigrationCredentials,
+    query: string,
+    variables?: Record<string, unknown>
+  ): Promise<{ data?: Record<string, unknown>; errors?: Array<{ message: string }> }>;
+}
+
 export class BoulevardProvider implements MigrationProvider {
   readonly source = "Boulevard";
+  readonly perPatientEntities = ["photos", "forms", "documents"];
+  locationId?: string;
   private sessionCookies: string = "";
   private csrfToken: string = "";
   private credentials: MigrationCredentials | null = null;
@@ -423,7 +433,14 @@ export class BoulevardProvider implements MigrationProvider {
       throw new Error(`Boulevard API error (${res.status}): ${text}`);
     }
 
-    return res.json();
+    const json = await res.json() as GraphQLResponse;
+
+    // Log GraphQL errors for debugging
+    if (json.errors?.length) {
+      console.warn(`  [boulevard] GraphQL errors: ${json.errors.map(e => e.message).join("; ")}`);
+    }
+
+    return json;
   }
 
   async testConnection(credentials: MigrationCredentials): Promise<ConnectionTestResult> {
@@ -433,7 +450,7 @@ export class BoulevardProvider implements MigrationProvider {
       // Query business info + locations to verify full API access
       const result = await this.query(
         credentials,
-        `query { business { id name locations { edges { node { id name } } } } }`
+        `query { business { id name locations { id name } } }`
       );
 
       if (result.errors?.length) {
@@ -445,11 +462,12 @@ export class BoulevardProvider implements MigrationProvider {
 
       const business = result.data?.business as {
         name?: string;
-        locations?: { edges: Array<{ node: { id: string; name: string } }> };
+        locations?: Array<{ id: string; name: string }>;
       } | undefined;
 
       // Use the first location ID for document fetching
-      const locationId = business?.locations?.edges?.[0]?.node?.id;
+      const locationId = business?.locations?.[0]?.id;
+      this.locationId = locationId;
 
       return {
         connected: true,
@@ -472,6 +490,7 @@ export class BoulevardProvider implements MigrationProvider {
     // Boulevard uses page-number pagination (0-indexed), not cursor-based
     const pageNumber = options?.cursor ? parseInt(options.cursor, 10) : 0;
 
+    // Step 1: Search with lightweight fields (ClientSearchResultItem type)
     const result = await this.query(
       credentials,
       `query ClientSearch($query: String, $pageSize: Int, $pageNumber: Int, $filter: JSON) {
@@ -484,58 +503,81 @@ export class BoulevardProvider implements MigrationProvider {
             fullName
             email
             phoneNumber
-            dob
-            pronoun
-            sexAssignedAtBirth
             active
-            address {
-              line1
-              line2
-              city
-              state
-              zip
-            }
-            tags { id name }
-            bookingMemo { text }
           }
         }
       }`,
-      { query: "", pageSize, pageNumber, filter: "null" }
+      { query: "", pageSize, pageNumber, filter: null }
     );
 
     const searchData = result.data?.clientSearch as {
       totalEntries: number;
       clients: Array<Record<string, unknown>>;
-    };
+    } | undefined;
 
-    if (!searchData || searchData.clients.length === 0) {
+    if (!searchData) {
+      console.warn(`  [boulevard] clientSearch returned null. data keys: ${result.data ? Object.keys(result.data).join(", ") : "none"}`);
       return { data: [], totalCount: 0 };
     }
 
-    const data: SourcePatient[] = searchData.clients.map((n) => {
-      const addr = n.address as { line1?: string; line2?: string; city?: string; state?: string; zip?: string } | null;
-      const tags = n.tags as Array<{ name: string }> | null;
-      const memo = n.bookingMemo as { text?: string } | null;
+    if (!searchData.clients || searchData.clients.length === 0) {
+      return { data: [], totalCount: searchData.totalEntries || 0 };
+    }
 
-      return {
-        sourceId: n.id as string,
-        firstName: (n.firstName as string) || "",
-        lastName: (n.lastName as string) || "",
-        email: (n.email as string) || undefined,
-        phone: (n.phoneNumber as string) || undefined,
-        dateOfBirth: (n.dob as string) || undefined,
-        gender: (n.pronoun as string) || (n.sexAssignedAtBirth as string) || undefined,
-        address: addr?.line1,
-        city: addr?.city,
-        state: addr?.state,
-        zipCode: addr?.zip,
-        medicalNotes: memo?.text || undefined,
-        tags: tags?.map((t) => t.name),
-        rawData: n,
-      };
-    });
+    // Step 2: Hydrate each client with full details via client(id:)
+    const data: SourcePatient[] = [];
+    for (const client of searchData.clients) {
+      const clientId = client.id as string;
+      try {
+        const detail = await this.query(
+          credentials,
+          `query GetClient($id: ID!) {
+            client(id: $id) {
+              id firstName lastName fullName email phoneNumber
+              dob pronoun sexAssignedAtBirth active
+              address { line1 line2 city state zip }
+              tags { id name }
+              bookingMemo { text }
+            }
+          }`,
+          { id: clientId }
+        );
 
-    // Calculate if there are more pages
+        const n = (detail.data?.client as Record<string, unknown>) || client;
+        const addr = n.address as { line1?: string; city?: string; state?: string; zip?: string } | null;
+        const tags = n.tags as Array<{ name: string }> | null;
+        const memo = n.bookingMemo as { text?: string } | null;
+
+        data.push({
+          sourceId: n.id as string,
+          firstName: (n.firstName as string) || "",
+          lastName: (n.lastName as string) || "",
+          email: (n.email as string) || undefined,
+          phone: (n.phoneNumber as string) || undefined,
+          dateOfBirth: (n.dob as string) || undefined,
+          gender: (n.pronoun as string) || (n.sexAssignedAtBirth as string) || undefined,
+          address: addr?.line1,
+          city: addr?.city,
+          state: addr?.state,
+          zipCode: addr?.zip,
+          medicalNotes: memo?.text || undefined,
+          tags: tags?.map((t) => t.name),
+          rawData: n,
+        });
+      } catch (err) {
+        // Fall back to search-level data if detail fetch fails
+        console.warn(`  [boulevard] Failed to hydrate client ${clientId}: ${err instanceof Error ? err.message : err}`);
+        data.push({
+          sourceId: clientId,
+          firstName: (client.firstName as string) || "",
+          lastName: (client.lastName as string) || "",
+          email: (client.email as string) || undefined,
+          phone: (client.phoneNumber as string) || undefined,
+          rawData: client,
+        });
+      }
+    }
+
     const totalFetched = (pageNumber + 1) * pageSize;
     const hasMore = totalFetched < searchData.totalEntries;
 
@@ -548,139 +590,88 @@ export class BoulevardProvider implements MigrationProvider {
 
   async fetchServices(
     credentials: MigrationCredentials,
-    options?: FetchOptions
+    _options?: FetchOptions
   ): Promise<FetchResult<SourceService>> {
-    const limit = options?.limit ?? 50;
-    const result = await this.query(
-      credentials,
-      `query($first: Int, $after: String) {
-        services(first: $first, after: $after) {
-          edges {
-            node {
-              id
-              name
-              description
-              duration
-              price
-              category { name }
-              disabled
-            }
-          }
-          pageInfo { hasNextPage endCursor }
-          totalCount
+    // Boulevard dashboard API: try multiple query patterns for services
+    const queries = [
+      // Pattern 1: menuItems on business
+      `query { business { id menuItems { id name description disabled duration price category { name } } } }`,
+      // Pattern 2: services on business
+      `query { business { id services { edges { node { id name description disabled duration price category { name } } } } } }`,
+    ];
+
+    for (const queryStr of queries) {
+      try {
+        const result = await this.query(credentials, queryStr);
+
+        // Check for GraphQL errors — try next pattern
+        if (result.errors?.length && !result.data) continue;
+
+        const business = result.data?.business as Record<string, unknown> | undefined;
+        if (!business) continue;
+
+        // Try to extract items from either menuItems or services.edges
+        let items: Array<Record<string, unknown>> = [];
+        if (business.menuItems) {
+          items = business.menuItems as Array<Record<string, unknown>>;
+        } else if (business.services) {
+          const services = business.services as { edges?: Array<{ node: Record<string, unknown> }> };
+          items = services.edges?.map((e) => e.node) || [];
         }
-      }`,
-      { first: limit, after: options?.cursor || null }
-    );
 
-    const services = result.data?.services as {
-      edges: Array<{ node: Record<string, unknown> }>;
-      pageInfo: { hasNextPage: boolean; endCursor: string };
-      totalCount: number;
-    };
+        if (items.length === 0) continue;
 
-    if (!services) {
-      return { data: [], totalCount: 0 };
+        const data: SourceService[] = items.map((n) => {
+          const cat = n.category as { name: string } | null;
+          return {
+            sourceId: n.id as string,
+            name: (n.name as string) || "",
+            description: (n.description as string) || undefined,
+            duration: (n.duration as number) || undefined,
+            price: (n.price as number) || undefined,
+            category: cat?.name,
+            isActive: !(n.disabled as boolean),
+            rawData: n,
+          };
+        });
+
+        return { data, totalCount: data.length };
+      } catch {
+        continue;
+      }
     }
 
-    const data: SourceService[] = services.edges.map((edge) => {
-      const n = edge.node;
-      const cat = n.category as { name: string } | null;
-      return {
-        sourceId: n.id as string,
-        name: (n.name as string) || "",
-        description: (n.description as string) || undefined,
-        duration: (n.duration as number) || undefined,
-        price: (n.price as number) || undefined,
-        category: cat?.name,
-        isActive: !(n.disabled as boolean),
-        rawData: n,
-      };
-    });
-
-    return {
-      data,
-      nextCursor: services.pageInfo.hasNextPage ? services.pageInfo.endCursor : undefined,
-      totalCount: services.totalCount,
-    };
+    console.warn("  [boulevard] fetchServices: no working query pattern found, returning empty");
+    return { data: [], totalCount: 0 };
   }
 
   async fetchAppointments(
     credentials: MigrationCredentials,
-    options?: FetchOptions
+    _options?: FetchOptions
   ): Promise<FetchResult<SourceAppointment>> {
-    const limit = options?.limit ?? 50;
-    const result = await this.query(
-      credentials,
-      `query($first: Int, $after: String) {
-        appointments(first: $first, after: $after) {
-          edges {
-            node {
-              id
-              client { id }
-              staff { firstName lastName }
-              service { id name }
-              startAt
-              endAt
-              state
-              notes
-            }
-          }
-          pageInfo { hasNextPage endCursor }
-          totalCount
-        }
-      }`,
-      { first: limit, after: options?.cursor || null }
-    );
-
-    const appointments = result.data?.appointments as {
-      edges: Array<{ node: Record<string, unknown> }>;
-      pageInfo: { hasNextPage: boolean; endCursor: string };
-      totalCount: number;
-    };
-
-    if (!appointments) {
-      return { data: [], totalCount: 0 };
-    }
-
-    const data: SourceAppointment[] = appointments.edges.map((edge) => {
-      const n = edge.node;
-      const client = n.client as { id: string } | null;
-      const staff = n.staff as { firstName: string; lastName: string } | null;
-      const service = n.service as { id: string; name: string } | null;
-
-      return {
-        sourceId: n.id as string,
-        patientSourceId: client?.id || "",
-        providerName: staff ? `${staff.firstName} ${staff.lastName}` : undefined,
-        serviceSourceId: service?.id,
-        serviceName: service?.name,
-        startTime: (n.startAt as string) || "",
-        endTime: (n.endAt as string) || undefined,
-        status: (n.state as string) || "unknown",
-        notes: (n.notes as string) || undefined,
-        rawData: n,
-      };
-    });
-
-    return {
-      data,
-      nextCursor: appointments.pageInfo.hasNextPage ? appointments.pageInfo.endCursor : undefined,
-      totalCount: appointments.totalCount,
-    };
+    // Boulevard dashboard API: appointments may not have a bulk list query.
+    // They're typically queried per-date-range or per-client.
+    // For now, return empty — appointments will come from per-patient fetching in v.next.
+    console.warn("  [boulevard] fetchAppointments: bulk query not available in dashboard API, skipping");
+    return { data: [], totalCount: 0 };
   }
 
   async fetchInvoices(
     credentials: MigrationCredentials,
-    options?: FetchOptions
+    _options?: FetchOptions
   ): Promise<FetchResult<SourceInvoice>> {
-    const limit = options?.limit ?? 50;
-    const result = await this.query(
-      credentials,
-      `query($first: Int, $after: String) {
-        orders(first: $first, after: $after) {
-          edges {
-            node {
+    // Boulevard orders require locationId and use a different pagination model.
+    if (!this.locationId) {
+      console.warn("  [boulevard] fetchInvoices: no locationId available, skipping");
+      return { data: [], totalCount: 0 };
+    }
+
+    try {
+      const result = await this.query(
+        credentials,
+        `query GetOrders($locationId: ID!, $limit: Int) {
+          orders(locationId: $locationId, limit: $limit) {
+            results {
               id
               client { id }
               number
@@ -690,63 +681,44 @@ export class BoulevardProvider implements MigrationProvider {
               totalTax
               notes
               closedAt
-              lineItems {
-                description
-                service { id }
-                quantity
-                unitPrice
-                total
-              }
             }
+            total
           }
-          pageInfo { hasNextPage endCursor }
-          totalCount
-        }
-      }`,
-      { first: limit, after: options?.cursor || null }
-    );
+        }`,
+        { locationId: this.locationId, limit: 100 }
+      );
 
-    const orders = result.data?.orders as {
-      edges: Array<{ node: Record<string, unknown> }>;
-      pageInfo: { hasNextPage: boolean; endCursor: string };
-      totalCount: number;
-    };
+      const orders = result.data?.orders as {
+        results?: Array<Record<string, unknown>>;
+        total?: number;
+      } | undefined;
 
-    if (!orders) {
+      if (!orders?.results?.length) {
+        return { data: [], totalCount: orders?.total || 0 };
+      }
+
+      const data: SourceInvoice[] = orders.results.map((n) => {
+        const client = n.client as { id: string } | null;
+        return {
+          sourceId: n.id as string,
+          patientSourceId: client?.id || "",
+          invoiceNumber: (n.number as string) || undefined,
+          status: (n.state as string) || "unknown",
+          total: (n.total as number) || 0,
+          subtotal: (n.subtotal as number) || undefined,
+          taxAmount: (n.totalTax as number) || undefined,
+          notes: (n.notes as string) || undefined,
+          paidAt: (n.closedAt as string) || undefined,
+          lineItems: [],
+          rawData: n,
+        };
+      });
+
+      return { data, totalCount: orders.total || data.length };
+    } catch {
+      console.warn("  [boulevard] fetchInvoices: query failed, schema may differ");
       return { data: [], totalCount: 0 };
     }
-
-    const data: SourceInvoice[] = orders.edges.map((edge) => {
-      const n = edge.node;
-      const client = n.client as { id: string } | null;
-      const items = (n.lineItems as Array<Record<string, unknown>>) || [];
-
-      return {
-        sourceId: n.id as string,
-        patientSourceId: client?.id || "",
-        invoiceNumber: (n.number as string) || undefined,
-        status: (n.state as string) || "unknown",
-        total: (n.total as number) || 0,
-        subtotal: (n.subtotal as number) || undefined,
-        taxAmount: (n.totalTax as number) || undefined,
-        notes: (n.notes as string) || undefined,
-        paidAt: (n.closedAt as string) || undefined,
-        lineItems: items.map((item) => ({
-          description: (item.description as string) || "",
-          serviceSourceId: (item.service as { id: string } | null)?.id,
-          quantity: (item.quantity as number) || 1,
-          unitPrice: (item.unitPrice as number) || 0,
-          total: (item.total as number) || 0,
-        })),
-        rawData: n,
-      };
-    });
-
-    return {
-      data,
-      nextCursor: orders.pageInfo.hasNextPage ? orders.pageInfo.endCursor : undefined,
-      totalCount: orders.totalCount,
-    };
   }
 
   async fetchPhotos(
@@ -1038,5 +1010,82 @@ export class BoulevardProvider implements MigrationProvider {
       cursor: `${clientId}:${locationId}`,
     });
     return result.data;
+  }
+
+  /**
+   * Expose the internal GraphQL executor for the schema discovery agent.
+   * The agent uses this to run introspection and test queries.
+   */
+  getGraphQLExecutor(): BoulevardGraphQLExecutor {
+    return (credentials, queryStr, variables) =>
+      this.query(credentials, queryStr, variables);
+  }
+
+  /**
+   * Return existing hardcoded queries as seed knowledge for the discovery agent.
+   * These are hints, not hard dependencies — the agent may discover better queries.
+   */
+  getSeedQueries(): Array<{ entityType: string; query: string; variables?: Record<string, unknown> }> {
+    return [
+      {
+        entityType: "patients",
+        query: `query ClientSearch($query: String, $pageSize: Int, $pageNumber: Int, $filter: JSON) {
+          clientSearch(query: $query, pageSize: $pageSize, pageNumber: $pageNumber, filter: $filter) {
+            totalEntries
+            clients { id firstName lastName fullName email phoneNumber active }
+          }
+        }`,
+        variables: { query: "", pageSize: 50, pageNumber: 0, filter: null },
+      },
+      {
+        entityType: "services",
+        query: `query { business { id menuItems { id name description disabled duration price category { name } } } }`,
+      },
+      {
+        entityType: "invoices",
+        query: `query GetOrders($locationId: ID!, $limit: Int) {
+          orders(locationId: $locationId, limit: $limit) {
+            results { id client { id } number state total subtotal totalTax notes closedAt }
+            total
+          }
+        }`,
+        variables: { locationId: "", limit: 100 },
+      },
+      {
+        entityType: "photos",
+        query: `query getPhotoGallery($clientId: ID!, $options: GetPhotoGalleryOptions) {
+          photoGallery(clientId: $clientId, options: $options) {
+            cursor
+            items { id url label appointmentId insertedAt }
+          }
+        }`,
+        variables: { clientId: "", options: { limit: 100 } },
+      },
+      {
+        entityType: "forms",
+        query: `query GetClientForms($id: ID!) {
+          client(id: $id) {
+            id
+            customForms {
+              id status submittedAt
+              version { template { id name internal } }
+              appointment { id }
+            }
+          }
+        }`,
+        variables: { id: "" },
+      },
+      {
+        entityType: "documents",
+        query: `query getMigratedFiles($input: MigratedFilesInput!) {
+          migratedFiles(input: $input) {
+            migratedFiles { id fileName url insertedAt originallyCreatedAt }
+            pageInfo { hasNextPage endCursor }
+            totalCount
+          }
+        }`,
+        variables: { input: { clientId: "", locationId: "", limit: 50 } },
+      },
+    ];
   }
 }

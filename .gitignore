@@ -50,3 +50,6 @@ next-env.d.ts
 # uploaded files
 /storage
 /public/uploads
+
+# migration agent cache
+.migration-cache/
