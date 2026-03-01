@@ -5,15 +5,19 @@ import {
   DISCOVERY_SCHEMA,
   MAPPING_SCHEMA,
   VERIFICATION_SCHEMA,
+  FORM_CLASSIFICATION_SCHEMA,
   type DiscoveryResponse,
   type MappingResponse,
   type VerificationResponse,
+  type FormClassificationResponse,
 } from "./agent-schemas";
 import {
   DISCOVERY_SYSTEM_PROMPT,
   MAPPING_SYSTEM_PROMPT,
   VERIFICATION_SYSTEM_PROMPT,
+  FORM_CLASSIFICATION_SYSTEM_PROMPT,
 } from "./agent-prompts";
+import type { SourceForm, FormFieldContent } from "./providers/types";
 import { decrypt } from "./crypto";
 
 // Temperature 0.2 — deterministic for data migration, not creative writing
@@ -298,6 +302,136 @@ Total records processed: ${migrationLogs.length}`;
     userMessage,
     VERIFICATION_SCHEMA,
     mockVerification
+  );
+}
+
+/**
+ * Classify forms as consent, clinical_chart, intake, or skip.
+ * Uses AI when available, falls back to heuristic classification.
+ */
+export async function classifyAndMapForms(
+  forms: Array<SourceForm & { fields?: FormFieldContent[] }>
+): Promise<FormClassificationResponse> {
+  const userMessage = `Classify these ${forms.length} forms from a MedSpa migration:
+
+${JSON.stringify(
+  forms.map((f) => ({
+    sourceId: f.sourceId,
+    templateName: f.templateName,
+    status: f.status,
+    isInternal: f.isInternal,
+    submittedByRole: f.submittedByRole,
+    fields: f.fields?.map((field) => ({
+      label: field.label,
+      type: field.type,
+      value: field.value,
+      selectedOptions: field.selectedOptions,
+    })),
+  })),
+  null,
+  2
+)}`;
+
+  // Heuristic mock fallback
+  const mockClassifications: FormClassificationResponse = {
+    classifications: forms.map((f) => {
+      const name = f.templateName.toLowerCase();
+
+      if (f.isInternal && !name.includes("chart") && !name.includes("treatment")) {
+        return {
+          formSourceId: f.sourceId,
+          classification: "skip" as const,
+          confidence: 0.8,
+          reasoning: "Internal admin form",
+          chartData: null,
+        };
+      }
+
+      if (
+        name.includes("consent") ||
+        name.includes("waiver") ||
+        name.includes("agreement") ||
+        name.includes("policy") ||
+        name.includes("authorization") ||
+        name.includes("instructions")
+      ) {
+        return {
+          formSourceId: f.sourceId,
+          classification: "consent" as const,
+          confidence: 0.9,
+          reasoning: `Template name "${f.templateName}" matches consent pattern`,
+          chartData: null,
+        };
+      }
+
+      if (
+        name.includes("intake") ||
+        name.includes("history") ||
+        name.includes("questionnaire") ||
+        name.includes("survey") ||
+        name.includes("registration")
+      ) {
+        return {
+          formSourceId: f.sourceId,
+          classification: "intake" as const,
+          confidence: 0.85,
+          reasoning: `Template name "${f.templateName}" matches intake pattern`,
+          chartData: null,
+        };
+      }
+
+      if (
+        name.includes("chart") ||
+        name.includes("treatment") ||
+        name.includes("procedure") ||
+        name.includes("clinical") ||
+        name.includes("assessment")
+      ) {
+        // Build rich narrative from data-bearing fields only (skip headings, signatures, images)
+        const dataFields = f.fields?.filter((fld) =>
+          fld.type !== "heading" && fld.type !== "signature" && fld.type !== "image"
+        ) || [];
+
+        const narrativeLines: string[] = [];
+        for (const fld of dataFields) {
+          if (!fld.value && (!fld.selectedOptions || fld.selectedOptions.length === 0)) continue;
+          const val = fld.selectedOptions?.length
+            ? fld.selectedOptions.join(", ")
+            : fld.value || "";
+          if (val) narrativeLines.push(`${fld.label}: ${val}`);
+        }
+
+        return {
+          formSourceId: f.sourceId,
+          classification: "clinical_chart" as const,
+          confidence: 0.75,
+          reasoning: `Template name "${f.templateName}" matches clinical chart pattern`,
+          chartData: {
+            chiefComplaint: f.templateName,
+            templateType: "Other" as const,
+            treatmentCardTitle: f.templateName,
+            narrativeText: narrativeLines.join("\n"),
+            structuredData: {},
+          },
+        };
+      }
+
+      // Default: treat as consent (safest for unknown forms)
+      return {
+        formSourceId: f.sourceId,
+        classification: "consent" as const,
+        confidence: 0.6,
+        reasoning: `No clear pattern match for "${f.templateName}" — defaulting to consent`,
+        chartData: null,
+      };
+    }),
+  };
+
+  return runAI<FormClassificationResponse>(
+    FORM_CLASSIFICATION_SYSTEM_PROMPT,
+    userMessage,
+    FORM_CLASSIFICATION_SCHEMA,
+    mockClassifications
   );
 }
 

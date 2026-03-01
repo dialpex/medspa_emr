@@ -8,6 +8,10 @@ import type {
   SourceService,
   SourceAppointment,
   SourceInvoice,
+  SourcePhoto,
+  SourceForm,
+  SourceDocument,
+  FormFieldContent,
 } from "./types";
 
 const BOULEVARD_BASE = "https://dashboard.boulevard.io";
@@ -18,6 +22,238 @@ const BOULEVARD_GRAPH_URL = `${BOULEVARD_BASE}/api/v1.0/graph`;
 interface GraphQLResponse {
   data?: Record<string, unknown>;
   errors?: Array<{ message: string }>;
+}
+
+/**
+ * Boulevard form content query — uses inline fragments for the CustomFormComponent union.
+ * Each component type has different answer fields (textAnswer, checkboxAnswer, dateAnswer, etc.).
+ * Components are positioned on a grid (x, y, w, h) — we use `y` for sort ordering.
+ */
+const BOULEVARD_FORM_CONTENT_QUERY = `query GetFormContent($id: ID!) {
+  customForm(id: $id) {
+    id
+    formUrl
+    version {
+      template { name }
+      components {
+        __typename
+        ... on CustomFormComponentTextV2 { id y value }
+        ... on CustomFormComponentTextInputV2 { id y label textAnswer placeholder connectedField }
+        ... on CustomFormComponentTextarea { id y label textAnswer textareaAnswer }
+        ... on CustomFormComponentText { id y label textAnswer }
+        ... on CustomFormComponentCheckboxV2 { id y label checkboxAnswer values { label } enableOther otherAnswer }
+        ... on CustomFormComponentCheckbox { id y label checkboxAnswer values { label } }
+        ... on CustomFormComponentDateV2 { id y label dateAnswer connectedField }
+        ... on CustomFormComponentDate { id y label dateAnswer }
+        ... on CustomFormComponentDropdownV2 { id y label dropdownAnswer values { label } }
+        ... on CustomFormComponentSelect { id y label selectAnswer values { label } }
+        ... on CustomFormComponentMultipleChoiceV2 { id y label radioAnswer values { label } }
+        ... on CustomFormComponentRadio { id y label radioAnswer values { label } }
+        ... on CustomFormComponentSignatureV2 { id y label }
+        ... on CustomFormComponentSignature { id y label }
+        ... on CustomFormComponentImageUploaderV2 { id y label }
+        ... on CustomFormComponentImageV2 { id y label src }
+        ... on CustomFormComponentH1 { id y label }
+        ... on CustomFormComponentH2 { id y label }
+        ... on CustomFormComponentDividerV2 { id y }
+        ... on CustomFormComponentLogoV2 { id y }
+        ... on CustomFormComponentLogo { id y }
+        ... on CustomFormComponentMarkdown { id y markdownContent }
+      }
+    }
+  }
+}`;
+
+/**
+ * Parse Boulevard form components into normalized FormFieldContent array.
+ * Skips decorative elements (dividers, logos) and focuses on data-bearing components.
+ * Components are sorted by y position to preserve form layout order.
+ */
+function parseBoulevardFormComponents(
+  components: Array<Record<string, unknown>>
+): FormFieldContent[] {
+  const fields: FormFieldContent[] = [];
+
+  for (const comp of components) {
+    const typename = comp.__typename as string;
+    const id = (comp.id as string) || "";
+    const y = (comp.y as number) ?? 0;
+
+    // Skip decorative/layout components
+    if (
+      typename.includes("Divider") ||
+      typename.includes("Logo") ||
+      typename === "CustomFormComponentMarkdown"
+    ) {
+      continue;
+    }
+
+    // Static text headings (H1, H2, TextV2)
+    if (typename === "CustomFormComponentH1" || typename === "CustomFormComponentH2") {
+      const label = comp.label as string;
+      if (label) {
+        fields.push({ fieldId: id, label, type: "heading", value: null, sortOrder: y });
+      }
+      continue;
+    }
+
+    if (typename === "CustomFormComponentTextV2") {
+      const value = comp.value as string;
+      if (value) {
+        fields.push({ fieldId: id, label: value, type: "heading", value: null, sortOrder: y });
+      }
+      continue;
+    }
+
+    // Text inputs
+    if (
+      typename === "CustomFormComponentTextInputV2" ||
+      typename === "CustomFormComponentText"
+    ) {
+      fields.push({
+        fieldId: id,
+        label: (comp.label as string) || "",
+        type: (comp.connectedField as string) ? "connected_text" : "text",
+        value: (comp.textAnswer as string) || null,
+        sortOrder: y,
+      });
+      continue;
+    }
+
+    // Textareas
+    if (typename === "CustomFormComponentTextarea") {
+      fields.push({
+        fieldId: id,
+        label: (comp.label as string) || "",
+        type: "textarea",
+        value: (comp.textareaAnswer as string) || (comp.textAnswer as string) || null,
+        sortOrder: y,
+      });
+      continue;
+    }
+
+    // Checkboxes
+    if (
+      typename === "CustomFormComponentCheckboxV2" ||
+      typename === "CustomFormComponentCheckbox"
+    ) {
+      const checkboxAnswer = (comp.checkboxAnswer as string[]) || [];
+      const values = (comp.values as Array<{ label: string }>) || [];
+      const otherAnswer = comp.otherAnswer as string | undefined;
+      const selected = [...checkboxAnswer];
+      if (otherAnswer) selected.push(otherAnswer);
+
+      fields.push({
+        fieldId: id,
+        label: (comp.label as string) || "",
+        type: "checkbox",
+        value: selected.join(", ") || null,
+        selectedOptions: selected.length > 0 ? selected : undefined,
+        availableOptions: values.map((v) => v.label),
+        sortOrder: y,
+      });
+      continue;
+    }
+
+    // Dates
+    if (
+      typename === "CustomFormComponentDateV2" ||
+      typename === "CustomFormComponentDate"
+    ) {
+      fields.push({
+        fieldId: id,
+        label: (comp.label as string) || "",
+        type: (comp.connectedField as string) ? "connected_date" : "date",
+        value: (comp.dateAnswer as string) || null,
+        sortOrder: y,
+      });
+      continue;
+    }
+
+    // Dropdowns
+    if (typename === "CustomFormComponentDropdownV2") {
+      const dropdownAnswer = (comp.dropdownAnswer as string[]) || [];
+      const values = (comp.values as Array<{ label: string }>) || [];
+      fields.push({
+        fieldId: id,
+        label: (comp.label as string) || "",
+        type: "dropdown",
+        value: dropdownAnswer.join(", ") || null,
+        selectedOptions: dropdownAnswer.length > 0 ? dropdownAnswer : undefined,
+        availableOptions: values.map((v) => v.label),
+        sortOrder: y,
+      });
+      continue;
+    }
+
+    // Selects
+    if (typename === "CustomFormComponentSelect") {
+      const selectAnswer = (comp.selectAnswer as string[]) || [];
+      const values = (comp.values as Array<{ label: string }>) || [];
+      fields.push({
+        fieldId: id,
+        label: (comp.label as string) || "",
+        type: "select",
+        value: selectAnswer.join(", ") || null,
+        selectedOptions: selectAnswer.length > 0 ? selectAnswer : undefined,
+        availableOptions: values.map((v) => v.label),
+        sortOrder: y,
+      });
+      continue;
+    }
+
+    // Multiple choice / Radio
+    if (
+      typename === "CustomFormComponentMultipleChoiceV2" ||
+      typename === "CustomFormComponentRadio"
+    ) {
+      const values = (comp.values as Array<{ label: string }>) || [];
+      fields.push({
+        fieldId: id,
+        label: (comp.label as string) || "",
+        type: "radio",
+        value: (comp.radioAnswer as string) || null,
+        availableOptions: values.map((v) => v.label),
+        sortOrder: y,
+      });
+      continue;
+    }
+
+    // Signatures
+    if (
+      typename === "CustomFormComponentSignatureV2" ||
+      typename === "CustomFormComponentSignature"
+    ) {
+      fields.push({
+        fieldId: id,
+        label: (comp.label as string) || "Signature",
+        type: "signature",
+        value: "[signed]",
+        sortOrder: y,
+      });
+      continue;
+    }
+
+    // Image uploaders
+    if (
+      typename === "CustomFormComponentImageUploaderV2" ||
+      typename === "CustomFormComponentImageV2"
+    ) {
+      fields.push({
+        fieldId: id,
+        label: (comp.label as string) || "Photo",
+        type: "image",
+        value: (comp.src as string) || null,
+        sortOrder: y,
+      });
+      continue;
+    }
+  }
+
+  // Sort by y position to preserve form layout order
+  fields.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+  return fields;
 }
 
 /**
@@ -194,10 +430,10 @@ export class BoulevardProvider implements MigrationProvider {
     try {
       await this.authenticate(credentials);
 
-      // Query business info to verify full API access
+      // Query business info + locations to verify full API access
       const result = await this.query(
         credentials,
-        `query { business { id name } }`
+        `query { business { id name locations { edges { node { id name } } } } }`
       );
 
       if (result.errors?.length) {
@@ -207,10 +443,18 @@ export class BoulevardProvider implements MigrationProvider {
         };
       }
 
-      const business = result.data?.business as { name?: string } | undefined;
+      const business = result.data?.business as {
+        name?: string;
+        locations?: { edges: Array<{ node: { id: string; name: string } }> };
+      } | undefined;
+
+      // Use the first location ID for document fetching
+      const locationId = business?.locations?.edges?.[0]?.node?.id;
+
       return {
         connected: true,
         businessName: business?.name ?? "Unknown Business",
+        locationId,
       };
     } catch (err) {
       return {
@@ -224,75 +468,81 @@ export class BoulevardProvider implements MigrationProvider {
     credentials: MigrationCredentials,
     options?: FetchOptions
   ): Promise<FetchResult<SourcePatient>> {
-    const limit = options?.limit ?? 50;
+    const pageSize = options?.limit ?? 50;
+    // Boulevard uses page-number pagination (0-indexed), not cursor-based
+    const pageNumber = options?.cursor ? parseInt(options.cursor, 10) : 0;
+
     const result = await this.query(
       credentials,
-      `query($first: Int, $after: String) {
-        clients(first: $first, after: $after) {
-          edges {
-            cursor
-            node {
-              id
-              firstName
-              lastName
-              email
-              mobilePhone
-              dob
-              gender
-              address {
-                line1
-                city
-                state
-                zip
-              }
-              notes
-              tags { name }
+      `query ClientSearch($query: String, $pageSize: Int, $pageNumber: Int, $filter: JSON) {
+        clientSearch(query: $query, pageSize: $pageSize, pageNumber: $pageNumber, filter: $filter) {
+          totalEntries
+          clients {
+            id
+            firstName
+            lastName
+            fullName
+            email
+            phoneNumber
+            dob
+            pronoun
+            sexAssignedAtBirth
+            active
+            address {
+              line1
+              line2
+              city
+              state
+              zip
             }
+            tags { id name }
+            bookingMemo { text }
           }
-          pageInfo { hasNextPage endCursor }
-          totalCount
         }
       }`,
-      { first: limit, after: options?.cursor || null }
+      { query: "", pageSize, pageNumber, filter: "null" }
     );
 
-    const clients = result.data?.clients as {
-      edges: Array<{ node: Record<string, unknown>; cursor: string }>;
-      pageInfo: { hasNextPage: boolean; endCursor: string };
-      totalCount: number;
+    const searchData = result.data?.clientSearch as {
+      totalEntries: number;
+      clients: Array<Record<string, unknown>>;
     };
 
-    if (!clients) {
+    if (!searchData || searchData.clients.length === 0) {
       return { data: [], totalCount: 0 };
     }
 
-    const data: SourcePatient[] = clients.edges.map((edge) => {
-      const n = edge.node;
-      const addr = n.address as { line1?: string; city?: string; state?: string; zip?: string } | null;
+    const data: SourcePatient[] = searchData.clients.map((n) => {
+      const addr = n.address as { line1?: string; line2?: string; city?: string; state?: string; zip?: string } | null;
       const tags = n.tags as Array<{ name: string }> | null;
+      const memo = n.bookingMemo as { text?: string } | null;
 
       return {
         sourceId: n.id as string,
         firstName: (n.firstName as string) || "",
         lastName: (n.lastName as string) || "",
         email: (n.email as string) || undefined,
-        phone: (n.mobilePhone as string) || undefined,
+        phone: (n.phoneNumber as string) || undefined,
         dateOfBirth: (n.dob as string) || undefined,
-        gender: (n.gender as string) || undefined,
+        gender: (n.pronoun as string) || (n.sexAssignedAtBirth as string) || undefined,
         address: addr?.line1,
         city: addr?.city,
         state: addr?.state,
         zipCode: addr?.zip,
-        medicalNotes: (n.notes as string) || undefined,
+        medicalNotes: memo?.text || undefined,
         tags: tags?.map((t) => t.name),
         rawData: n,
       };
     });
 
+    // Calculate if there are more pages
+    const totalFetched = (pageNumber + 1) * pageSize;
+    const hasMore = totalFetched < searchData.totalEntries;
+
     return {
       data,
-      nextCursor: clients.pageInfo.hasNextPage ? clients.pageInfo.endCursor : undefined,
-      totalCount: clients.totalCount,
+      nextCursor: hasMore ? String(pageNumber + 1) : undefined,
+      totalCount: searchData.totalEntries,
     };
   }
 
@@ -497,5 +747,296 @@ export class BoulevardProvider implements MigrationProvider {
       nextCursor: orders.pageInfo.hasNextPage ? orders.pageInfo.endCursor : undefined,
       totalCount: orders.totalCount,
     };
+  }
+
+  async fetchPhotos(
+    credentials: MigrationCredentials,
+    options?: FetchOptions
+  ): Promise<FetchResult<SourcePhoto>> {
+    // Boulevard photo gallery is per-client, so we need to fetch patients first
+    // then iterate. For the pipeline, this is called with a patientSourceId in options.
+    // If no specific patient, we return empty (photos are fetched per-patient during import).
+    const patientId = options?.cursor;
+    if (!patientId) {
+      return { data: [], totalCount: 0 };
+    }
+
+    const result = await this.query(
+      credentials,
+      `query getPhotoGallery($clientId: ID!, $options: GetPhotoGalleryOptions) {
+        photoGallery(clientId: $clientId, options: $options) {
+          cursor
+          items {
+            appointmentId
+            customFormId
+            serviceStaffIds
+            entity
+            id
+            insertedAt
+            label
+            url
+          }
+        }
+      }`,
+      {
+        clientId: patientId,
+        options: { limit: options?.limit ?? 100 },
+      }
+    );
+
+    const gallery = result.data?.photoGallery as {
+      cursor: string | null;
+      items: Array<Record<string, unknown>>;
+    };
+
+    if (!gallery || !gallery.items?.length) {
+      return { data: [], totalCount: 0 };
+    }
+
+    const data: SourcePhoto[] = gallery.items.map((item) => ({
+      sourceId: item.id as string,
+      patientSourceId: patientId,
+      url: item.url as string,
+      label: (item.label as string) || undefined,
+      appointmentSourceId: (item.appointmentId as string) || undefined,
+      takenAt: (item.insertedAt as string) || undefined,
+      rawData: item,
+    }));
+
+    return {
+      data,
+      nextCursor: gallery.cursor || undefined,
+      totalCount: data.length,
+    };
+  }
+
+  /**
+   * Fetch photos for a specific Boulevard client by ID.
+   * Convenience method used by the test import script and pipeline.
+   */
+  async fetchPatientPhotos(
+    credentials: MigrationCredentials,
+    clientId: string,
+    limit = 100
+  ): Promise<SourcePhoto[]> {
+    const result = await this.fetchPhotos(credentials, { cursor: clientId, limit });
+    return result.data;
+  }
+
+  async fetchForms(
+    credentials: MigrationCredentials,
+    options?: FetchOptions
+  ): Promise<FetchResult<SourceForm>> {
+    // Boulevard forms are per-client. Pass patientSourceId via cursor.
+    const patientId = options?.cursor;
+    if (!patientId) {
+      return { data: [], totalCount: 0 };
+    }
+
+    const result = await this.query(
+      credentials,
+      `query GetClientForms($id: ID!) {
+        client(id: $id) {
+          id
+          customForms {
+            id
+            submittedByStaff {
+              firstName
+              lastName
+            }
+            submittedByClient {
+              firstName
+              lastName
+            }
+            updatedAt
+            submittedAt
+            offline
+            status
+            expirationDate
+            version {
+              template {
+                id
+                name
+                internal
+              }
+              templatingVersion
+            }
+            appointment {
+              id
+            }
+          }
+        }
+      }`,
+      { id: patientId }
+    );
+
+    const clientData = result.data?.client as Record<string, unknown> | null;
+    const customForms = (clientData?.customForms as Array<Record<string, unknown>>) || [];
+
+    if (!customForms.length) {
+      return { data: [], totalCount: 0 };
+    }
+
+    const data: SourceForm[] = customForms.map((f) => {
+      const version = f.version as { template?: { id?: string; name?: string; internal?: boolean } } | null;
+      const staff = f.submittedByStaff as { firstName?: string; lastName?: string } | null;
+      const client = f.submittedByClient as { firstName?: string; lastName?: string } | null;
+      const appt = f.appointment as { id?: string } | null;
+
+      let submittedByName: string | undefined;
+      let submittedByRole: "staff" | "client" | undefined;
+      if (staff?.firstName) {
+        submittedByName = `${staff.firstName} ${staff.lastName || ""}`.trim();
+        submittedByRole = "staff";
+      } else if (client?.firstName) {
+        submittedByName = `${client.firstName} ${client.lastName || ""}`.trim();
+        submittedByRole = "client";
+      }
+
+      return {
+        sourceId: f.id as string,
+        patientSourceId: patientId,
+        templateId: version?.template?.id,
+        templateName: version?.template?.name || "Unknown Form",
+        status: (f.status as string) || undefined,
+        isInternal: version?.template?.internal,
+        submittedAt: (f.submittedAt as string) || undefined,
+        expirationDate: (f.expirationDate as string) || undefined,
+        submittedByName,
+        submittedByRole,
+        appointmentSourceId: appt?.id,
+        rawData: f,
+      };
+    });
+
+    return {
+      data,
+      totalCount: customForms.length,
+    };
+  }
+
+  /**
+   * Fetch forms for a specific Boulevard client by ID.
+   * Convenience method used by the test import script and pipeline.
+   */
+  async fetchPatientForms(
+    credentials: MigrationCredentials,
+    clientId: string
+  ): Promise<SourceForm[]> {
+    const result = await this.fetchForms(credentials, { cursor: clientId });
+    return result.data;
+  }
+
+  async fetchFormContent(
+    credentials: MigrationCredentials,
+    formSourceId: string
+  ): Promise<FormFieldContent[]> {
+    try {
+      const result = await this.query(
+        credentials,
+        BOULEVARD_FORM_CONTENT_QUERY,
+        { id: formSourceId }
+      );
+
+      const formData = result.data?.customForm as Record<string, unknown> | null;
+      const version = formData?.version as { components?: Array<Record<string, unknown>> } | null;
+
+      if (!version?.components) {
+        return [];
+      }
+
+      return parseBoulevardFormComponents(version.components);
+    } catch (err) {
+      console.warn(
+        `[Boulevard] Failed to fetch form content for ${formSourceId}: ${err instanceof Error ? err.message : String(err)}`
+      );
+      return [];
+    }
+  }
+
+  async fetchDocuments(
+    credentials: MigrationCredentials,
+    options?: FetchOptions
+  ): Promise<FetchResult<SourceDocument>> {
+    // Boulevard files are per-client + per-location.
+    // Pass "clientId:locationId" via cursor (colon-separated).
+    const cursorParts = options?.cursor?.split(":") ?? [];
+    const clientId = cursorParts[0];
+    const locationId = cursorParts[1];
+
+    if (!clientId || !locationId) {
+      return { data: [], totalCount: 0 };
+    }
+
+    const result = await this.query(
+      credentials,
+      `query getMigratedFiles($input: MigratedFilesInput!) {
+        migratedFiles(input: $input) {
+          migratedFiles {
+            fileName
+            id
+            insertedAt
+            originallyCreatedAt
+            url
+          }
+          pageInfo {
+            hasNextPage
+            hasPreviousPage
+            startCursor
+            endCursor
+          }
+          totalCount
+        }
+      }`,
+      {
+        input: {
+          clientId,
+          locationId,
+          limit: options?.limit ?? 50,
+        },
+      }
+    );
+
+    const filesData = result.data?.migratedFiles as {
+      migratedFiles: Array<Record<string, unknown>>;
+      pageInfo: { hasNextPage: boolean; endCursor: string };
+      totalCount: number;
+    };
+
+    if (!filesData || !filesData.migratedFiles?.length) {
+      return { data: [], totalCount: filesData?.totalCount ?? 0 };
+    }
+
+    const data: SourceDocument[] = filesData.migratedFiles.map((f) => ({
+      sourceId: f.id as string,
+      patientSourceId: clientId,
+      url: f.url as string,
+      filename: (f.fileName as string) || "unknown",
+      category: "migrated_file",
+      rawData: f,
+    }));
+
+    return {
+      data,
+      nextCursor: filesData.pageInfo.hasNextPage
+        ? `${clientId}:${locationId}:${filesData.pageInfo.endCursor}`
+        : undefined,
+      totalCount: filesData.totalCount,
+    };
+  }
+
+  /**
+   * Fetch documents/files for a specific Boulevard client + location.
+   * Convenience method used by the test import script and pipeline.
+   */
+  async fetchPatientDocuments(
+    credentials: MigrationCredentials,
+    clientId: string,
+    locationId: string
+  ): Promise<SourceDocument[]> {
+    const result = await this.fetchDocuments(credentials, {
+      cursor: `${clientId}:${locationId}`,
+    });
+    return result.data;
   }
 }

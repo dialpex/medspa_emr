@@ -116,6 +116,33 @@ describe("MockMigrationProvider", () => {
     }
   });
 
+  it("fetches forms", async () => {
+    const result = await provider.fetchForms!(credentials);
+    expect(result.data.length).toBe(5);
+    for (const form of result.data) {
+      expect(form.sourceId).toBeTruthy();
+      expect(form.patientSourceId).toBeTruthy();
+      expect(form.templateName).toBeTruthy();
+      expect(form.rawData).toBeDefined();
+    }
+  });
+
+  it("forms include submission metadata", async () => {
+    const result = await provider.fetchForms!(credentials);
+    const withSubmitter = result.data.filter((f) => f.submittedByName);
+    expect(withSubmitter.length).toBe(5);
+    const staffForms = result.data.filter((f) => f.submittedByRole === "staff");
+    expect(staffForms.length).toBeGreaterThanOrEqual(1);
+    const clientForms = result.data.filter((f) => f.submittedByRole === "client");
+    expect(clientForms.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("forms include internal flag", async () => {
+    const result = await provider.fetchForms!(credentials);
+    const internalForms = result.data.filter((f) => f.isInternal);
+    expect(internalForms.length).toBeGreaterThanOrEqual(1);
+  });
+
   it("fetches photos", async () => {
     const result = await provider.fetchPhotos!(credentials);
     expect(result.data.length).toBe(2);

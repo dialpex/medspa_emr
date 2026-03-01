@@ -187,6 +187,61 @@ export const VERIFICATION_SCHEMA = {
   },
 };
 
+export const FORM_CLASSIFICATION_SCHEMA = {
+  type: "json_schema" as const,
+  json_schema: {
+    name: "form_classification",
+    strict: true,
+    schema: {
+      type: "object",
+      required: ["classifications"],
+      additionalProperties: false,
+      properties: {
+        classifications: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["formSourceId", "classification", "confidence", "reasoning", "chartData"],
+            additionalProperties: false,
+            properties: {
+              formSourceId: { type: "string" },
+              classification: {
+                type: "string",
+                enum: ["consent", "clinical_chart", "intake", "skip"],
+              },
+              confidence: { type: "number", description: "0.0 to 1.0" },
+              reasoning: { type: "string" },
+              chartData: {
+                anyOf: [
+                  {
+                    type: "object",
+                    required: ["chiefComplaint", "templateType", "treatmentCardTitle", "narrativeText", "structuredData"],
+                    additionalProperties: false,
+                    properties: {
+                      chiefComplaint: { type: "string" },
+                      templateType: {
+                        type: "string",
+                        enum: ["Injectable", "Laser", "Esthetics", "Other"],
+                      },
+                      treatmentCardTitle: { type: "string" },
+                      narrativeText: { type: "string" },
+                      structuredData: {
+                        type: "object",
+                        additionalProperties: true,
+                      },
+                    },
+                  },
+                  { type: "null" },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 // TypeScript types matching the schemas above
 
 export interface DiscoveryResponse {
@@ -231,6 +286,22 @@ export interface DecisionResponse {
     }>;
     recommendedOption: string;
     reasoning: string;
+  }>;
+}
+
+export interface FormClassificationResponse {
+  classifications: Array<{
+    formSourceId: string;
+    classification: "consent" | "clinical_chart" | "intake" | "skip";
+    confidence: number;
+    reasoning: string;
+    chartData: {
+      chiefComplaint: string;
+      templateType: "Injectable" | "Laser" | "Esthetics" | "Other";
+      treatmentCardTitle: string;
+      narrativeText: string;
+      structuredData: Record<string, unknown>;
+    } | null;
   }>;
 }
 

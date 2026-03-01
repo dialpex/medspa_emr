@@ -65,6 +65,7 @@ export type PatientTimeline = {
     id: string;
     signedAt: Date | null;
     template: { name: string };
+    templateSnapshot: string | null;
     createdAt: Date;
   }[];
   invoices: {
@@ -74,6 +75,14 @@ export type PatientTimeline = {
     total: number;
     createdAt: Date;
     paidAt: Date | null;
+  }[];
+  documents: {
+    id: string;
+    filename: string;
+    category: string | null;
+    notes: string | null;
+    createdAt: Date;
+    uploadedBy: { name: string };
   }[];
 };
 
@@ -220,7 +229,7 @@ export async function getPatientTimeline(patientId: string): Promise<PatientTime
     throw new Error("Patient not found");
   }
 
-  const [appointments, charts, photos, consents, invoices] = await Promise.all([
+  const [appointments, charts, photos, consents, invoices, documents] = await Promise.all([
     prisma.appointment.findMany({
       where: { patientId, deletedAt: null },
       orderBy: { startTime: "desc" },
@@ -265,6 +274,7 @@ export async function getPatientTimeline(patientId: string): Promise<PatientTime
         id: true,
         signedAt: true,
         template: { select: { name: true } },
+        templateSnapshot: true,
         createdAt: true,
       },
     }),
@@ -280,9 +290,21 @@ export async function getPatientTimeline(patientId: string): Promise<PatientTime
         paidAt: true,
       },
     }),
+    prisma.patientDocument.findMany({
+      where: { patientId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        filename: true,
+        category: true,
+        notes: true,
+        createdAt: true,
+        uploadedBy: { select: { name: true } },
+      },
+    }),
   ]);
 
-  return { appointments, charts, photos, consents, invoices };
+  return { appointments, charts, photos, consents, invoices, documents };
 }
 
 export type CreatePatientInput = {

@@ -9,6 +9,7 @@ export const FEATURES = [
   "marketing_tools",
   "e_prescribe",
   "lab_results",
+  "data_migration",
 ] as const;
 
 export type FeatureFlag = (typeof FEATURES)[number];
@@ -23,6 +24,7 @@ const TIER_FEATURES: Record<ClinicTier, Record<FeatureFlag, boolean>> = {
     marketing_tools: true,
     e_prescribe: false,
     lab_results: false,
+    data_migration: true,
   },
   Pro: {
     sms_messaging: true,
@@ -32,6 +34,7 @@ const TIER_FEATURES: Record<ClinicTier, Record<FeatureFlag, boolean>> = {
     marketing_tools: true,
     e_prescribe: true,
     lab_results: true,
+    data_migration: true,
   },
 };
 
@@ -44,6 +47,7 @@ export const FEATURE_LABELS: Record<FeatureFlag, string> = {
   marketing_tools: "Marketing Tools",
   e_prescribe: "E-Prescribe",
   lab_results: "Lab Results",
+  data_migration: "Data Migration",
 };
 
 /** Get the tier default for a feature */

@@ -9,8 +9,10 @@ import type {
   SourceAppointment,
   SourceInvoice,
   SourcePhoto,
+  SourceForm,
   SourceChart,
   SourceDocument,
+  FormFieldContent,
 } from "./types";
 
 const MOCK_PATIENTS: SourcePatient[] = [
@@ -257,6 +259,73 @@ const MOCK_PHOTOS: SourcePhoto[] = [
   },
 ];
 
+const MOCK_FORMS: SourceForm[] = [
+  {
+    sourceId: "mock-form-1",
+    patientSourceId: "mock-p-1",
+    templateId: "tmpl-consent-botox",
+    templateName: "Botox Consent Form",
+    status: "completed",
+    isInternal: false,
+    submittedAt: "2025-06-15T09:45:00Z",
+    submittedByName: "Sarah Johnson",
+    submittedByRole: "client",
+    appointmentSourceId: "mock-a-1",
+    rawData: { id: "mock-form-1", source: "mock" },
+  },
+  {
+    sourceId: "mock-form-2",
+    patientSourceId: "mock-p-1",
+    templateId: "tmpl-intake",
+    templateName: "New Patient Intake Form",
+    status: "completed",
+    isInternal: false,
+    submittedAt: "2025-06-15T09:30:00Z",
+    submittedByName: "Sarah Johnson",
+    submittedByRole: "client",
+    rawData: { id: "mock-form-2", source: "mock" },
+  },
+  {
+    sourceId: "mock-form-3",
+    patientSourceId: "mock-p-2",
+    templateId: "tmpl-consent-filler",
+    templateName: "Dermal Filler Consent Form",
+    status: "completed",
+    isInternal: false,
+    submittedAt: "2025-07-01T13:30:00Z",
+    submittedByName: "Emily Chen",
+    submittedByRole: "client",
+    appointmentSourceId: "mock-a-2",
+    rawData: { id: "mock-form-3", source: "mock" },
+  },
+  {
+    sourceId: "mock-form-4",
+    patientSourceId: "mock-p-1",
+    templateId: "tmpl-medical-history",
+    templateName: "Medical History Review",
+    status: "completed",
+    isInternal: true,
+    submittedAt: "2025-06-15T10:00:00Z",
+    submittedByName: "Dr. Kim",
+    submittedByRole: "staff",
+    appointmentSourceId: "mock-a-1",
+    rawData: { id: "mock-form-4", source: "mock" },
+  },
+  {
+    sourceId: "mock-form-5",
+    patientSourceId: "mock-p-1",
+    templateId: "tmpl-treatment-chart",
+    templateName: "Dermalier Patient Treatment Chart",
+    status: "completed",
+    isInternal: false,
+    submittedAt: "2025-06-15T10:15:00Z",
+    submittedByName: "Dr. Kim",
+    submittedByRole: "staff",
+    appointmentSourceId: "mock-a-1",
+    rawData: { id: "mock-form-5", source: "mock" },
+  },
+];
+
 const MOCK_CHARTS: SourceChart[] = [
   {
     sourceId: "mock-chart-1",
@@ -329,6 +398,32 @@ const MOCK_DOCUMENTS: SourceDocument[] = [
   },
 ];
 
+const MOCK_FORM_CONTENT: Record<string, FormFieldContent[]> = {
+  "mock-form-1": [
+    { fieldId: "f1", label: "I consent to Botox treatment", type: "checkbox", value: "Yes", selectedOptions: ["Yes"], sortOrder: 0 },
+    { fieldId: "f2", label: "I understand the risks", type: "checkbox", value: "Yes", selectedOptions: ["Yes"], sortOrder: 1 },
+    { fieldId: "f3", label: "Patient Signature", type: "signature", value: "[signed]", sortOrder: 2 },
+  ],
+  "mock-form-2": [
+    { fieldId: "f4", label: "Current Medications", type: "textarea", value: "None", sortOrder: 0 },
+    { fieldId: "f5", label: "Previous Cosmetic Procedures", type: "textarea", value: "Botox 2024", sortOrder: 1 },
+    { fieldId: "f6", label: "Drug Allergies", type: "text", value: "Latex", sortOrder: 2 },
+    { fieldId: "f7", label: "Skin Type", type: "select", value: "Type III", selectedOptions: ["Type III"], availableOptions: ["Type I", "Type II", "Type III", "Type IV", "Type V", "Type VI"], sortOrder: 3 },
+  ],
+  "mock-form-3": [
+    { fieldId: "f8", label: "I consent to dermal filler treatment", type: "checkbox", value: "Yes", selectedOptions: ["Yes"], sortOrder: 0 },
+    { fieldId: "f9", label: "I acknowledge post-treatment care instructions", type: "checkbox", value: "Yes", selectedOptions: ["Yes"], sortOrder: 1 },
+  ],
+  "mock-form-5": [
+    { fieldId: "f10", label: "Treatment Type", type: "dropdown", value: "Botox", selectedOptions: ["Botox"], availableOptions: ["Botox", "Dysport", "Xeomin", "Juvederm", "Restylane"], sortOrder: 0 },
+    { fieldId: "f11", label: "Areas Treated", type: "checkbox", value: "Forehead, Glabella", selectedOptions: ["Forehead", "Glabella"], availableOptions: ["Forehead", "Glabella", "Crow's Feet", "Lip Flip", "Masseter", "Bunny Lines"], sortOrder: 1 },
+    { fieldId: "f12", label: "Total Units", type: "text", value: "20", sortOrder: 2 },
+    { fieldId: "f13", label: "Product/Lot Number", type: "text", value: "BOT-2025-A1234", sortOrder: 3 },
+    { fieldId: "f14", label: "Complications", type: "textarea", value: "None", sortOrder: 4 },
+    { fieldId: "f15", label: "Post-Treatment Instructions Given", type: "checkbox", value: "Yes", selectedOptions: ["Yes"], sortOrder: 5 },
+  ],
+};
+
 export class MockMigrationProvider implements MigrationProvider {
   readonly source = "Mock";
 
@@ -341,7 +436,7 @@ export class MockMigrationProvider implements MigrationProvider {
       if (credentials.password === "invalid") {
         return { connected: false, errorMessage: "Invalid credentials" };
       }
-      return { connected: true, businessName: "Mock MedSpa Clinic" };
+      return { connected: true, businessName: "Mock MedSpa Clinic", locationId: "mock-loc-1" };
     }
 
     // Legacy apiKey check
@@ -353,7 +448,7 @@ export class MockMigrationProvider implements MigrationProvider {
       return { connected: false, errorMessage: "Email and password are required" };
     }
 
-    return { connected: true, businessName: "Mock MedSpa Clinic" };
+    return { connected: true, businessName: "Mock MedSpa Clinic", locationId: "mock-loc-1" };
   }
 
   async fetchPatients(
@@ -439,6 +534,31 @@ export class MockMigrationProvider implements MigrationProvider {
       nextCursor: nextIndex < MOCK_PHOTOS.length ? String(nextIndex) : undefined,
       totalCount: MOCK_PHOTOS.length,
     };
+  }
+
+  async fetchForms(
+    _credentials: MigrationCredentials,
+    options?: FetchOptions
+  ): Promise<FetchResult<SourceForm>> {
+    await new Promise((r) => setTimeout(r, 200));
+    const limit = options?.limit ?? 50;
+    const startIndex = options?.cursor ? parseInt(options.cursor, 10) : 0;
+    const slice = MOCK_FORMS.slice(startIndex, startIndex + limit);
+    const nextIndex = startIndex + limit;
+
+    return {
+      data: slice,
+      nextCursor: nextIndex < MOCK_FORMS.length ? String(nextIndex) : undefined,
+      totalCount: MOCK_FORMS.length,
+    };
+  }
+
+  async fetchFormContent(
+    _credentials: MigrationCredentials,
+    formSourceId: string
+  ): Promise<FormFieldContent[]> {
+    await new Promise((r) => setTimeout(r, 100));
+    return MOCK_FORM_CONTENT[formSourceId] || [];
   }
 
   async fetchCharts(

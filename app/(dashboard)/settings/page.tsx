@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon, BoxIcon, BellIcon } from "lucide-react";
+import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon, BoxIcon, BellIcon, ArrowRightLeftIcon } from "lucide-react";
 import { PageCard } from "@/components/ui/page-card";
 import { auth } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
@@ -56,6 +56,12 @@ const settingsItems: Array<{
     description: "Manage staff accounts, roles, and permissions",
     href: "/settings/users",
     icon: UsersIcon,
+  },
+  {
+    label: "Data Migration",
+    description: "Import data from another platform",
+    href: "/settings/migration",
+    icon: ArrowRightLeftIcon,
   },
 ];
 

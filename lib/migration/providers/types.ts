@@ -31,6 +31,7 @@ export interface ProviderInfo {
 export interface ConnectionTestResult {
   connected: boolean;
   businessName?: string;
+  locationId?: string;
   errorMessage?: string;
 }
 
@@ -106,6 +107,39 @@ export interface SourcePhoto {
   mimeType?: string;
   category?: string;
   caption?: string;
+  label?: string;
+  appointmentSourceId?: string;
+  takenAt?: string;
+  rawData: Record<string, unknown>;
+}
+
+export interface FormFieldContent {
+  fieldId: string;
+  label: string;
+  type: string;
+  /** Text answer for text inputs, textareas, dates; selected value for dropdowns/radio */
+  value: string | null;
+  /** Checked/selected items for checkboxes, dropdowns (multi), selects */
+  selectedOptions?: string[];
+  /** All available options (for checkboxes, dropdowns, radio, multiple choice) */
+  availableOptions?: string[];
+  /** Position in form layout (y coordinate — for ordering components top-to-bottom) */
+  sortOrder?: number;
+}
+
+export interface SourceForm {
+  sourceId: string;
+  patientSourceId: string;
+  templateId?: string;
+  templateName: string;
+  status?: string;
+  isInternal?: boolean;
+  submittedAt?: string;
+  expirationDate?: string;
+  submittedByName?: string;
+  submittedByRole?: "staff" | "client";
+  appointmentSourceId?: string;
+  fields?: FormFieldContent[];
   rawData: Record<string, unknown>;
 }
 
@@ -176,6 +210,16 @@ export interface MigrationProvider {
     credentials: MigrationCredentials,
     options?: FetchOptions
   ): Promise<FetchResult<SourcePhoto>>;
+
+  fetchForms?(
+    credentials: MigrationCredentials,
+    options?: FetchOptions
+  ): Promise<FetchResult<SourceForm>>;
+
+  fetchFormContent?(
+    credentials: MigrationCredentials,
+    formSourceId: string
+  ): Promise<FormFieldContent[]>;
 
   fetchCharts?(
     credentials: MigrationCredentials,

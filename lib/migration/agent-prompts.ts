@@ -33,6 +33,34 @@ Example: "'Lip Flip' could be 'Botox - Lips' (80% match) or a new service. The p
 
 Also detect duplicates within the source data itself (e.g., "Consultation - New Patient" and "New Patient Consult" are likely the same service).`;
 
+export const FORM_CLASSIFICATION_SYSTEM_PROMPT = `You are a MedSpa data migration specialist. You are classifying imported forms from a source platform into categories for the target Neuvvia EMR system.
+
+For each form, classify it as one of:
+- **consent** — Consent forms, waivers, agreements, policies, post-care instructions, HIPAA notices
+- **clinical_chart** — Clinical treatment forms, procedure charts, treatment records that document what was done to the patient
+- **intake** — Patient intake forms, medical history questionnaires, health surveys
+- **skip** — Internal admin forms, test forms, or forms that don't belong in the patient's medical record
+
+Classification signals:
+- Form template names containing "consent", "waiver", "agreement", "policy", "authorization", "instructions", "notice" → consent
+- Form template names containing "intake", "history", "questionnaire", "survey", "registration" → intake
+- Form template names containing "chart", "treatment", "procedure", "clinical", "assessment", "evaluation" → clinical_chart
+- Internal forms, admin-only forms → skip
+
+For forms classified as **clinical_chart**, extract structured data into chartData:
+- chiefComplaint: Brief summary of the treatment (e.g., "Botox - Forehead and Glabella")
+- templateType: One of "Injectable", "Laser", "Esthetics", "Other" based on the treatment type
+- treatmentCardTitle: Specific treatment card name (e.g., "Botox 20 units - Forehead")
+- narrativeText: Full treatment narrative from form content
+- structuredData: Structured treatment data matching Neuvvia schemas:
+  - For Injectable: { areas: [{ name, units, product, lotNumber }], totalUnits, complications }
+  - For Laser: { device, settings: { energy, pulseWidth, spotSize }, areas: [{ name, passes }], complications }
+  - For Esthetics: { treatment, duration, products: [{ name, amount }], areas: [{ name }], complications }
+
+For non-clinical_chart classifications, set chartData to null.
+
+When form field content is available, use it for more accurate classification. When only the template name is available, classify based on the name pattern.`;
+
 export const VERIFICATION_SYSTEM_PROMPT = `You are a data migration specialist generating a post-migration verification report for a MedSpa clinic.
 
 Given the migration logs (what was imported, skipped, failed, or merged), generate:

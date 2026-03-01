@@ -19,10 +19,16 @@ async function getClinicContext() {
     throw new Error("Authentication required");
   }
 
-  const clinic = await prisma.clinic.findUniqueOrThrow({
+  const clinic = await prisma.clinic.findUnique({
     where: { id: session.user.clinicId },
     select: { id: true, tier: true },
   });
+
+  if (!clinic) {
+    // Stale session — clinic was deleted (e.g. after DB reseed).
+    // Return Standard tier defaults so pages render instead of crashing.
+    return { clinicId: session.user.clinicId, tier: "Standard" as const };
+  }
 
   return { clinicId: clinic.id, tier: clinic.tier };
 }
