@@ -64,6 +64,9 @@ model Clinic {
   messageTemplates  MessageTemplate[]
   notificationTemplates NotificationTemplate[]
   featureOverrides  ClinicFeatureOverride[]
+  patientDocuments  PatientDocument[]
+  migrationJobs     MigrationJob[]
+  migrationRuns     MigrationRun[]
 }
 
 // ===========================================
@@ -116,6 +119,7 @@ model User {
   providerSignedCharts Chart[]             @relation("ChartProviderSigner")
   auditLogs            AuditLog[]
   photosTaken          Photo[]
+  uploadedDocuments    PatientDocument[]
 
   @@index([clinicId])
   @@index([email])
@@ -156,6 +160,7 @@ model Patient {
   invoices         Invoice[]
   patientMemberships PatientMembership[]
   communicationPreference PatientCommunicationPreference?
+  documents        PatientDocument[]
   conversation     Conversation?
   messages         Message[]
 
@@ -577,6 +582,34 @@ model PatientConsent {
 }
 
 // ===========================================
+// PATIENT DOCUMENTS
+// ===========================================
+
+model PatientDocument {
+  id            String    @id @default(cuid())
+  clinicId      String
+  patientId     String
+  uploadedById  String
+  filename      String
+  storagePath   String
+  mimeType      String?
+  sizeBytes     Int       @default(0)
+  category      String?   // "lab", "consent_scan", "imported", etc.
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  clinic     Clinic  @relation(fields: [clinicId], references: [id])
+  patient    Patient @relation(fields: [patientId], references: [id])
+  uploadedBy User    @relation(fields: [uploadedById], references: [id])
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([createdAt])
+}
+
+// ===========================================
 // BILLING
 // ===========================================
 
@@ -756,6 +789,12 @@ enum AuditAction {
   MDCoSign
   ExportPdf
   AddendumCreated
+  MigrationStart
+  MigrationComplete
+  MigrationFailed
+  DocumentUpload
+  DocumentView
+  MigrationEntityImported
 }
 
 model AuditLog {
@@ -979,4 +1018,262 @@ model ClinicFeatureOverride {
 
   @@unique([clinicId, feature])
   @@index([clinicId])
+}
+
+// ===========================================
+// DATA MIGRATION
+// ===========================================
+
+enum MigrationSource {
+  Boulevard
+  AestheticsRecord
+  CsvUpload
+}
+
+enum MigrationJobStatus {
+  Connecting
+  Connected
+  Discovering
+  Discovered
+  MappingInProgress
+  MappingReview
+  Migrating
+  Paused
+  Verifying
+  Completed
+  Failed
+}
+
+enum MigrationEntityType {
+  Patient
+  Service
+  Appointment
+  Chart
+  Photo
+  Invoice
+  Consent
+  Membership
+  Document
+  Form
+}
+
+model MigrationJob {
+  id                   String             @id @default(cuid())
+  clinicId             String
+  source               MigrationSource
+  status               MigrationJobStatus @default(Connecting)
+  credentialsEncrypted String?
+  connectionValidatedAt DateTime?
+
+  // Authorization consent
+  consentText          String?
+  consentSignedAt      DateTime?
+  consentSignedById    String?
+  consentIpAddress     String?
+
+  // AI agent data (JSON strings)
+  sourceDiscovery      String?
+  mappingConfig        String?
+  pendingDecisions     String?
+  progress             String   @default("{}")
+  lastCheckpoint       String?
+  agentLog             String?
+
+  // Lifecycle
+  startedById          String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  errorMessage         String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Relations
+  clinic     Clinic              @relation(fields: [clinicId], references: [id])
+  logs       MigrationLog[]
+  entityMaps MigrationEntityMap[]
+
+  @@index([clinicId])
+  @@index([status])
+}
+
+model MigrationLog {
+  id           String              @id @default(cuid())
+  jobId        String
+  entityType   MigrationEntityType
+  sourceId     String
+  targetId     String?
+  status       String              // imported, skipped, failed, duplicate, merged
+  aiReasoning  String?
+  errorMessage String?
+  rawData      String?
+  createdAt    DateTime            @default(now())
+
+  job MigrationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([jobId, entityType])
+  @@index([sourceId])
+}
+
+model MigrationEntityMap {
+  id         String              @id @default(cuid())
+  jobId      String
+  entityType MigrationEntityType
+  sourceId   String
+  targetId   String
+  createdAt  DateTime            @default(now())
+
+  job MigrationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, entityType, sourceId])
+  @@index([jobId])
+}
+
+// ===========================================
+// MIGRATION V2 — Production Pipeline
+// ===========================================
+
+enum MigrationRunStatus {
+  Created
+  Ingesting
+  Ingested
+  Profiling
+  Profiled
+  DraftingMapping
+  MappingDrafted
+  MappingApproved
+  Transforming
+  Transformed
+  Validating
+  Validated
+  Loading
+  Loaded
+  Reconciling
+  Completed
+  Failed
+  Paused
+}
+
+model MigrationRun {
+  id                  String             @id @default(cuid())
+  clinicId            String
+  sourceVendor        String             // "boulevard", "csv", "generic", etc.
+  status              MigrationRunStatus @default(Created)
+  currentPhase        String?            // "ingest", "profile", "draft_mapping", etc.
+
+  // Artifacts & hashes
+  artifactManifest    String?            // JSON: list of ArtifactRefs with hashes
+
+  // Non-PHI analysis results
+  sourceProfile       String?            // JSON: SourceProfile
+  phiClassification   String?            // JSON: field → isPHI overrides
+
+  // Mapping
+  mappingSpecVersion  Int                @default(0)
+  mappingApprovedAt   DateTime?
+  mappingApprovedById String?
+
+  // Progress & resume
+  progress            String             @default("{}")
+  lastCheckpoint      String?
+
+  // Consent & lifecycle
+  consentText         String?
+  consentSignedAt     DateTime?
+  startedById         String?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  errorMessage        String?
+
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // Relations
+  clinic              Clinic             @relation(fields: [clinicId], references: [id])
+  artifacts           MigrationArtifact[]
+  mappingSpecs        MigrationMappingSpec[]
+  ledgerEntries       MigrationRecordLedger[]
+  auditEvents         MigrationAuditEvent[]
+  stagingRecords      CanonicalStagingRecord[]
+
+  @@index([clinicId])
+  @@index([status])
+}
+
+model MigrationArtifact {
+  id        String   @id @default(cuid())
+  runId     String
+  key       String   // filename or entity name
+  hash      String   // SHA-256
+  sizeBytes Int
+  storedAt  String   // local path or S3 URI
+  metadata  String?  // JSON
+  createdAt DateTime @default(now())
+
+  run MigrationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, key])
+  @@index([runId])
+}
+
+model MigrationMappingSpec {
+  id        String   @id @default(cuid())
+  runId     String
+  version   Int
+  spec      String   // JSON: MappingSpec
+  createdAt DateTime @default(now())
+
+  run MigrationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, version])
+  @@index([runId])
+}
+
+model MigrationRecordLedger {
+  id                String   @id @default(cuid())
+  runId             String
+  entityType        String
+  sourceRecordId    String
+  canonicalId       String
+  status            String   // "staged", "validated", "loaded", "promoted", "failed"
+  sourceChecksum    String
+  canonicalChecksum String?
+  errorCode         String?  // non-PHI error code
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  run MigrationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, entityType, sourceRecordId])
+  @@index([runId, status])
+}
+
+model MigrationAuditEvent {
+  id        String   @id @default(cuid())
+  runId     String
+  phase     String   // "ingest", "profile", etc.
+  action    String   // "MAPPING_APPROVED", "VALIDATION_FAILED", etc.
+  actorId   String?  // user ID or "system"
+  metadata  String?  // JSON: non-PHI metadata only
+  createdAt DateTime @default(now())
+
+  run MigrationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+}
+
+model CanonicalStagingRecord {
+  id          String   @id @default(cuid())
+  runId       String
+  entityType  String
+  canonicalId String
+  payload     String   // JSON: canonical record
+  checksum    String
+  status      String   @default("staged") // "staged", "validated", "promoted"
+  createdAt   DateTime @default(now())
+
+  run MigrationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, entityType, canonicalId])
+  @@index([runId, status])
 }
