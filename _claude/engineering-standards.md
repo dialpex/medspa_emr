@@ -112,3 +112,10 @@ Audit logs must include:
 - Colocate related files (component, styles, tests)
 - Controlled components for forms
 - Event handlers named `handleX` (e.g., `handleClick`, `handleSubmit`)
+
+
+## 10. Feature Implementation
+
+- All features must be implemented in a modular and maintainable way.
+- All features must be implemented in a way that is consistent with the existing codebase.
+- All features must be implemented behind a feature flag for ease of management and product decisions.

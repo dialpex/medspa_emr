@@ -21,7 +21,7 @@ Priorities:
 - Human-in-the-loop AI
 - Auditability
 - Modern UX
-
+- Tiered model for feature access and market fit
 ---
 
 # Core Feature Modules
