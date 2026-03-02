@@ -77,7 +77,7 @@ describe("Migration Pipeline Integration", () => {
       ].join("\n");
 
       const ref = await store.put(TEST_RUN_ID, "patients.csv", Buffer.from(csv));
-      const adapter = new GenericCSVAdapter("test-clinic", "csv");
+      const adapter = new GenericCSVAdapter("test-clinic");
       const profile = await adapter.profile([ref], store);
 
       expect(profile.entities).toHaveLength(1);
@@ -157,7 +157,7 @@ describe("Migration Pipeline Integration", () => {
         ],
       };
 
-      const adapter = new GenericCSVAdapter("test-clinic", "csv");
+      const adapter = new GenericCSVAdapter("test-clinic");
       const results = [];
       for await (const item of adapter.transform([ref], store, mappingSpec)) {
         results.push(item);
@@ -318,7 +318,7 @@ describe("Migration Pipeline Integration", () => {
       const ref = await store.put(TEST_RUN_ID, "patients.csv", Buffer.from(csv));
 
       // 2. Profile
-      const adapter = new GenericCSVAdapter("test-clinic", "csv");
+      const adapter = new GenericCSVAdapter("test-clinic");
       const profile = await adapter.profile([ref], store);
 
       expect(profile.entities).toHaveLength(1);

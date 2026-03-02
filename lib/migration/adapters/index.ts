@@ -9,9 +9,8 @@ export function createAdapter(vendor: string, tenantId: string): VendorAdapter {
   switch (vendor) {
     case "csv":
     case "generic":
-      return new GenericCSVAdapter(tenantId, vendor);
     default:
-      // Default: treat unknown vendors as generic CSV/JSON
-      return new GenericCSVAdapter(tenantId, vendor);
+      // All vendors use GenericCSVAdapter; vendor key comes from mappingSpec.sourceVendor at transform time
+      return new GenericCSVAdapter(tenantId);
   }
 }

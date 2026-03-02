@@ -184,6 +184,18 @@ async function runPipeline(
     const valReport = valProgress.validateResult?.report;
     if (valReport) {
       console.log(`  Valid: ${valReport.validRecords}  Invalid: ${valReport.invalidRecords}`);
+      if (valReport.referentialErrors?.length > 0) {
+        console.log(`  Referential errors: ${valReport.referentialErrors.length}`);
+        // Group referential errors by entity type
+        const refByEntity: Record<string, number> = {};
+        for (const re of valReport.referentialErrors) {
+          refByEntity[re.entityType] = (refByEntity[re.entityType] || 0) + 1;
+        }
+        console.log(`  Referential errors by entity:`, refByEntity);
+        for (const re of valReport.referentialErrors.slice(0, 5)) {
+          console.log(`    ${re.entityType}: ${re.field} — ${re.message}`);
+        }
+      }
       if (valReport.invalidRecords > 0) {
         console.log(`  Errors by entity:`, valReport.errorsByEntity);
         for (const err of (valReport.errors || []).slice(0, 10)) {
@@ -199,6 +211,16 @@ async function runPipeline(
         const br = validateBatch(batchInput);
         const re = validateReferentialIntegrity(batchInput);
         console.log(`  Valid: ${br.validRecords}  Invalid: ${br.invalidRecords}  Referential: ${re.length}`);
+        if (re.length > 0) {
+          const refByEntity: Record<string, number> = {};
+          for (const r of re) {
+            refByEntity[r.entityType] = (refByEntity[r.entityType] || 0) + 1;
+          }
+          console.log(`  Referential errors by entity:`, refByEntity);
+          for (const r of re.slice(0, 5)) {
+            console.log(`    ${r.entityType}: ${r.field} — ${r.message}`);
+          }
+        }
         console.log(`  Errors by entity:`, br.errorsByEntity);
         for (const err of br.errors.slice(0, 10)) {
           console.log(`    [${err.code}] ${err.entityType}.${err.field}: ${err.message}`);
@@ -206,6 +228,12 @@ async function runPipeline(
       }
     }
     console.log();
+
+    if (!validationPassed) {
+      console.error("=== VALIDATION FAILED — aborting before load phase ===");
+      await prisma.$disconnect();
+      process.exit(1);
+    }
 
     // Phase 7: Load
     console.log("--- Phase 7: Load ---");

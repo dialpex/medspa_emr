@@ -123,11 +123,9 @@ function guessEntityType(key: string): string {
 
 export class GenericCSVAdapter implements VendorAdapter {
   private tenantId: string;
-  private vendorKey: string;
 
-  constructor(tenantId: string, vendorKey: string = "csv") {
+  constructor(tenantId: string) {
     this.tenantId = tenantId;
-    this.vendorKey = vendorKey;
   }
 
   async profile(artifacts: ArtifactRef[], store: ArtifactStore): Promise<SourceProfile> {
@@ -337,7 +335,7 @@ export class GenericCSVAdapter implements VendorAdapter {
             (fm.targetField === "canonicalPatientId" || fm.targetField === "canonicalAppointmentId") &&
             value
           ) {
-            value = generateCanonicalId(this.tenantId, this.vendorKey, String(value));
+            value = generateCanonicalId(this.tenantId, mappingSpec.sourceVendor, String(value));
           } else if (fm.transform) {
             const enumMap = entityMapping.enumMaps[fm.sourceField];
             value = executeTransform(fm.transform as AllowedTransform, value as string, {
