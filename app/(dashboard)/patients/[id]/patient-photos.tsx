@@ -379,8 +379,8 @@ export function PatientPhotos({
       </div>
 
       {compareMode && (
-        <div className="mb-4 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-700">
-          Select 2 photos to compare. Click a photo to select or deselect it.
+        <div className="mb-4 inline-block rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs text-purple-700">
+          Select 2 photos to compare
         </div>
       )}
 
@@ -388,7 +388,7 @@ export function PatientPhotos({
       <div className="space-y-6">
         {visitGroups.map((group) => (
           <div key={group.key}>
-            <h3 className="text-xs font-semibold text-gray-500 tracking-wide mb-2">
+            <h3 className="text-sm font-semibold text-gray-900 tracking-wide mb-3 pb-2 border-b border-gray-200">
               {group.label}
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -438,8 +438,8 @@ export function PatientPhotos({
 
       {/* Sticky comparison bar */}
       {compareMode && bothSelected && selectedPhotos && (
-        <div className="sticky bottom-0 mt-6 -mx-1 px-1 pb-1">
-          <div className="flex items-center justify-between rounded-xl border border-purple-200 bg-white px-4 py-3 shadow-lg">
+        <div className="sticky bottom-0 mt-6 flex justify-center pb-1">
+          <div className="inline-flex items-center gap-3 rounded-xl border border-purple-200 bg-white px-4 py-3 shadow-lg">
             <span className="text-sm text-gray-700">
               Ready to compare ({getPhotoDateLabel(selectedPhotos.before)} vs{" "}
               {getPhotoDateLabel(selectedPhotos.after)})
