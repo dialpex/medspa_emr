@@ -19,6 +19,7 @@ export interface IngestInput {
   encryptedCredentials?: string;
   emrUrl?: string;
   uploadedFiles?: Array<{ key: string; data: Buffer }>;
+  patientLimit?: number; // cap patient ingestion (saves API credits)
 }
 
 export interface IngestResult {
@@ -113,7 +114,7 @@ async function executeApiIngest(
   // --- Step 1: Fetch top-level entities (paginated) ---
 
   // Always fetch patients first — needed for per-patient entity fetching
-  const allPatients = await fetchAllPaginated(provider, "fetchPatients", creds);
+  const allPatients = await fetchAllPaginated(provider, "fetchPatients", creds, input.patientLimit);
   if (allPatients.length > 0) {
     const data = Buffer.from(JSON.stringify(allPatients, null, 2));
     const ref = await store.put(input.runId, "patients.json", data);
@@ -199,7 +200,8 @@ async function executeApiIngest(
 async function fetchAllPaginated(
   provider: MigrationProvider,
   methodName: string,
-  creds: MigrationCredentials
+  creds: MigrationCredentials,
+  limit?: number
 ): Promise<unknown[]> {
   const fetchFn = (provider as unknown as Record<string, Function>)[methodName];
   if (!fetchFn) {
@@ -221,13 +223,20 @@ async function fetchAllPaginated(
       allRecords.push(...result.data);
       cursor = result.nextCursor;
       page++;
+
+      // Stop early if we've hit the limit
+      if (limit && allRecords.length >= limit) {
+        allRecords.length = limit; // truncate to exact limit
+        break;
+      }
     } while (cursor);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error(`  [ingest] ${methodName} failed on page ${page}: ${msg}`);
   }
 
-  console.log(`  [ingest] ${methodName}: ${allRecords.length} records (${page} pages)`);
+  const limitNote = limit ? ` [limit: ${limit}]` : "";
+  console.log(`  [ingest] ${methodName}: ${allRecords.length} records (${page} pages)${limitNote}`);
   return allRecords;
 }
 

@@ -197,6 +197,7 @@ export class MigrationOrchestrator {
       encryptedCredentials: progress.encryptedCredentials,
       emrUrl: progress.emrUrl,
       uploadedFiles: progress.uploadedFiles,
+      patientLimit: progress.patientLimit,
     };
 
     const result = await executeIngest(ingestInput, this.store, this.provider);

@@ -4,7 +4,9 @@
  *
  * Usage:
  *   npx tsx scripts/test-migration-pipeline.ts              # Mock provider (default)
- *   npx tsx scripts/test-migration-pipeline.ts boulevard     # Boulevard (prompts for creds)
+ *   npx tsx scripts/test-migration-pipeline.ts boulevard     # Boulevard (default: 15 patients)
+ *   npx tsx scripts/test-migration-pipeline.ts boulevard --limit=50
+ *   npx tsx scripts/test-migration-pipeline.ts boulevard --limit=0   # unlimited
  *
  * Runs all 8 phases through the real orchestrator:
  *   Ingest → Profile → Draft Mapping → Approve → Transform → Validate → Load → Reconcile
@@ -86,7 +88,8 @@ async function setupBoulevard(): Promise<{ provider: MigrationProvider; vendor: 
 async function runPipeline(
   provider: MigrationProvider,
   vendor: string,
-  credentials: MigrationCredentials
+  credentials: MigrationCredentials,
+  patientLimit?: number
 ) {
   const clinic = await prisma.clinic.findFirst();
   if (!clinic) { console.error("No clinic found. Run `npx prisma db seed` first."); process.exit(1); }
@@ -106,7 +109,7 @@ async function runPipeline(
       consentSignedAt: new Date(),
       startedById: user.id,
       startedAt: new Date(),
-      progress: JSON.stringify({ credentials }),
+      progress: JSON.stringify({ credentials, ...(patientLimit ? { patientLimit } : {}) }),
     },
   });
 
@@ -278,8 +281,23 @@ async function runPipeline(
 // --- Main ---
 
 async function main() {
-  const vendor = process.argv[2] || "mock";
-  console.log(`=== Migration Pipeline E2E Test (${vendor}) ===\n`);
+  const args = process.argv.slice(2);
+  const vendor = args.find((a) => !a.startsWith("--")) || "mock";
+
+  // Parse --limit=N (0 means unlimited)
+  const limitArg = args.find((a) => a.startsWith("--limit="));
+  const parsedLimit = limitArg ? parseInt(limitArg.split("=")[1], 10) : undefined;
+
+  // Default: 15 for boulevard, unlimited for mock
+  const patientLimit =
+    parsedLimit !== undefined
+      ? parsedLimit || undefined // --limit=0 → undefined (unlimited)
+      : vendor.toLowerCase() === "boulevard"
+        ? 15
+        : undefined;
+
+  const limitLabel = patientLimit ? `limit=${patientLimit}` : "unlimited";
+  console.log(`=== Migration Pipeline E2E Test (${vendor}, ${limitLabel}) ===\n`);
 
   let setup: { provider: MigrationProvider; vendor: string; credentials: MigrationCredentials };
 
@@ -293,7 +311,7 @@ async function main() {
       break;
   }
 
-  await runPipeline(setup.provider, setup.vendor, setup.credentials);
+  await runPipeline(setup.provider, setup.vendor, setup.credentials, patientLimit);
 }
 
 main();
