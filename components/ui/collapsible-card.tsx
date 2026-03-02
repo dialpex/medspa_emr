@@ -8,6 +8,7 @@ interface CollapsibleCardProps {
   title: string;
   subtitle?: string;
   defaultOpen?: boolean;
+  headerAction?: ReactNode;
   children: ReactNode;
 }
 
@@ -16,16 +17,19 @@ export function CollapsibleCard({
   title,
   subtitle,
   defaultOpen = true,
+  headerAction,
   children,
 }: CollapsibleCardProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((v) => !v); } }}
+        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors cursor-pointer select-none"
       >
         <Icon className="size-5 text-gray-500 flex-shrink-0" />
         <div className="flex-1 min-w-0">
@@ -34,12 +38,17 @@ export function CollapsibleCard({
             <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
           )}
         </div>
+        {headerAction && (
+          <div onClick={(e) => e.stopPropagation()}>
+            {headerAction}
+          </div>
+        )}
         <ChevronDownIcon
           className={`size-5 text-gray-400 transition-transform duration-200 ${
             open ? "rotate-180" : ""
           }`}
         />
-      </button>
+      </div>
       <div
         className={`transition-all duration-200 ${
           open ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"

@@ -124,14 +124,15 @@ function TabsList({
 
   return (
     <MotionHighlight
-      className={cn("rounded-sm bg-background shadow-sm", activeClassName)}
+      className={cn("rounded-md bg-background shadow-sm", activeClassName)}
+      containerClassName="bg-muted rounded-lg"
       controlledItems
       transition={transition}
       value={activeValue}
     >
       <div
         className={cn(
-          "bg-muted text-muted-foreground inline-flex h-10 w-fit items-center justify-center rounded-lg p-[4px]",
+          "relative z-[1] text-muted-foreground inline-flex h-10 w-fit items-center justify-center p-[4px]",
           className,
         )}
         data-slot="tabs-list"
@@ -234,13 +235,16 @@ type TabsContentProps = HTMLMotionProps<"div"> & {
 function TabsContent({ children, value, className, ...props }: TabsContentProps) {
   const { activeValue } = useTabs()
   const isActive = activeValue === value
+
+  if (!isActive) return null
+
   return (
     <motion.div
-      animate={{ filter: "blur(0px)" }}
+      animate={{ filter: "blur(0px)", opacity: 1 }}
       className={cn("overflow-hidden", className)}
       data-slot="tabs-content"
-      exit={{ filter: "blur(0px)" }}
-      initial={{ filter: "blur(0px)" }}
+      exit={{ filter: "blur(4px)", opacity: 0 }}
+      initial={{ filter: "blur(4px)", opacity: 0 }}
       role="tabpanel"
       transition={{ type: "spring", stiffness: 200, damping: 25 }}
       {...(props as any)}

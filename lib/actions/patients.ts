@@ -31,6 +31,7 @@ export type PatientDetail = {
   allergies: string | null;
   medicalNotes: string | null;
   tags: string | null;
+  status: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -321,6 +322,7 @@ export type CreatePatientInput = {
   allergies?: string;
   medicalNotes?: string;
   tags?: string;
+  status?: string;
 };
 
 /**
@@ -406,6 +408,7 @@ export async function updatePatient(
       ...(input.allergies !== undefined && { allergies: input.allergies || null }),
       ...(input.medicalNotes !== undefined && { medicalNotes: input.medicalNotes || null }),
       ...(input.tags !== undefined && { tags: input.tags || null }),
+      ...(input.status !== undefined && { status: input.status as "Active" | "Fired" }),
     },
   });
 

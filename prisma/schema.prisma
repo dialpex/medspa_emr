@@ -129,8 +129,13 @@ model User {
 // PATIENTS & CRM
 // ===========================================
 
+enum PatientStatus {
+  Active
+  Fired
+}
+
 model Patient {
-  id            String    @id @default(cuid())
+  id            String        @id @default(cuid())
   clinicId      String
   firstName     String
   lastName      String
@@ -142,10 +147,11 @@ model Patient {
   city          String?
   state         String?
   zipCode       String?
-  allergies     String?   // Stored as text, can be JSON in practice
+  allergies     String?       // Stored as text, can be JSON in practice
   medicalNotes  String?
-  tags          String?   // Comma-separated or JSON array
-  isActive      Boolean   @default(true)
+  tags          String?       // Comma-separated or JSON array
+  status        PatientStatus @default(Active)
+  isActive      Boolean       @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime? // Soft delete

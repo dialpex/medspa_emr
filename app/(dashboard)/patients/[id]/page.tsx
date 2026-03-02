@@ -1,13 +1,27 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import {
+  User,
+  Clock,
+  FileText,
+  Camera,
+  ClipboardList,
+  FolderOpen,
+  Receipt,
+  ChevronRight,
+} from "lucide-react";
 import { getPatient, getPatientTimeline } from "@/lib/actions/patients";
 import { getCharts } from "@/lib/actions/charts";
 import { requirePermission, hasPermission } from "@/lib/rbac";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageCard } from "@/components/ui/page-card";
 import { PatientHeader } from "./patient-header";
-import { PatientDetails } from "./patient-details";
-import { PatientTimeline } from "./patient-timeline";
+import { PatientDetailsTab } from "./patient-details-tab";
 import { PatientCharts } from "./patient-charts";
+import { PatientHistory } from "./patient-history";
+import { PatientPhotos } from "./patient-photos";
+import { PatientForms } from "./patient-forms";
+import { PatientDocuments } from "./patient-documents";
+import { PatientInvoices } from "./patient-invoices";
+import { PatientTabs } from "./patient-tabs";
 
 export default async function PatientPage({
   params,
@@ -29,38 +43,117 @@ export default async function PatientPage({
     notFound();
   }
 
+  // Compute lastAppointmentDate from completed/checked-in appointments
+  const completedAppointments = timeline.appointments.filter(
+    (a) => a.status === "Completed" || a.status === "CheckedIn"
+  );
+  const lastAppointmentDate = completedAppointments.length > 0
+    ? new Date(Math.max(...completedAppointments.map((a) => new Date(a.startTime).getTime())))
+    : null;
+
   const canEdit =
     user.role !== "MedicalDirector" &&
     user.role !== "ReadOnly" &&
     user.role !== "Billing";
 
+  const tabs = [
+    {
+      value: "details",
+      label: "Details",
+      icon: <User className="size-4" />,
+      content: (
+        <PatientDetailsTab
+          patient={patient}
+          timeline={timeline}
+          canEdit={canEdit}
+        />
+      ),
+    },
+    {
+      value: "history",
+      label: "History",
+      icon: <Clock className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientHistory timeline={timeline} />
+        </div>
+      ),
+    },
+    ...(canViewCharts
+      ? [
+          {
+            value: "charts",
+            label: "Charts",
+            icon: <FileText className="size-4" />,
+            content: (
+              <div className="rounded-xl border border-gray-200 bg-white p-6">
+                <PatientCharts charts={charts} />
+              </div>
+            ),
+          },
+        ]
+      : []),
+    {
+      value: "photos",
+      label: "Photos",
+      icon: <Camera className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientPhotos photos={timeline.photos} />
+        </div>
+      ),
+    },
+    {
+      value: "forms",
+      label: "Forms",
+      icon: <ClipboardList className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientForms consents={timeline.consents} />
+        </div>
+      ),
+    },
+    {
+      value: "documents",
+      label: "Docs",
+      icon: <FolderOpen className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientDocuments documents={timeline.documents} />
+        </div>
+      ),
+    },
+    {
+      value: "invoices",
+      label: "Invoices",
+      icon: <Receipt className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientInvoices invoices={timeline.invoices} />
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <PageCard title={`${patient.firstName} ${patient.lastName}`}>
-        <PatientHeader patient={patient} />
+    <div className="px-4 py-6 space-y-4">
+      <nav className="flex items-center gap-1 text-sm text-gray-500">
+        <Link href="/patients" className="hover:text-gray-900 transition-colors">
+          Patients
+        </Link>
+        <ChevronRight className="size-3.5" />
+        <span className="text-gray-900 font-medium">
+          {patient.firstName} {patient.lastName}
+        </span>
+      </nav>
 
-        <Tabs defaultValue="details" className="mt-6">
-          <TabsList>
-            <TabsTrigger value="details">Details</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            {canViewCharts && <TabsTrigger value="charts">Charts</TabsTrigger>}
-          </TabsList>
+      <PatientHeader
+        patient={patient}
+        canViewCharts={canViewCharts}
+        lastAppointmentDate={lastAppointmentDate}
+      />
 
-          <TabsContent value="details" className="mt-4">
-            <PatientDetails patient={patient} canEdit={canEdit} />
-          </TabsContent>
-
-          <TabsContent value="timeline" className="mt-4">
-            <PatientTimeline timeline={timeline} />
-          </TabsContent>
-
-          {canViewCharts && (
-            <TabsContent value="charts" className="mt-4">
-              <PatientCharts charts={charts} />
-            </TabsContent>
-          )}
-        </Tabs>
-      </PageCard>
+      <PatientTabs tabs={tabs} />
     </div>
   );
 }
