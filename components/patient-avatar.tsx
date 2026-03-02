@@ -1,13 +1,14 @@
 interface PatientAvatarProps {
   firstName: string;
   lastName: string;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   imageUrl?: string | null;
 }
 
 const SIZE_CLASSES = {
   sm: "h-8 w-8 text-xs",
   md: "h-10 w-10 text-sm",
+  lg: "h-14 w-14 text-lg",
 } as const;
 
 export function PatientAvatar({ firstName, lastName, size = "sm", imageUrl }: PatientAvatarProps) {

@@ -26,6 +26,7 @@ function useMotionHighlight() {
 interface MotionHighlightProps {
   children: React.ReactNode
   className?: string
+  containerClassName?: string
   controlledItems?: boolean
   value?: string
   onValueChange?: (value: string | null) => void
@@ -37,6 +38,7 @@ interface MotionHighlightProps {
 function MotionHighlight({
   children,
   className,
+  containerClassName,
   controlledItems = false,
   value,
   onValueChange,
@@ -89,7 +91,7 @@ function MotionHighlight({
         setActiveValue,
       }}
     >
-      <div className="relative">
+      <div className={cn("relative", containerClassName)}>
         {children}
         <HighlightElement
           className={className}
@@ -151,7 +153,7 @@ function HighlightElement({ className, itemsRef, transition }: HighlightElementP
   return (
     <motion.div
       layoutId={`highlight-${id}`}
-      className={cn("absolute inset-0 -z-10", className)}
+      className={cn("absolute inset-0 z-0 pointer-events-none", className)}
       initial={false}
       animate={{
         x: relativeRect.x,
