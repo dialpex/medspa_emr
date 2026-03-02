@@ -61,6 +61,14 @@ export type PatientTimeline = {
     caption: string | null;
     createdAt: Date;
     takenBy: { name: string };
+    chart: {
+      id: string;
+      appointment: {
+        id: string;
+        startTime: Date;
+        service: { name: string } | null;
+      } | null;
+    } | null;
   }[];
   consents: {
     id: string;
@@ -266,6 +274,18 @@ export async function getPatientTimeline(patientId: string): Promise<PatientTime
         caption: true,
         createdAt: true,
         takenBy: { select: { name: true } },
+        chart: {
+          select: {
+            id: true,
+            appointment: {
+              select: {
+                id: true,
+                startTime: true,
+                service: { select: { name: true } },
+              },
+            },
+          },
+        },
       },
     }),
     prisma.patientConsent.findMany({
