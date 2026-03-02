@@ -1,7 +1,8 @@
 "use client";
 
 import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
-import type { AIResponse } from "@/lib/agents/chat/types";
+import { Reasoning } from "@/components/ai/reasoning";
+import type { AIResponse, PlanStep } from "@/lib/agents/chat/types";
 
 interface Message {
   id: string;
@@ -9,6 +10,8 @@ interface Message {
   content: string;
   response?: AIResponse;
   isPending?: boolean;
+  isExecuting?: boolean;
+  startedAt?: number;
 }
 
 function ClarifyView({
@@ -42,10 +45,12 @@ function PlanView({
   response,
   onConfirm,
   onCancel,
+  showActions,
 }: {
   response: AIResponse & { type: "plan" };
   onConfirm: () => void;
   onCancel: () => void;
+  showActions: boolean;
 }) {
   return (
     <div className="space-y-3">
@@ -62,20 +67,22 @@ function PlanView({
           ))}
         </ol>
       </div>
-      <div className="flex gap-2">
-        <button
-          onClick={onConfirm}
-          className="rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-        >
-          Confirm
-        </button>
-        <button
-          onClick={onCancel}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-      </div>
+      {showActions && (
+        <div className="flex gap-2">
+          <button
+            onClick={onConfirm}
+            className="rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          >
+            Confirm
+          </button>
+          <button
+            onClick={onCancel}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -103,7 +110,7 @@ function ResultView({
                   {key.replace(/_/g, " ")}
                 </dt>
                 <dd className="font-medium text-gray-800">
-                  {String(value)}
+                  {typeof value === "object" ? JSON.stringify(value) : String(value)}
                 </dd>
               </div>
             ))}
@@ -141,9 +148,13 @@ function RefuseView({
 export function MessageBubble({
   message,
   onSend,
+  onExecutePlan,
+  isLast,
 }: {
   message: Message;
   onSend: (text: string) => void;
+  onExecutePlan?: (steps: PlanStep[]) => void;
+  isLast?: boolean;
 }) {
   // User message
   if (message.role === "user") {
@@ -160,9 +171,12 @@ export function MessageBubble({
   if (message.isPending) {
     return (
       <div className="flex justify-start">
-        <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-500">
-          <Loader2 className="size-4 animate-spin" />
-          Thinking...
+        <div className="max-w-[85%] rounded-2xl border border-gray-200 bg-white px-4 py-3">
+          <Reasoning isStreaming={true} />
+          <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
+            <Loader2 className="size-4 animate-spin" />
+            {message.isExecuting ? "Executing plan..." : "Thinking..."}
+          </div>
         </div>
       </div>
     );
@@ -175,6 +189,14 @@ export function MessageBubble({
   return (
     <div className="flex justify-start">
       <div className="max-w-[85%] rounded-2xl border border-gray-200 bg-white px-4 py-3">
+        {response.rationale_muted && (
+          <div className="mb-2">
+            <Reasoning
+              isStreaming={false}
+              rationale={response.rationale_muted}
+            />
+          </div>
+        )}
         {response.type === "clarify" && (
           <ClarifyView
             response={response as AIResponse & { type: "clarify" }}
@@ -184,7 +206,15 @@ export function MessageBubble({
         {response.type === "plan" && (
           <PlanView
             response={response as AIResponse & { type: "plan" }}
-            onConfirm={() => onSend("Confirm")}
+            showActions={!!isLast}
+            onConfirm={() => {
+              const plan = (response as AIResponse & { type: "plan" }).plan;
+              if (onExecutePlan && plan.steps.length > 0) {
+                onExecutePlan(plan.steps);
+              } else {
+                onSend("Confirm");
+              }
+            }}
             onCancel={() => onSend("Cancel")}
           />
         )}

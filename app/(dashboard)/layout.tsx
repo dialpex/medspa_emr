@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
+import { RivePreload } from "@/components/ai/rive-preload";
 import { getTotalUnreadCount } from "@/lib/actions/messaging";
 import { getEnabledFeatures } from "@/lib/feature-flags";
 import { prisma } from "@/lib/prisma";
@@ -40,6 +41,7 @@ export default async function DashboardLayout({
         clinicName={clinic?.name ?? "Clinic"}
         enabledFeatures={enabledFeatures}
       />
+      <RivePreload />
       <main className="flex-1 min-w-0 bg-gray-50">{children}</main>
     </div>
   );
