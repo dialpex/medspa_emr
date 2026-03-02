@@ -115,7 +115,15 @@ export class MigrationOrchestrator {
 
     const run = await this.getRun(runId);
     const profile: SourceProfile = JSON.parse(run.sourceProfile || "{}");
-    return executeReconcile({ runId, sourceProfile: profile });
+
+    const mappingSpecRecord = await prisma.migrationMappingSpec.findFirst({
+      where: { runId, version: run.mappingSpecVersion },
+    });
+    const mappingSpec: MappingSpec | undefined = mappingSpecRecord
+      ? JSON.parse(mappingSpecRecord.spec)
+      : undefined;
+
+    return executeReconcile({ runId, sourceProfile: profile, mappingSpec });
   }
 
   // Run the full pipeline (for testing or with autoApprove)
@@ -372,7 +380,16 @@ export class MigrationOrchestrator {
     await this.updateRun(run.id, { status: "Reconciling", currentPhase: "reconcile" });
 
     const profile: SourceProfile = JSON.parse(run.sourceProfile || "{}");
-    const report = await executeReconcile({ runId: run.id, sourceProfile: profile });
+
+    // Load approved mapping spec so reconcile can resolve source→canonical entity types
+    const mappingSpecRecord = await prisma.migrationMappingSpec.findFirst({
+      where: { runId: run.id, version: run.mappingSpecVersion },
+    });
+    const mappingSpec: MappingSpec | undefined = mappingSpecRecord
+      ? JSON.parse(mappingSpecRecord.spec)
+      : undefined;
+
+    const report = await executeReconcile({ runId: run.id, sourceProfile: profile, mappingSpec });
 
     const progress = JSON.parse(run.progress || "{}");
     await this.updateRun(run.id, {

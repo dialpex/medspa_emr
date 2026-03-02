@@ -323,6 +323,9 @@ export class GenericCSVAdapter implements VendorAdapter {
         );
         canonical.sourceRecordId = sourceRecordId;
 
+        // Accumulator for nested address object (flat source → CanonicalAddress)
+        const addressParts: Record<string, string> = {};
+
         // Apply field mappings
         for (const fm of entityMapping.fieldMappings) {
           if (fm.targetField === "sourceRecordId" || fm.targetField === "canonicalId") continue;
@@ -343,7 +346,19 @@ export class GenericCSVAdapter implements VendorAdapter {
             });
           }
 
+          // Assemble nested address from flat "address.xxx" target fields
+          if (fm.targetField.startsWith("address.") && value) {
+            const subField = fm.targetField.split(".")[1]; // "line1", "city", etc.
+            addressParts[subField] = String(value);
+            continue;
+          }
+
           canonical[fm.targetField] = value;
+        }
+
+        // Compose address object if any address parts were mapped
+        if (Object.keys(addressParts).length > 0) {
+          canonical.address = addressParts;
         }
 
         yield {

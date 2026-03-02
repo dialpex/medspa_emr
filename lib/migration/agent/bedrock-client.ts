@@ -201,8 +201,14 @@ export class BedrockClaudeClient {
       fname: "firstName", first_name: "firstName", firstname: "firstName",
       lname: "lastName", last_name: "lastName", lastname: "lastName",
       dob: "dateOfBirth", date_of_birth: "dateOfBirth", birthdate: "dateOfBirth", birthday: "dateOfBirth",
-      phone_number: "phone", mobile: "phone", cell: "phone",
+      phone_number: "phone", mobile: "phone", cell: "phone", phonenumber: "phone",
       email_address: "email", mail: "email",
+      sex: "gender", pronoun: "gender", sexassignedatbirth: "gender",
+      sex_assigned_at_birth: "gender",
+      allergy: "allergies", allergy_list: "allergies",
+      medical_notes: "medicalNotes", medicalnotes: "medicalNotes",
+      notes: "medicalNotes", booking_memo: "medicalNotes",
+      tag: "tags",
       provider: "providerName", provider_name: "providerName", doctor: "providerName",
       providername: "providerName",
       service: "serviceName", service_name: "serviceName", servicename: "serviceName",
@@ -226,10 +232,24 @@ export class BedrockClaudeClient {
       taken_at: "takenAt", takenat: "takenAt",
       url: "artifactKey",  // photos/docs: URL → artifact reference
       lineitems: "lineItems", line_items: "lineItems",
+      // Address sub-fields: flat source → nested canonical address object
+      address: "address.line1", street: "address.line1", address1: "address.line1",
+      street_address: "address.line1", line1: "address.line1", address_line1: "address.line1",
+      address2: "address.line2", line2: "address.line2", address_line2: "address.line2",
+      apt: "address.line2", suite: "address.line2",
+      city: "address.city",
+      state: "address.state", province: "address.state",
+      zipcode: "address.zip", zip: "address.zip", zip_code: "address.zip",
+      postal_code: "address.zip", postalcode: "address.zip",
+      country: "address.country",
     };
 
     const alias = aliases[lower];
-    if (alias && targetEntity.fields.find((f) => f.name === alias)) return alias;
+    if (alias) {
+      // For address sub-fields, always return — the transform handles assembly
+      if (alias.startsWith("address.")) return alias;
+      if (targetEntity.fields.find((f) => f.name === alias)) return alias;
+    }
 
     return null;
   }

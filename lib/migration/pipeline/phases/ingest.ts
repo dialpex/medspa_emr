@@ -102,6 +102,7 @@ async function executeApiIngest(
       getExecutor: () => baseProvider.getGraphQLExecutor(),
       getSeedQueries: () => baseProvider.getSeedQueries(),
     });
+    await enhanced.initialize(creds);
     provider = enhanced;
   }
 

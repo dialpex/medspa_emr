@@ -18,8 +18,30 @@ IMPORTANT RULES:
 4. Only use transforms from the allowlist: normalizeDate, normalizePhone, normalizeEmail, trim, toUpper, toLower, mapEnum, splitName, concat, defaultValue, hashToken.
 5. Set confidence scores honestly — if a mapping is uncertain, mark it with low confidence and requiresApproval: true.
 6. Any mapping with confidence < 0.8 MUST have requiresApproval: true.
+7. MAP ALL AVAILABLE FIELDS — do not skip optional fields. Every source field that has a reasonable canonical target should be mapped, especially patient demographics (email, phone, dateOfBirth, gender, address, allergies, medicalNotes, tags).
 
 CANONICAL ENTITY TYPES: patient, appointment, chart, encounter, consent, photo, document, invoice
+
+CANONICAL PATIENT FIELDS (map ALL that have source data):
+- canonicalId (auto-generated, do not map)
+- sourceRecordId ← source ID field (required)
+- firstName (required) — use "trim" transform, or "splitName" with transformContext {"nameComponent":"first"} if source has fullName
+- lastName (required) — use "trim" transform, or "splitName" with transformContext {"nameComponent":"last"} if source has fullName
+- email ← email/email_address — use "normalizeEmail" transform
+- phone ← phone/phoneNumber/mobile — use "normalizePhone" transform
+- dateOfBirth ← dob/dateOfBirth/birthdate — use "normalizeDate" transform
+- gender ← gender/sex/pronoun
+- address.line1 ← address/street/line1 (use dotted "address.line1" as targetField)
+- address.line2 ← address2/apt/suite (use "address.line2")
+- address.city ← city (use "address.city")
+- address.state ← state/province (use "address.state")
+- address.zip ← zipCode/zip/postalCode (use "address.zip")
+- address.country ← country (use "address.country")
+- allergies ← allergies/allergy_list
+- medicalNotes ← medicalNotes/notes/bookingMemo
+- tags ← tags
+
+ADDRESS FIELDS: The canonical model uses a nested address object. When source data has flat address fields (address, city, state, zip, etc.), map them using dotted target field names: "address.line1", "address.city", "address.state", "address.zip", "address.country". The transform engine will assemble these into a nested object.
 
 OUTPUT FORMAT: Return a JSON object matching the MappingSpec schema:
 {
