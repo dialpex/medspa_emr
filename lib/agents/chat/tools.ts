@@ -18,6 +18,20 @@ export interface ToolResult {
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }>;
 
+/** Strip punctuation and collapse whitespace for fuzzy matching */
+function normalizeSearch(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** Check if needle matches haystack — full-string first, then all-words fallback */
+function fuzzyMatch(haystack: string, needle: string): boolean {
+  const h = normalizeSearch(haystack);
+  const n = normalizeSearch(needle);
+  if (h.includes(n)) return true;
+  const words = n.split(" ").filter(Boolean);
+  return words.length > 1 && words.every((w) => h.includes(w));
+}
+
 function serializeDates(obj: unknown): unknown {
   if (obj instanceof Date) return obj.toISOString();
   if (Array.isArray(obj)) return obj.map(serializeDates);
@@ -36,12 +50,9 @@ const toolRegistry: Record<string, ToolHandler> = {
       return { success: false, error: "name argument is required" };
     }
     const services = await getServicesForClinic();
-    const needle = name.toLowerCase();
-    const matches = services.filter((s) =>
-      s.name.toLowerCase().includes(needle)
-    );
+    const matches = services.filter((s) => fuzzyMatch(s.name, name));
     if (matches.length === 0) {
-      return { success: true, data: { matches: [], message: `No services found matching "${name}"` } };
+      return { success: true, data: { matches: [], message: `No services found matching "${name}". Try a shorter or alternative keyword.` } };
     }
     return {
       success: true,
@@ -127,9 +138,9 @@ const toolRegistry: Record<string, ToolHandler> = {
 
   lookup_provider: async (args) => {
     const providers = await getProviders();
-    const name = args.name ? String(args.name).toLowerCase() : "";
+    const name = args.name ? String(args.name) : "";
     const filtered = name
-      ? providers.filter((p) => p.name.toLowerCase().includes(name))
+      ? providers.filter((p) => fuzzyMatch(p.name, name))
       : providers;
     return {
       success: true,
@@ -395,10 +406,7 @@ const toolRegistry: Record<string, ToolHandler> = {
       return { success: false, error: "name argument is required" };
     }
     const products = await getProductsForClinic();
-    const needle = name.toLowerCase();
-    const matches = products.filter((p) =>
-      p.name.toLowerCase().includes(needle)
-    );
+    const matches = products.filter((p) => fuzzyMatch(p.name, name));
     return {
       success: true,
       data: {
