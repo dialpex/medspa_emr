@@ -31,6 +31,86 @@ export interface ValidateResult {
   passed: boolean; // true if no hard-stop errors
 }
 
+// Non-PHI feedback for AI self-correction — only error codes, field names, counts
+export interface MappingFeedback {
+  attempt: number;
+  totalRecords: number;
+  invalidRecords: number;
+  referentialErrorCount: number;
+  errorsByCode: Record<string, number>; // e.g. { V001: 5, V006: 3 }
+  errorsByEntity: Record<string, number>; // e.g. { patient: 2, appointment: 6 }
+  // Per-error-code detail: which entity types and fields are affected
+  errorDetails: Array<{
+    code: string;
+    entityType: string;
+    field?: string;
+    count: number;
+    sampleMessage: string; // One representative message (no PHI)
+  }>;
+  referentialDetails: Array<{
+    entityType: string;
+    field: string;
+    count: number;
+  }>;
+}
+
+export function buildMappingFeedback(
+  result: ValidateResult,
+  attempt: number
+): MappingFeedback {
+  // Group errors by (code, entityType, field) for actionable detail
+  const errorGroupKey = (e: { code: string; entityType: string; field?: string }) =>
+    `${e.code}::${e.entityType}::${e.field || ""}`;
+
+  const errorGroups = new Map<
+    string,
+    { code: string; entityType: string; field?: string; count: number; sampleMessage: string }
+  >();
+
+  for (const err of result.report.errors) {
+    const key = errorGroupKey(err);
+    const existing = errorGroups.get(key);
+    if (existing) {
+      existing.count++;
+    } else {
+      errorGroups.set(key, {
+        code: err.code,
+        entityType: err.entityType,
+        field: err.field,
+        count: 1,
+        sampleMessage: err.message,
+      });
+    }
+  }
+
+  // Group referential errors by (entityType, field)
+  const refGroups = new Map<string, { entityType: string; field: string; count: number }>();
+  for (const err of result.referentialErrors) {
+    const key = `${err.entityType}::${err.field || ""}`;
+    const existing = refGroups.get(key);
+    if (existing) {
+      existing.count++;
+    } else {
+      refGroups.set(key, {
+        entityType: err.entityType,
+        field: err.field || "",
+        count: 1,
+      });
+    }
+  }
+
+  return {
+    attempt,
+    totalRecords: result.report.totalRecords,
+    invalidRecords: result.report.invalidRecords,
+    referentialErrorCount: result.referentialErrors.length,
+    errorsByCode: { ...result.report.errorsByCode },
+    errorsByEntity: { ...result.report.errorsByEntity },
+    errorDetails: [...errorGroups.values()],
+    referentialDetails: [...refGroups.values()],
+  };
+}
+
 export function executeValidate(input: ValidateInput): ValidateResult {
   // Run per-record validators
   const batchInput = input.records.map((r) => ({

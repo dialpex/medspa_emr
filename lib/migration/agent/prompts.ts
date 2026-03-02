@@ -82,6 +82,61 @@ Given the reconciliation data (counts, error summaries, warning distributions), 
 
 You will NOT receive any actual patient data. Only aggregate counts and error codes.`;
 
+export const MAPPING_CORRECTION_PROMPT = `You are a data migration specialist fixing a MappingSpec that produced validation errors.
+
+You will receive:
+1. The current MappingSpec (JSON) — field mappings and transforms
+2. A MappingFeedback object — error codes, affected entities/fields, counts (NO PHI)
+
+Your job: return a corrected MappingSpec JSON that fixes the errors. Do NOT change mappings that are working.
+
+ERROR CODE FIXES:
+
+V001 (MISSING_REQUIRED): A required target field has no value.
+  → Check if there's a sourceField that should map to this targetField but is missing from fieldMappings.
+  → If the source data doesn't have the field, add a defaultValue transform with a sensible default.
+  → For patient: firstName and lastName are required.
+  → For other entities: check which fields are required in the canonical schema.
+
+V002 (INVALID_DATE): Date format is wrong after transform.
+  → Add or fix "normalizeDate" transform on the date field mapping.
+  → If the source field uses a non-standard format, normalizeDate handles most formats.
+
+V003 (INVALID_EMAIL): Email format is invalid.
+  → Add "normalizeEmail" transform which lowercases and trims.
+  → If the source data has non-email values in the email field, consider removing the mapping.
+
+V004 (INVALID_PHONE): Phone format is invalid.
+  → Add "normalizePhone" transform which standardizes to E.164 format.
+
+V005 (ORPHANED_REFERENCE): A record references a patient/appointment that doesn't exist in the dataset.
+  → This is usually a data issue, not a mapping issue. Cannot be fixed by changing the mapping.
+  → Skip these — the orchestrator will handle them.
+
+V006 (MISSING_PATIENT_LINK): Entity missing canonicalPatientId.
+  → Ensure the source field containing the patient ID/reference is mapped to canonicalPatientId.
+  → The sourceField is often "clientId", "patientId", "customerId", or similar.
+
+V007 (MISSING_PROVIDER): Entity missing providerName.
+  → Map the provider/staff/practitioner field to providerName.
+  → If unavailable, add defaultValue transform with "Unknown Provider".
+
+V008 (EMPTY_SECTIONS): Chart has no sections. This is a warning, not an error. Ignore.
+
+V009 (INVALID_AMOUNT): Invoice total is not a valid non-negative number.
+  → Ensure the source amount field is mapped correctly. No transform needed if source is numeric.
+
+V010 (MISSING_LINE_ITEMS): Invoice has no line items. This is a warning. Ignore.
+
+V011 (DUPLICATE_CANONICAL_ID): Duplicate canonical ID. Usually a data issue. Cannot fix via mapping.
+
+RULES:
+1. Return ONLY the corrected MappingSpec as JSON.
+2. Increment the version number by 1.
+3. Keep all working mappings unchanged.
+4. Only use transforms from the allowlist: normalizeDate, normalizePhone, normalizeEmail, trim, toUpper, toLower, mapEnum, splitName, concat, defaultValue, hashToken.
+5. Do NOT invent source field names — only use fields from the existing mapping or that appear in the error context.`;
+
 // --- Schema Discovery Prompts ---
 
 export const SCHEMA_DISCOVERY_SYSTEM_PROMPT = `You are a GraphQL schema discovery agent for a data migration system.
@@ -148,4 +203,18 @@ export function buildDiscoveryUserPrompt(
   );
 
   return parts.join("\n");
+}
+
+/**
+ * Build system prompt for mapping draft, optionally injecting cross-run memory.
+ */
+export function buildMappingSystemPrompt(memoryContext?: string): string {
+  if (!memoryContext) return MAPPING_SYSTEM_PROMPT;
+
+  return `${MAPPING_SYSTEM_PROMPT}
+
+PREVIOUS SUCCESSFUL MAPPINGS (from prior runs for this vendor):
+${memoryContext}
+
+Use these as a strong starting point. They represent field mappings and transforms that passed validation in previous migrations. Adapt as needed if the source schema has changed.`;
 }

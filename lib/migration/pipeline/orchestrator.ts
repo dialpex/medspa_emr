@@ -14,11 +14,16 @@ import type { MigrationReport } from "./phases/reconcile";
 
 import { executeIngest, type IngestInput } from "./phases/ingest";
 import { executeProfile } from "./phases/profile";
-import { executeDraftMapping } from "./phases/draft-mapping";
+import { executeDraftMapping, executeMappingCorrection } from "./phases/draft-mapping";
 import { executeTransform } from "./phases/transform";
-import { executeValidate, type ValidateResult } from "./phases/validate";
+import {
+  executeValidate,
+  buildMappingFeedback,
+  type ValidateResult,
+} from "./phases/validate";
 import { executeLoad, executePromote } from "./phases/load";
 import { executeReconcile } from "./phases/reconcile";
+import { writeMappingMemory, type MappingMemoryEntry } from "../agent/mapping-memory";
 
 export type MigrationPhase =
   | "ingest"
@@ -254,7 +259,16 @@ export class MigrationOrchestrator {
     await this.updateRun(run.id, { status: "DraftingMapping", currentPhase: "draft_mapping" });
 
     const profile: SourceProfile = JSON.parse(run.sourceProfile || "{}");
-    const result = await executeDraftMapping({ runId: run.id, profile });
+    const artifacts = await this.getArtifactRefs(run.id);
+
+    const result = await executeDraftMapping({
+      runId: run.id,
+      profile,
+      vendor: run.sourceVendor,
+      artifacts,
+      store: this.store,
+      tenantId: run.clinicId,
+    });
 
     const version = run.mappingSpecVersion + 1;
 
@@ -267,9 +281,14 @@ export class MigrationOrchestrator {
       },
     });
 
+    const progress = JSON.parse(run.progress || "{}");
     await this.updateRun(run.id, {
       status: "MappingDrafted",
       mappingSpecVersion: version,
+      progress: JSON.stringify({
+        ...progress,
+        dryValidation: result.dryValidation || null,
+      }),
     });
   }
 
@@ -313,17 +332,97 @@ export class MigrationOrchestrator {
     });
   }
 
-  private async phaseValidate(run: MigrationRun): Promise<void> {
+  private async phaseValidate(initialRun: MigrationRun): Promise<void> {
+    let run = initialRun;
     await this.updateRun(run.id, { status: "Validating", currentPhase: "validate" });
 
-    const progress = JSON.parse(run.progress || "{}");
-    const records = progress._transformedRecords;
+    const MAX_CORRECTION_ATTEMPTS = 2;
+    let progress = JSON.parse(run.progress || "{}");
+    let records = progress._transformedRecords;
 
     if (!records || records.length === 0) {
       throw new Error("No transformed records to validate");
     }
 
-    const result = executeValidate({ records });
+    let result = executeValidate({ records });
+    let correctionAttempts = 0;
+
+    // Self-correction loop: if validation fails, ask AI to fix the mapping
+    while (!result.passed && correctionAttempts < MAX_CORRECTION_ATTEMPTS) {
+      correctionAttempts++;
+      const feedback = buildMappingFeedback(result, correctionAttempts);
+
+      await this.auditEvent(run.id, "validate", "VALIDATION_FAILED_ATTEMPTING_CORRECTION", {
+        attempt: correctionAttempts,
+        invalidRecords: result.report.invalidRecords,
+        referentialErrors: result.referentialErrors.length,
+        errorsByCode: result.report.errorsByCode,
+      });
+
+      // Load current mapping spec + source profile for correction
+      const mappingSpecRecord = await prisma.migrationMappingSpec.findFirst({
+        where: { runId: run.id, version: run.mappingSpecVersion },
+      });
+      if (!mappingSpecRecord) {
+        throw new Error("Mapping spec not found for correction");
+      }
+      const currentSpec: MappingSpec = JSON.parse(mappingSpecRecord.spec);
+      const profile: SourceProfile = JSON.parse(run.sourceProfile || "{}");
+
+      // Ask AI to correct the mapping
+      const correctedSpec = await executeMappingCorrection(currentSpec, feedback, profile);
+
+      if (!correctedSpec) {
+        // AI unavailable or returned invalid spec — stop trying
+        console.log(`[orchestrator] AI correction unavailable, halting after attempt ${correctionAttempts}`);
+        break;
+      }
+
+      // Persist corrected spec as new version
+      const newVersion = run.mappingSpecVersion + 1;
+      await prisma.migrationMappingSpec.create({
+        data: {
+          runId: run.id,
+          version: newVersion,
+          spec: JSON.stringify(correctedSpec),
+        },
+      });
+
+      await this.updateRun(run.id, { mappingSpecVersion: newVersion });
+      run = await this.getRun(run.id);
+
+      await this.auditEvent(run.id, "validate", "MAPPING_CORRECTED", {
+        attempt: correctionAttempts,
+        newVersion,
+      });
+
+      // Re-transform with corrected spec
+      const artifacts = await this.getArtifactRefs(run.id);
+      const transformResult = await executeTransform(
+        {
+          runId: run.id,
+          vendor: run.sourceVendor,
+          tenantId: run.clinicId,
+          artifacts,
+          mappingSpec: correctedSpec,
+        },
+        this.store
+      );
+
+      records = transformResult.records;
+      progress = {
+        ...progress,
+        transformResult: { counts: transformResult.counts },
+        _transformedRecords: records,
+      };
+
+      await this.updateRun(run.id, {
+        progress: JSON.stringify(progress),
+      });
+
+      // Re-validate
+      result = executeValidate({ records });
+    }
 
     if (!result.passed) {
       const errorSummary = `${result.report.invalidRecords} invalid records, ${result.referentialErrors.length} referential errors`;
@@ -331,8 +430,11 @@ export class MigrationOrchestrator {
         invalidRecords: result.report.invalidRecords,
         referentialErrors: result.referentialErrors.length,
         errorsByCode: result.report.errorsByCode,
+        correctionAttempts,
       });
-      throw new Error(`Validation failed: ${errorSummary}`);
+      throw new Error(
+        `Validation failed after ${correctionAttempts} correction attempt(s): ${errorSummary}`
+      );
     }
 
     await this.updateRun(run.id, {
@@ -342,9 +444,16 @@ export class MigrationOrchestrator {
         validateResult: {
           report: result.report,
           samplingPacket: result.samplingPacket,
+          correctionAttempts,
         },
       }),
     });
+
+    if (correctionAttempts > 0) {
+      await this.auditEvent(run.id, "validate", "VALIDATION_PASSED_AFTER_CORRECTION", {
+        correctionAttempts,
+      });
+    }
   }
 
   private async phaseLoad(run: MigrationRun): Promise<void> {
@@ -401,6 +510,58 @@ export class MigrationOrchestrator {
         report,
       }),
     });
+
+    // Persist mapping memory for cross-run learning
+    if (mappingSpec && report.status !== "failed") {
+      try {
+        // Build correction history from all mapping spec versions
+        const correctionHistory: MappingMemoryEntry["correctionHistory"] = [];
+        if (run.mappingSpecVersion > 1) {
+          // Load validation audit events for this run to reconstruct correction history
+          const correctionEvents = await prisma.migrationAuditEvent.findMany({
+            where: {
+              runId: run.id,
+              action: { in: ["VALIDATION_FAILED_ATTEMPTING_CORRECTION", "MAPPING_CORRECTED"] },
+            },
+            orderBy: { createdAt: "asc" },
+          });
+          for (const event of correctionEvents) {
+            if (event.action === "VALIDATION_FAILED_ATTEMPTING_CORRECTION" && event.metadata) {
+              const meta = JSON.parse(event.metadata);
+              correctionHistory.push({
+                attempt: meta.attempt,
+                errorsByCode: meta.errorsByCode || {},
+                fixed: true, // if we got here (reconcile), corrections worked
+              });
+            }
+          }
+        }
+
+        const memoryEntry: MappingMemoryEntry = {
+          runId: run.id,
+          vendor: run.sourceVendor,
+          createdAt: new Date().toISOString(),
+          entityMappings: mappingSpec.entityMappings.map((em) => ({
+            sourceEntity: em.sourceEntity,
+            targetEntity: em.targetEntity,
+            fieldMappings: em.fieldMappings.map((fm) => ({
+              sourceField: fm.sourceField,
+              targetField: fm.targetField,
+              transform: fm.transform,
+              transformContext: fm.transformContext,
+            })),
+            enumMaps: em.enumMaps,
+          })),
+          correctionHistory,
+        };
+
+        await writeMappingMemory(run.sourceVendor, memoryEntry);
+      } catch (error) {
+        // Non-critical — log and continue
+        const msg = error instanceof Error ? error.message : String(error);
+        console.log(`[orchestrator] Failed to persist mapping memory: ${msg}`);
+      }
+    }
   }
 
   // --- Helpers ---
