@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles } from "lucide-react";
 import { ChatInput } from "./chat-input";
 import { MessageBubble } from "./message-bubble";
-import type { AIResponse, ChatMessage } from "@/lib/ai/providers/types";
+import type { AIResponse, ChatMessage } from "@/lib/agents/chat/types";
 
 interface UIMessage {
   id: string;

@@ -1,52 +1,45 @@
-// Bedrock Claude Client — Intelligence Layer
-// Sends SafeContext to Claude via AWS Bedrock, receives MappingSpec.
+// Mapping Proposer — Domain-specific intelligence for proposing MappingSpecs.
+// Uses LLMProvider.complete() to call Bedrock/Anthropic/OpenAI for mapping proposals.
 // NEVER logs prompt content. Only logs: runId, token counts, latency.
 
-import type { SafeContext } from "./safe-context-builder";
-import type { MappingSpec } from "../canonical/mapping-spec";
-import { validateMappingSpec } from "../canonical/mapping-spec";
-import type { AllowedTransform } from "../canonical/transforms";
+import type { LLMProvider } from "@/lib/agents/_shared/llm/types";
+import { extractJSON } from "@/lib/agents/_shared/llm/utils";
+import { getLLMProvider } from "@/lib/agents/_shared/llm";
+import type { SafeContext } from "@/lib/agents/_shared/phi/safe-context";
+import type { MappingSpec } from "@/lib/migration/canonical/mapping-spec";
+import { validateMappingSpec } from "@/lib/migration/canonical/mapping-spec";
+import type { AllowedTransform } from "@/lib/migration/canonical/transforms";
 import { MAPPING_SYSTEM_PROMPT, ENUM_MAPPING_PROMPT } from "./prompts";
 
-interface BedrockConfig {
-  region: string;
-  modelId: string;
-}
+export class MappingProposer {
+  private provider: LLMProvider;
 
-function getConfig(): BedrockConfig {
-  return {
-    region: process.env.AWS_REGION || "us-east-1",
-    modelId: process.env.BEDROCK_MODEL_ID || "anthropic.claude-sonnet-4-5-20250929-v1:0",
-  };
-}
-
-export class BedrockClaudeClient {
-  private config: BedrockConfig;
-
-  constructor(config?: Partial<BedrockConfig>) {
-    const defaults = getConfig();
-    this.config = { ...defaults, ...config };
+  constructor(provider?: LLMProvider) {
+    this.provider = provider || getLLMProvider({ provider: "bedrock" });
   }
 
   async proposeMappingSpec(safeContext: SafeContext, runId?: string): Promise<MappingSpec> {
     const startTime = Date.now();
 
-    const userMessage = JSON.stringify(safeContext, null, 2);
+    const userMessage = `Analyze this source data profile and propose field mappings to the canonical schema.\n\n${JSON.stringify(safeContext, null, 2)}`;
 
-    const response = await this.invokeModel(
+    const result = await this.provider.complete(
       MAPPING_SYSTEM_PROMPT,
-      `Analyze this source data profile and propose field mappings to the canonical schema.\n\n${userMessage}`
+      userMessage
     );
 
     const latencyMs = Date.now() - startTime;
-    // Log metadata only — never log prompt content
-    console.log(`[Bedrock] proposeMappingSpec runId=${runId || "unknown"} latency=${latencyMs}ms`);
+    console.log(`[MappingProposer] proposeMappingSpec runId=${runId || "unknown"} latency=${latencyMs}ms`);
 
-    // Parse and validate
-    const spec = this.extractJSON<MappingSpec>(response);
+    if (!result.text) {
+      // Provider returned empty (mock/unavailable) — use mock response
+      return this.generateMockMappingSpec(safeContext);
+    }
+
+    const spec = extractJSON<MappingSpec>(result.text);
     const validation = validateMappingSpec(spec);
     if (!validation.valid) {
-      throw new Error(`Invalid MappingSpec from Bedrock: ${validation.errors.map((e) => e.message).join(", ")}`);
+      throw new Error(`Invalid MappingSpec: ${validation.errors.map((e) => e.message).join(", ")}`);
     }
 
     return spec;
@@ -56,79 +49,25 @@ export class BedrockClaudeClient {
     sourceEnums: string[],
     targetEnums: string[]
   ): Promise<Record<string, string>> {
-    const response = await this.invokeModel(
+    const result = await this.provider.complete(
       ENUM_MAPPING_PROMPT,
       `Source values: ${JSON.stringify(sourceEnums)}\nTarget values: ${JSON.stringify(targetEnums)}`
     );
 
-    return this.extractJSON<Record<string, string>>(response);
-  }
-
-  private async invokeModel(systemPrompt: string, userMessage: string): Promise<string> {
-    // Check if AWS SDK is available
-    try {
-      const bedrockModule = "@aws-sdk/client-bedrock-runtime";
-      const { BedrockRuntimeClient, InvokeModelCommand } = await import(
-        /* webpackIgnore: true */ bedrockModule
-      );
-
-      const client = new BedrockRuntimeClient({ region: this.config.region });
-
-      const body = JSON.stringify({
-        anthropic_version: "bedrock-2023-05-31",
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
-      });
-
-      const command = new InvokeModelCommand({
-        modelId: this.config.modelId,
-        contentType: "application/json",
-        accept: "application/json",
-        body: new TextEncoder().encode(body),
-      });
-
-      const response = await client.send(command);
-      const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-      return responseBody.content?.[0]?.text || "";
-    } catch (error: unknown) {
-      // If AWS SDK not installed or credentials missing, fall through to mock
-      const message = error instanceof Error ? error.message : String(error);
-      if (
-        message.includes("Cannot find module") ||
-        message.includes("Cannot find package") ||
-        message.includes("ERR_MODULE_NOT_FOUND") ||
-        message.includes("credentials") ||
-        message.includes("Could not load")
-      ) {
-        console.warn("[Bedrock] AWS SDK unavailable, using mock response");
-        return this.mockResponse(systemPrompt, userMessage);
-      }
-      throw error;
+    if (!result.text) {
+      return {};
     }
+
+    return extractJSON<Record<string, string>>(result.text);
   }
 
-  private mockResponse(_systemPrompt: string, userMessage: string): string {
-    // Generate a sensible mock MappingSpec from the SafeContext
-    try {
-      const context = JSON.parse(userMessage.split("\n\n").slice(1).join("\n\n")) as SafeContext;
-      return JSON.stringify(this.generateMockMappingSpec(context));
-    } catch {
-      return JSON.stringify({
-        version: 1,
-        sourceVendor: "unknown",
-        entityMappings: [],
-      });
-    }
-  }
+  // --- Mock fallback ---
 
   private generateMockMappingSpec(context: SafeContext): MappingSpec {
     const entityMappings = context.sourceProfile.entities
       .map((entity) => {
-        // Find matching canonical entity
         const targetEntity = this.matchCanonicalEntity(entity.type);
-        if (!targetEntity) return null; // Skip unmappable entities (services, forms, etc.)
+        if (!targetEntity) return null;
 
         const targetEntityDesc = context.targetSchema.find((s) => s.entityType === targetEntity);
 
@@ -150,7 +89,7 @@ export class BedrockClaudeClient {
           })
           .filter((fm): fm is NonNullable<typeof fm> => fm !== null);
 
-        if (fieldMappings.length === 0) return null; // Skip entities with no field mappings
+        if (fieldMappings.length === 0) return null;
 
         return {
           sourceEntity: entity.type,
@@ -190,13 +129,11 @@ export class BedrockClaudeClient {
     if (!targetEntity) return null;
     const lower = sourceField.toLowerCase();
 
-    // Direct name matches
     const direct = targetEntity.fields.find(
       (f) => f.name.toLowerCase() === lower
     );
     if (direct) return direct.name;
 
-    // Common aliases
     const aliases: Record<string, string> = {
       fname: "firstName", first_name: "firstName", firstname: "firstName",
       lname: "lastName", last_name: "lastName", lastname: "lastName",
@@ -230,9 +167,8 @@ export class BedrockClaudeClient {
       file_name: "filename", name: "filename",
       mime_type: "mimeType", content_type: "mimeType", mimetype: "mimeType",
       taken_at: "takenAt", takenat: "takenAt",
-      url: "artifactKey",  // photos/docs: URL → artifact reference
+      url: "artifactKey",
       lineitems: "lineItems", line_items: "lineItems",
-      // Address sub-fields: flat source → nested canonical address object
       address: "address.line1", street: "address.line1", address1: "address.line1",
       street_address: "address.line1", line1: "address.line1", address_line1: "address.line1",
       address2: "address.line2", line2: "address.line2", address_line2: "address.line2",
@@ -246,7 +182,6 @@ export class BedrockClaudeClient {
 
     const alias = aliases[lower];
     if (alias) {
-      // For address sub-fields, always return — the transform handles assembly
       if (alias.startsWith("address.")) return alias;
       if (targetEntity.fields.find((f) => f.name === alias)) return alias;
     }
@@ -279,14 +214,5 @@ export class BedrockClaudeClient {
     if (lower === targetLower) return 0.95;
     if (lower.includes(targetLower) || targetLower.includes(lower)) return 0.85;
     return 0.6;
-  }
-
-  private extractJSON<T>(text: string): T {
-    // Try to find JSON in the response
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("No JSON found in Bedrock response");
-    }
-    return JSON.parse(jsonMatch[0]);
   }
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { LocalArtifactStore } from "../lib/migration/storage/local-store";
 import { GenericCSVAdapter } from "../lib/migration/adapters/generic-csv";
-import { SafeContextBuilder } from "../lib/migration/agent/safe-context-builder";
+import { SafeContextBuilder } from "../lib/agents/_shared/phi/safe-context";
 import { executeValidate, buildMappingFeedback } from "../lib/migration/pipeline/phases/validate";
 import { validateMappingSpec, type MappingSpec } from "../lib/migration/canonical/mapping-spec";
 import { executeTransform as transformPhase } from "../lib/migration/pipeline/phases/transform";
@@ -12,7 +12,7 @@ import {
   writeMappingMemory,
   readMemoryForAgent,
   type MappingMemoryEntry,
-} from "../lib/migration/agent/mapping-memory";
+} from "../lib/agents/migration/mapping-memory";
 import {
   readVendorDiscoveryMemory,
   writeVendorDiscoveryMemory,
@@ -22,9 +22,9 @@ import {
   addCrossVendorPattern,
   readDiscoveryMemoryForAgent,
   type VendorDiscoveryMemory,
-} from "../lib/migration/agent/discovery-memory";
-import { parseGraphQLError } from "../lib/migration/agent/tools";
-import { buildMappingSystemPrompt } from "../lib/migration/agent/prompts";
+} from "../lib/agents/migration/discovery-memory";
+import { parseGraphQLError } from "../lib/agents/migration/tools";
+import { buildMappingSystemPrompt } from "../lib/agents/migration/prompts";
 import { rm } from "fs/promises";
 import path from "path";
 
@@ -184,7 +184,7 @@ describe("Migration Pipeline Integration", () => {
       expect(results).toHaveLength(2);
       expect(results[0].entityType).toBe("patient");
 
-      const record = results[0].record as Record<string, unknown>;
+      const record = results[0].record as unknown as Record<string, unknown>;
       expect(record.firstName).toBe("Jane");
       expect(record.lastName).toBe("Doe");
       expect(record.email).toBe("jane@example.com");
@@ -196,7 +196,7 @@ describe("Migration Pipeline Integration", () => {
       for await (const item of adapter.transform([ref], store, mappingSpec)) {
         results2.push(item);
       }
-      expect((results2[0].record as Record<string, unknown>).canonicalId)
+      expect((results2[0].record as unknown as Record<string, unknown>).canonicalId)
         .toBe(record.canonicalId);
     });
   });

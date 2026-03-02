@@ -4,7 +4,7 @@ import {
   mockTranscribeAudio,
   mockClinicalDraft,
   applyStructuredPatch,
-} from "../lib/ai/clinical-draft";
+} from "../lib/agents/clinical/draft";
 
 const prisma = new PrismaClient();
 

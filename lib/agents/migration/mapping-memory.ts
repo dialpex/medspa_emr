@@ -2,10 +2,9 @@
 // Stores in .migration-cache/{vendor}/mapping-memory.json (gitignored).
 // 30-day staleness, max 5 entries per vendor.
 
-import { readFile, writeFile, mkdir } from "fs/promises";
 import { join } from "path";
+import { vendorDir, readJSON, writeJSON, isStale } from "../_shared/memory/base";
 
-const CACHE_BASE = join(process.cwd(), ".migration-cache");
 const STALENESS_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const MAX_ENTRIES = 5;
 
@@ -36,34 +35,6 @@ export interface MappingMemoryCache {
   updatedAt: string;
 }
 
-function vendorDir(vendor: string): string {
-  return join(CACHE_BASE, vendor.toLowerCase().replace(/[^a-z0-9]/g, "-"));
-}
-
-async function ensureDir(dir: string): Promise<void> {
-  await mkdir(dir, { recursive: true });
-}
-
-async function readJSON<T>(path: string): Promise<T | null> {
-  try {
-    const content = await readFile(path, "utf-8");
-    return JSON.parse(content) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function writeJSON(path: string, data: unknown): Promise<void> {
-  const dir = path.substring(0, path.lastIndexOf("/"));
-  await ensureDir(dir);
-  await writeFile(path, JSON.stringify(data, null, 2), "utf-8");
-}
-
-function isStale(timestamp: string): boolean {
-  const age = Date.now() - new Date(timestamp).getTime();
-  return age > STALENESS_MS;
-}
-
 function memoryPath(vendor: string): string {
   return join(vendorDir(vendor), "mapping-memory.json");
 }
@@ -73,7 +44,7 @@ function memoryPath(vendor: string): string {
 export async function readMappingMemory(vendor: string): Promise<MappingMemoryCache | null> {
   const cache = await readJSON<MappingMemoryCache>(memoryPath(vendor));
   if (!cache) return null;
-  if (isStale(cache.updatedAt)) {
+  if (isStale(cache.updatedAt, STALENESS_MS)) {
     console.log(`[mapping-memory] Cache for ${vendor} is stale (>30 days), ignoring`);
     return null;
   }

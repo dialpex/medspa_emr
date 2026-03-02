@@ -118,7 +118,6 @@ export class MockAiProvider implements AiProvider {
 
     // Scheduling domain
     if (domain === "scheduling") {
-      // If vague, clarify
       if (!text.match(/\b(tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|\d{1,2}\/\d{1,2})\b/)) {
         return {
           type: "clarify",
@@ -187,9 +186,8 @@ export class MockAiProvider implements AiProvider {
       };
     }
 
-    // Service/pricing modifications → plan with clarification
+    // Service/pricing modifications
     if (matchesAny(text, SERVICE_KEYWORDS) && matchesAny(text, ["update", "change", "edit", "modify", "set", "price", "pricing", "cost"])) {
-      // Extract a service name hint from the message
       const serviceHint = extractServiceName(text);
       return {
         type: "clarify",
@@ -240,7 +238,7 @@ export class MockAiProvider implements AiProvider {
       };
     }
 
-    // Handle choice selections from clarify responses (e.g. "Update the price")
+    // Handle choice selections
     if (matchesAny(text, ["update the price", "update the duration", "update the description"])) {
       return {
         type: "plan",
@@ -294,7 +292,7 @@ export class MockAiProvider implements AiProvider {
       };
     }
 
-    // General fallback — clarify intent instead of showing help
+    // General fallback
     return {
       type: "clarify",
       domain: "general",

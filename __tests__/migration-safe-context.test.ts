@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SafeContextBuilder, maskString, maskDate, maskFreeText, maskIdentifier } from "../lib/migration/agent/safe-context-builder";
+import { SafeContextBuilder, maskString, maskDate, maskFreeText, maskIdentifier } from "../lib/agents/_shared/phi/safe-context";
 import type { SourceProfile } from "../lib/migration/adapters/types";
 
 describe("SafeContext PHI Masking", () => {

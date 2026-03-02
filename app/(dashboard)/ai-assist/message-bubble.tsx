@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
-import type { AIResponse } from "@/lib/ai/providers/types";
+import type { AIResponse } from "@/lib/agents/chat/types";
 
 interface Message {
   id: string;

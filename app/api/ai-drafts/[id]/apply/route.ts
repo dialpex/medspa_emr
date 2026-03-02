@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
-import { applyStructuredPatch } from "@/lib/ai/clinical-draft";
+import { applyStructuredPatch } from "@/lib/agents/clinical/draft";
 import { parseStructuredData } from "@/lib/templates/schemas";
 
 export async function POST(

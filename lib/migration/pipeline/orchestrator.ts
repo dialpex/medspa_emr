@@ -23,7 +23,7 @@ import {
 } from "./phases/validate";
 import { executeLoad, executePromote } from "./phases/load";
 import { executeReconcile } from "./phases/reconcile";
-import { writeMappingMemory, type MappingMemoryEntry } from "../agent/mapping-memory";
+import { writeMappingMemory, type MappingMemoryEntry } from "@/lib/agents/migration/mapping-memory";
 
 export type MigrationPhase =
   | "ingest"

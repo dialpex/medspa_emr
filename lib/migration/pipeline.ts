@@ -3,7 +3,7 @@ import type { MigrationJob, MigrationEntityType } from "@prisma/client";
 import type { MigrationProvider, MigrationCredentials, SourceForm, FormFieldContent } from "./providers/types";
 import { decrypt } from "./crypto";
 import { detectDuplicate } from "./duplicate-detector";
-import { classifyAndMapForms } from "./agent";
+import { classifyAndMapForms } from "@/lib/agents/migration/legacy/agent";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 

@@ -2,10 +2,9 @@
 // Per-vendor: .migration-cache/{vendor}/discovery-memory.json (90-day TTL, max 50 errors + 20 quirks)
 // Cross-vendor: .migration-cache/_shared/discovery-patterns.json (180-day TTL, max 30 patterns)
 
-import { readFile, writeFile, mkdir } from "fs/promises";
 import { join } from "path";
+import { vendorDir, sharedDir, readJSON, writeJSON, isStale } from "../_shared/memory/base";
 
-const CACHE_BASE = join(process.cwd(), ".migration-cache");
 const VENDOR_STALENESS_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 const SHARED_STALENESS_MS = 180 * 24 * 60 * 60 * 1000; // 180 days
 const MAX_ERRORS = 50;
@@ -61,38 +60,6 @@ export interface CapturedDiscoveryError {
 }
 
 // --- File helpers ---
-
-function vendorDir(vendor: string): string {
-  return join(CACHE_BASE, vendor.toLowerCase().replace(/[^a-z0-9]/g, "-"));
-}
-
-function sharedDir(): string {
-  return join(CACHE_BASE, "_shared");
-}
-
-async function ensureDir(dir: string): Promise<void> {
-  await mkdir(dir, { recursive: true });
-}
-
-async function readJSON<T>(filePath: string): Promise<T | null> {
-  try {
-    const content = await readFile(filePath, "utf-8");
-    return JSON.parse(content) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function writeJSON(filePath: string, data: unknown): Promise<void> {
-  const dir = filePath.substring(0, filePath.lastIndexOf("/"));
-  await ensureDir(dir);
-  await writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
-}
-
-function isStale(timestamp: string, maxAge: number): boolean {
-  const age = Date.now() - new Date(timestamp).getTime();
-  return age > maxAge;
-}
 
 function discoveryMemoryPath(vendor: string): string {
   return join(vendorDir(vendor), "discovery-memory.json");

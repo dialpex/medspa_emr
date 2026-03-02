@@ -1,4 +1,4 @@
-import type { ChatContext } from "./providers/types";
+import type { ChatContext } from "./types";
 
 const BASE_PROMPT = `You are the AI Operating System for a medspa EMR SaaS platform. You translate natural language into safe, auditable, permissioned actions. You do not directly edit databases. You propose plans, ask clarifying questions, and wait for confirmation before execution.
 

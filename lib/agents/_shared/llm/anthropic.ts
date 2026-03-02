@@ -1,50 +1,44 @@
-// Anthropic Client — Core SDK wrapper for migration intelligence
-// Thin wrapper around @anthropic-ai/sdk with tool-use agentic loop.
+// AnthropicProvider — LLMProvider implementation using Anthropic SDK.
 // NEVER logs prompt content. Only logs: runId, token counts, latency.
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { Tool, MessageParam, ContentBlockParam } from "@anthropic-ai/sdk/resources/messages";
+import type {
+  LLMProvider,
+  ToolHandler,
+  CompletionOptions,
+  CompletionResult,
+  ToolLoopOptions,
+  ToolLoopResult,
+} from "./types";
+import { extractJSON } from "./utils";
 
-const MODEL = "claude-sonnet-4-5-20250929";
+const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 
-export interface ToolHandler {
-  name: string;
-  description: string;
-  input_schema: Record<string, unknown>;
-  handler: (input: Record<string, unknown>) => Promise<unknown>;
-}
-
-export interface ToolLoopResult {
-  finalText: string;
-  toolCallCount: number;
-  inputTokens: number;
-  outputTokens: number;
-}
-
-export class AnthropicClient {
+export class AnthropicProvider implements LLMProvider {
+  readonly name = "anthropic";
   private client: Anthropic;
+  private defaultModel: string;
 
-  constructor() {
+  constructor(model?: string) {
     this.client = new Anthropic();
+    this.defaultModel = model || DEFAULT_MODEL;
   }
 
-  static isAvailable(): boolean {
+  isAvailable(): boolean {
     return !!process.env.ANTHROPIC_API_KEY;
   }
 
-  /**
-   * Single-shot structured response. Sends a system + user message,
-   * expects a JSON response, parses and returns it.
-   */
-  async complete<T>(
-    systemPrompt: string,
+  async complete(
+    system: string,
     userMessage: string,
-    maxTokens = 4096
-  ): Promise<T> {
+    options?: CompletionOptions
+  ): Promise<CompletionResult> {
     const response = await this.client.messages.create({
-      model: MODEL,
-      max_tokens: maxTokens,
-      system: systemPrompt,
+      model: options?.model || this.defaultModel,
+      max_tokens: options?.maxTokens ?? 4096,
+      temperature: options?.temperature,
+      system,
       messages: [{ role: "user", content: userMessage }],
     });
 
@@ -53,20 +47,23 @@ export class AnthropicClient {
       throw new Error("No text response from Anthropic");
     }
 
-    return this.extractJSON<T>(textBlock.text);
+    return {
+      text: textBlock.text,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    };
   }
 
-  /**
-   * Agentic tool-use loop. Sends tools, dispatches handlers, loops
-   * until Claude stops calling tools (end_turn or no more tool_use blocks).
-   */
   async runToolLoop(
-    systemPrompt: string,
+    system: string,
     userMessage: string,
     toolHandlers: ToolHandler[],
-    maxIterations = 15,
-    maxTokens = 4096
+    options?: ToolLoopOptions
   ): Promise<ToolLoopResult> {
+    const maxIterations = options?.maxIterations ?? 15;
+    const maxTokens = options?.maxTokens ?? 4096;
+    const model = options?.model || this.defaultModel;
+
     const tools: Tool[] = toolHandlers.map((t) => ({
       name: t.name,
       description: t.description,
@@ -86,9 +83,10 @@ export class AnthropicClient {
 
     for (let i = 0; i < maxIterations; i++) {
       const response = await this.client.messages.create({
-        model: MODEL,
+        model,
         max_tokens: maxTokens,
-        system: systemPrompt,
+        temperature: options?.temperature,
+        system,
         messages,
         tools,
       });
@@ -106,7 +104,6 @@ export class AnthropicClient {
       // Check if we're done (no tool use)
       const toolUseBlocks = response.content.filter((b) => b.type === "tool_use");
       if (toolUseBlocks.length === 0 || response.stop_reason === "end_turn") {
-        // If stop_reason is end_turn but there are tool uses, process them first
         if (toolUseBlocks.length === 0) break;
       }
 
@@ -161,18 +158,7 @@ export class AnthropicClient {
       outputTokens: totalOutputTokens,
     };
   }
-
-  private extractJSON<T>(text: string): T {
-    // Try to find JSON in code blocks first
-    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeBlockMatch) {
-      return JSON.parse(codeBlockMatch[1].trim());
-    }
-    // Fall back to finding raw JSON
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("No JSON found in Anthropic response");
-    }
-    return JSON.parse(jsonMatch[0]);
-  }
 }
+
+// Re-export extractJSON for backward compat
+export { extractJSON };

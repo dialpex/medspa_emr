@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { AiProvider, AIResponse, ChatRequest } from "./types";
-import { getSystemPrompt } from "../system-prompt";
-import { MockAiProvider } from "./mock";
+import { getSystemPrompt } from "./prompts";
+import { MockAiProvider } from "./mock-provider";
 
 // Strict JSON schema so OpenAI always returns a valid AIResponse shape.
 // OpenAI structured outputs require all object properties to be required,

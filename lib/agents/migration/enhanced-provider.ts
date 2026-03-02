@@ -17,8 +17,8 @@ import type {
   SourceDocument,
   SourceChart,
   FormFieldContent,
-} from "../providers/types";
-import { AnthropicClient } from "./anthropic-client";
+} from "@/lib/migration/providers/types";
+import { AnthropicProvider } from "@/lib/agents/_shared/llm/anthropic";
 import { discoverAndBuildQueries, type SeedQuery } from "./schema-discovery";
 import type { GraphQLExecutor } from "./tools";
 import type { CachedQueryPattern } from "./schema-cache";
@@ -57,7 +57,8 @@ export class AgentEnhancedProvider implements MigrationProvider {
   async initialize(credentials: MigrationCredentials): Promise<void> {
     if (this.initialized) return;
 
-    if (!AnthropicClient.isAvailable()) {
+    const provider = new AnthropicProvider();
+    if (!provider.isAvailable()) {
       console.log("[enhanced-provider] ANTHROPIC_API_KEY not set, using base provider only");
       this.initialized = true;
       return;

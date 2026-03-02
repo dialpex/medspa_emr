@@ -2,9 +2,9 @@
 // build queries, test them, fix errors, and cache results.
 // PHI boundary: raw patient data NEVER goes to Claude.
 
-import { AnthropicClient } from "./anthropic-client";
+import { AnthropicProvider } from "@/lib/agents/_shared/llm/anthropic";
 import { buildDiscoveryTools, type GraphQLExecutor } from "./tools";
-import type { MigrationCredentials } from "../providers/types";
+import type { MigrationCredentials } from "@/lib/migration/providers/types";
 import type { CachedTypeInfo, CachedQueryPattern } from "./schema-cache";
 import {
   readSchemaCache,
@@ -71,7 +71,7 @@ export async function discoverAndBuildQueries(
   }
 
   // Run the discovery agent
-  const client = new AnthropicClient();
+  const provider = new AnthropicProvider();
 
   const discoveredTypes: Record<string, CachedTypeInfo> = cachedSchema?.types || {};
   const discoveredQueries: Record<string, CachedQueryPattern> = cachedQueries?.patterns || {};
@@ -97,12 +97,11 @@ export async function discoverAndBuildQueries(
   console.log(`[schema-discovery] Starting discovery for ${vendor}: ${entityTypes.join(", ")}`);
   const startTime = Date.now();
 
-  const result = await client.runToolLoop(
+  const result = await provider.runToolLoop(
     SCHEMA_DISCOVERY_SYSTEM_PROMPT,
     userPrompt,
     tools,
-    20, // max iterations
-    8192
+    { maxIterations: 20, maxTokens: 8192 }
   );
 
   const elapsed = Date.now() - startTime;

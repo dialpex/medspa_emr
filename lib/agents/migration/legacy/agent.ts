@@ -1,6 +1,10 @@
+// Legacy Migration Agent — OpenAI-based discovery/mapping/verification.
+// Preserved as-is for backward compatibility. New migrations use the
+// pipeline + Anthropic-based agent in lib/agents/migration/.
+
 import OpenAI from "openai";
 import type { MigrationJob } from "@prisma/client";
-import type { MigrationProvider, MigrationCredentials } from "./providers/types";
+import type { MigrationProvider, MigrationCredentials } from "@/lib/migration/providers/types";
 import {
   DISCOVERY_SCHEMA,
   MAPPING_SCHEMA,
@@ -17,8 +21,8 @@ import {
   VERIFICATION_SYSTEM_PROMPT,
   FORM_CLASSIFICATION_SYSTEM_PROMPT,
 } from "./agent-prompts";
-import type { SourceForm, FormFieldContent } from "./providers/types";
-import { decrypt } from "./crypto";
+import type { SourceForm, FormFieldContent } from "@/lib/migration/providers/types";
+import { decrypt } from "@/lib/migration/crypto";
 
 // Temperature 0.2 — deterministic for data migration, not creative writing
 const TEMPERATURE = 0.2;
@@ -387,7 +391,6 @@ ${JSON.stringify(
         name.includes("clinical") ||
         name.includes("assessment")
       ) {
-        // Build rich narrative from data-bearing fields only (skip headings, signatures, images)
         const dataFields = f.fields?.filter((fld) =>
           fld.type !== "heading" && fld.type !== "signature" && fld.type !== "image"
         ) || [];
@@ -444,7 +447,6 @@ function detectDataIssues(
 ) {
   const issues: DiscoveryResponse["issues"] = [];
 
-  // Missing emails
   const noEmail = patients.filter((p) => !p.email);
   if (noEmail.length > 0) {
     issues.push({
@@ -455,7 +457,6 @@ function detectDataIssues(
     });
   }
 
-  // Duplicate emails
   const emailCounts = new Map<string, number>();
   for (const p of patients) {
     if (p.email) {
@@ -472,7 +473,6 @@ function detectDataIssues(
     });
   }
 
-  // Duplicate service names
   const svcNames = new Map<string, number>();
   for (const s of services) {
     const norm = s.name.toLowerCase().trim();
@@ -488,7 +488,6 @@ function detectDataIssues(
     });
   }
 
-  // Orphaned appointment references
   const serviceIds = new Set(services.map((s) => s.sourceId));
   const patientIds = new Set(patients.map((p) => p.sourceId));
   const orphanedService = appointments.filter(
@@ -515,7 +514,6 @@ function detectDataIssues(
     });
   }
 
-  // Unknown providers
   const providerNames = new Set(appointments.map((a) => a.providerName).filter(Boolean));
   if (providerNames.size > 0) {
     issues.push({

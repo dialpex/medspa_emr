@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac";
 import { requireFeature } from "@/lib/feature-flags";
 import { FeatureNotAvailableError } from "@/lib/feature-flags-core";
-import { getAiProvider } from "@/lib/ai/providers";
+import { getAiProvider } from "@/lib/agents/chat";
 import { prisma } from "@/lib/prisma";
-import type { ChatMessage } from "@/lib/ai/providers/types";
+import type { ChatMessage } from "@/lib/agents/chat/types";
 
 export async function POST(request: NextRequest) {
   try {

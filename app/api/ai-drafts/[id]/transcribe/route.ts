@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { requirePermission } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
-import { transcribeAudio } from "@/lib/ai/clinical-draft";
+import { transcribeAudio } from "@/lib/agents/clinical/draft";
 
 export async function POST(
   _request: NextRequest,

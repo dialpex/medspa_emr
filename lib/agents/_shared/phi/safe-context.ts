@@ -3,9 +3,9 @@
 // Raw values NEVER leave Neuvvia-controlled storage.
 
 import { createHmac } from "crypto";
-import type { SourceProfile } from "../adapters/types";
-import type { CanonicalSchemaDescription } from "../canonical/schema";
-import { CANONICAL_SCHEMA_DESCRIPTION } from "../canonical/schema";
+import type { SourceProfile } from "@/lib/migration/adapters/types";
+import type { CanonicalSchemaDescription } from "@/lib/migration/canonical/schema";
+import { CANONICAL_SCHEMA_DESCRIPTION } from "@/lib/migration/canonical/schema";
 
 export interface SafeContext {
   sourceProfile: SourceProfile;

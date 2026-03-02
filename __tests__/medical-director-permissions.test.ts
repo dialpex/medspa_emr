@@ -20,22 +20,31 @@ interface TestUser {
 function generateRecordHash(chart: {
   id: string;
   chiefComplaint: string | null;
-  areasTreeated: string | null;
+  areasTreated: string | null;
   productsUsed: string | null;
   dosageUnits: string | null;
-  technique: string | null;
   aftercareNotes: string | null;
   additionalNotes: string | null;
+  treatmentCards?: Array<{
+    narrativeText: string;
+    structuredData: string;
+    sortOrder: number;
+  }>;
 }): string {
+  const cards = (chart.treatmentCards ?? [])
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((c) => ({ narrative: c.narrativeText, structured: c.structuredData }));
+
   const content = JSON.stringify({
     id: chart.id,
     chiefComplaint: chart.chiefComplaint,
-    areasTreeated: chart.areasTreeated,
+    areasTreated: chart.areasTreated,
     productsUsed: chart.productsUsed,
     dosageUnits: chart.dosageUnits,
-    technique: chart.technique,
     aftercareNotes: chart.aftercareNotes,
     additionalNotes: chart.additionalNotes,
+    treatmentCards: cards,
   });
   return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }

@@ -5,15 +5,15 @@
 import type { SourceProfile } from "../../adapters/types";
 import type { MappingSpec } from "../../canonical/mapping-spec";
 import { validateMappingSpec } from "../../canonical/mapping-spec";
-import { SafeContextBuilder } from "../../agent/safe-context-builder";
-import { AnthropicClient } from "../../agent/anthropic-client";
-import { BedrockClaudeClient } from "../../agent/bedrock-client";
+import { SafeContextBuilder } from "@/lib/agents/_shared/phi/safe-context";
+import { AnthropicProvider } from "@/lib/agents/_shared/llm/anthropic";
+import { extractJSON } from "@/lib/agents/_shared/llm/utils";
+import { MappingProposer } from "@/lib/agents/migration/mapping-proposer";
 import {
-  MAPPING_SYSTEM_PROMPT,
   MAPPING_CORRECTION_PROMPT,
   buildMappingSystemPrompt,
-} from "../../agent/prompts";
-import { readMemoryForAgent } from "../../agent/mapping-memory";
+} from "@/lib/agents/migration/prompts";
+import { readMemoryForAgent } from "@/lib/agents/migration/mapping-memory";
 import type { MappingFeedback } from "./validate";
 import type { ArtifactStore, ArtifactRef } from "../../storage/types";
 import type { CanonicalEntityType, CanonicalRecord } from "../../canonical/schema";
@@ -66,20 +66,17 @@ export async function executeDraftMapping(
 
   let mappingSpec: MappingSpec;
 
-  if (AnthropicClient.isAvailable()) {
+  const anthropic = new AnthropicProvider();
+  if (anthropic.isAvailable()) {
     // Use Anthropic SDK directly
     console.log(`[draft-mapping] Using Anthropic SDK (runId=${input.runId})`);
     const startTime = Date.now();
 
     const systemPrompt = buildMappingSystemPrompt(memoryContext);
-    const client = new AnthropicClient();
     const userMessage = `Analyze this source data profile and propose field mappings to the canonical schema.\n\n${JSON.stringify(safeContext, null, 2)}`;
 
-    mappingSpec = await client.complete<MappingSpec>(
-      systemPrompt,
-      userMessage,
-      8192
-    );
+    const result = await anthropic.complete(systemPrompt, userMessage, { maxTokens: 8192 });
+    mappingSpec = extractJSON<MappingSpec>(result.text);
 
     const latencyMs = Date.now() - startTime;
     console.log(`[draft-mapping] Anthropic response in ${latencyMs}ms`);
@@ -92,10 +89,10 @@ export async function executeDraftMapping(
       );
     }
   } else {
-    // Fall back to Bedrock (which itself falls back to mock)
+    // Fall back to Bedrock/mock via MappingProposer
     console.log(`[draft-mapping] ANTHROPIC_API_KEY not set, falling back to Bedrock/mock`);
-    const client = new BedrockClaudeClient();
-    mappingSpec = await client.proposeMappingSpec(safeContext, input.runId);
+    const proposer = new MappingProposer();
+    mappingSpec = await proposer.proposeMappingSpec(safeContext, input.runId);
   }
 
   // Run dry validation if artifacts/store/tenantId provided
@@ -129,7 +126,8 @@ export async function executeMappingCorrection(
   feedback: MappingFeedback,
   profile: SourceProfile
 ): Promise<MappingSpec | null> {
-  if (!AnthropicClient.isAvailable()) {
+  const anthropic = new AnthropicProvider();
+  if (!anthropic.isAvailable()) {
     console.log(`[draft-mapping] AI unavailable for correction, skipping`);
     return null;
   }
@@ -140,7 +138,6 @@ export async function executeMappingCorrection(
   );
 
   const startTime = Date.now();
-  const client = new AnthropicClient();
 
   const userMessage = `Fix the following MappingSpec based on the validation errors.
 
@@ -156,11 +153,8 @@ Entities: ${profile.entities.map((e) => `${e.type} (${e.recordCount} records, fi
 Return the corrected MappingSpec as JSON.`;
 
   try {
-    const correctedSpec = await client.complete<MappingSpec>(
-      MAPPING_CORRECTION_PROMPT,
-      userMessage,
-      8192
-    );
+    const result = await anthropic.complete(MAPPING_CORRECTION_PROMPT, userMessage, { maxTokens: 8192 });
+    const correctedSpec = extractJSON<MappingSpec>(result.text);
 
     const latencyMs = Date.now() - startTime;
     console.log(`[draft-mapping] AI correction response in ${latencyMs}ms`);

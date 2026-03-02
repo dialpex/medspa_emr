@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac";
 import OpenAI from "openai";
-import { TEMPLATE_GENERATOR_SYSTEM_PROMPT } from "@/lib/ai/prompts/template-generator";
-import { TEMPLATE_COPILOT_SCHEMA } from "@/lib/ai/schemas/template-copilot-schema";
+import { TEMPLATE_GENERATOR_SYSTEM_PROMPT } from "@/lib/agents/templates/generator-prompt";
+import { TEMPLATE_COPILOT_SCHEMA } from "@/lib/agents/templates/copilot-schema";
 
 interface ChatMessage {
   role: "user" | "assistant";

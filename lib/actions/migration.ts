@@ -12,7 +12,7 @@ import {
   discoverSourceData as agentDiscover,
   proposeMappings as agentProposeMappings,
   generateVerificationReport as agentVerify,
-} from "@/lib/migration/agent";
+} from "@/lib/agents/migration/legacy/agent";
 import { executeMigration as runPipeline } from "@/lib/migration/pipeline";
 
 type ActionResult<T = null> =

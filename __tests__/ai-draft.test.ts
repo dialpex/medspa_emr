@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import {
   mockClinicalDraft,
   applyStructuredPatch,
-} from "../lib/ai/clinical-draft";
+} from "../lib/agents/clinical/draft";
 
 // ==========================================================================
 // Pure unit tests (no DB)

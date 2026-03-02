@@ -1,9 +1,9 @@
 // Tool definitions for the schema discovery agent.
 // Five tools for GraphQL schema introspection and query building.
 
-import type { ToolHandler } from "./anthropic-client";
-import type { MigrationCredentials } from "../providers/types";
-import { redactPHI, redactGraphQLErrors } from "./phi-redactor";
+import type { ToolHandler } from "@/lib/agents/_shared/llm/types";
+import type { MigrationCredentials } from "@/lib/migration/providers/types";
+import { redactPHI, redactGraphQLErrors } from "@/lib/agents/_shared/phi/redactor";
 import { readCacheForAgent } from "./schema-cache";
 import type { CachedTypeInfo, CachedQueryPattern } from "./schema-cache";
 import type { CapturedDiscoveryError } from "./discovery-memory";
