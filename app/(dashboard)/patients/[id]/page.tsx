@@ -13,15 +13,15 @@ import {
 import { getPatient, getPatientTimeline } from "@/lib/actions/patients";
 import { getCharts } from "@/lib/actions/charts";
 import { requirePermission, hasPermission } from "@/lib/rbac";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PatientHeader } from "./patient-header";
-import { PatientDetails } from "./patient-details";
+import { PatientDetailsTab } from "./patient-details-tab";
 import { PatientCharts } from "./patient-charts";
 import { PatientHistory } from "./patient-history";
 import { PatientPhotos } from "./patient-photos";
 import { PatientForms } from "./patient-forms";
 import { PatientDocuments } from "./patient-documents";
 import { PatientInvoices } from "./patient-invoices";
+import { PatientTabs } from "./patient-tabs";
 
 export default async function PatientPage({
   params,
@@ -43,13 +43,100 @@ export default async function PatientPage({
     notFound();
   }
 
+  // Compute lastAppointmentDate from completed/checked-in appointments
+  const completedAppointments = timeline.appointments.filter(
+    (a) => a.status === "Completed" || a.status === "CheckedIn"
+  );
+  const lastAppointmentDate = completedAppointments.length > 0
+    ? new Date(Math.max(...completedAppointments.map((a) => new Date(a.startTime).getTime())))
+    : null;
+
   const canEdit =
     user.role !== "MedicalDirector" &&
     user.role !== "ReadOnly" &&
     user.role !== "Billing";
 
+  const tabs = [
+    {
+      value: "details",
+      label: "Details",
+      icon: <User className="size-4" />,
+      content: (
+        <PatientDetailsTab
+          patient={patient}
+          timeline={timeline}
+          canEdit={canEdit}
+        />
+      ),
+    },
+    {
+      value: "history",
+      label: "History",
+      icon: <Clock className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientHistory timeline={timeline} />
+        </div>
+      ),
+    },
+    ...(canViewCharts
+      ? [
+          {
+            value: "charts",
+            label: "Charts",
+            icon: <FileText className="size-4" />,
+            content: (
+              <div className="rounded-xl border border-gray-200 bg-white p-6">
+                <PatientCharts charts={charts} />
+              </div>
+            ),
+          },
+        ]
+      : []),
+    {
+      value: "photos",
+      label: "Photos",
+      icon: <Camera className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientPhotos photos={timeline.photos} />
+        </div>
+      ),
+    },
+    {
+      value: "forms",
+      label: "Forms",
+      icon: <ClipboardList className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientForms consents={timeline.consents} />
+        </div>
+      ),
+    },
+    {
+      value: "documents",
+      label: "Docs",
+      icon: <FolderOpen className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientDocuments documents={timeline.documents} />
+        </div>
+      ),
+    },
+    {
+      value: "invoices",
+      label: "Invoices",
+      icon: <Receipt className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientInvoices invoices={timeline.invoices} />
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-4">
+    <div className="px-4 py-6 space-y-4">
       <nav className="flex items-center gap-1 text-sm text-gray-500">
         <Link href="/patients" className="hover:text-gray-900 transition-colors">
           Patients
@@ -63,86 +150,10 @@ export default async function PatientPage({
       <PatientHeader
         patient={patient}
         canViewCharts={canViewCharts}
+        lastAppointmentDate={lastAppointmentDate}
       />
 
-      <Tabs defaultValue="details">
-        <TabsList className="w-full h-auto p-1 gap-1">
-          <TabsTrigger value="details" className="flex-1 py-2 px-3 text-xs">
-            <User className="size-3.5 mr-1" />
-            Details
-          </TabsTrigger>
-          <TabsTrigger value="history" className="flex-1 py-2 px-3 text-xs">
-            <Clock className="size-3.5 mr-1" />
-            History
-          </TabsTrigger>
-          {canViewCharts && (
-            <TabsTrigger value="charts" className="flex-1 py-2 px-3 text-xs">
-              <FileText className="size-3.5 mr-1" />
-              Charts
-            </TabsTrigger>
-          )}
-          <TabsTrigger value="photos" className="flex-1 py-2 px-3 text-xs">
-            <Camera className="size-3.5 mr-1" />
-            Photos
-          </TabsTrigger>
-          <TabsTrigger value="forms" className="flex-1 py-2 px-3 text-xs">
-            <ClipboardList className="size-3.5 mr-1" />
-            Forms
-          </TabsTrigger>
-          <TabsTrigger value="documents" className="flex-1 py-2 px-3 text-xs">
-            <FolderOpen className="size-3.5 mr-1" />
-            Docs
-          </TabsTrigger>
-          <TabsTrigger value="invoices" className="flex-1 py-2 px-3 text-xs">
-            <Receipt className="size-3.5 mr-1" />
-            Invoices
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="details" className="mt-4">
-          <div className="rounded-lg border bg-card shadow-sm">
-            <PatientDetails patient={patient} canEdit={canEdit} />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="history" className="mt-4">
-          <div className="rounded-lg border bg-card p-6 shadow-sm">
-            <PatientHistory timeline={timeline} />
-          </div>
-        </TabsContent>
-
-        {canViewCharts && (
-          <TabsContent value="charts" className="mt-4">
-            <div className="rounded-lg border bg-card p-6 shadow-sm">
-              <PatientCharts charts={charts} />
-            </div>
-          </TabsContent>
-        )}
-
-        <TabsContent value="photos" className="mt-4">
-          <div className="rounded-lg border bg-card p-6 shadow-sm">
-            <PatientPhotos photos={timeline.photos} />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="forms" className="mt-4">
-          <div className="rounded-lg border bg-card p-6 shadow-sm">
-            <PatientForms consents={timeline.consents} />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="documents" className="mt-4">
-          <div className="rounded-lg border bg-card p-6 shadow-sm">
-            <PatientDocuments documents={timeline.documents} />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="invoices" className="mt-4">
-          <div className="rounded-lg border bg-card p-6 shadow-sm">
-            <PatientInvoices invoices={timeline.invoices} />
-          </div>
-        </TabsContent>
-      </Tabs>
+      <PatientTabs tabs={tabs} />
     </div>
   );
 }

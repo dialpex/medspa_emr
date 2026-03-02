@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Clock, Phone, Mail, Plus } from "lucide-react";
+import { Clock, Phone, Mail, Plus, AlertCircle } from "lucide-react";
 import type { PatientDetail } from "@/lib/actions/patients";
 import { PatientAvatar } from "@/components/patient-avatar";
 
@@ -24,6 +24,25 @@ function formatDOB(dateOfBirth: Date | null): string | null {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function getDisplayStatus(
+  patient: PatientDetail,
+  lastAppointmentDate: Date | null
+): { label: string; colors: string } {
+  if (patient.status === "Fired") {
+    return { label: "Fired", colors: "bg-red-50 text-red-700 border-red-200" };
+  }
+
+  if (lastAppointmentDate) {
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    if (new Date(lastAppointmentDate) >= twelveMonthsAgo) {
+      return { label: "Active", colors: "bg-green-50 text-green-700 border-green-200" };
+    }
+  }
+
+  return { label: "Inactive", colors: "bg-gray-100 text-gray-600 border-gray-200" };
 }
 
 function PatientTags({ tags }: { tags: string | null }) {
@@ -51,12 +70,15 @@ function PatientTags({ tags }: { tags: string | null }) {
 export function PatientHeader({
   patient,
   canViewCharts,
+  lastAppointmentDate,
 }: {
   patient: PatientDetail;
   canViewCharts: boolean;
+  lastAppointmentDate: Date | null;
 }) {
   const age = formatAge(patient.dateOfBirth);
   const dob = formatDOB(patient.dateOfBirth);
+  const displayStatus = getDisplayStatus(patient, lastAppointmentDate);
 
   return (
     <div className="rounded-lg border bg-white shadow-sm p-6">
@@ -74,6 +96,9 @@ export function PatientHeader({
               <h1 className="text-2xl font-bold text-gray-900">
                 {patient.firstName} {patient.lastName}
               </h1>
+              <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full border ${displayStatus.colors}`}>
+                {displayStatus.label}
+              </span>
               <PatientTags tags={patient.tags} />
             </div>
 
@@ -98,6 +123,14 @@ export function PatientHeader({
                 </span>
               )}
             </div>
+
+            {patient.allergies && (
+              <div className="flex items-center gap-1.5 mt-1 text-sm text-red-600">
+                <AlertCircle className="size-3.5 flex-shrink-0" />
+                <span className="font-medium">Allergies:</span>
+                <span>{patient.allergies}</span>
+              </div>
+            )}
           </div>
         </div>
 
