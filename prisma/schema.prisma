@@ -784,6 +784,7 @@ enum AuditAction {
   MessageFailed
   ConversationView
   AiChat
+  AiPlanExecute
   AiDraftCreated
   AiDraftApplied
   VoiceDraftRecorded

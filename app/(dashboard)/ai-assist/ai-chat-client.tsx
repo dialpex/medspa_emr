@@ -4,7 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles } from "lucide-react";
 import { ChatInput } from "./chat-input";
 import { MessageBubble } from "./message-bubble";
-import type { AIResponse, ChatMessage } from "@/lib/agents/chat/types";
+import { Persona, type PersonaState } from "@/components/ai/persona";
+import type { AIResponse, PlanStep, ChatMessage } from "@/lib/agents/chat/types";
 
 interface UIMessage {
   id: string;
@@ -12,6 +13,8 @@ interface UIMessage {
   content: string;
   response?: AIResponse;
   isPending?: boolean;
+  isExecuting?: boolean;
+  startedAt?: number;
 }
 
 const EXAMPLE_PROMPTS = [
@@ -36,6 +39,88 @@ export default function AiChatClient() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
+  const executePlan = useCallback(
+    async (steps: PlanStep[]) => {
+      if (isLoading) return;
+
+      const userMsg: UIMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: "Confirm",
+      };
+      const pendingMsg: UIMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "",
+        isPending: true,
+        isExecuting: true,
+        startedAt: Date.now(),
+      };
+
+      setMessages((prev) => [...prev, userMsg, pendingMsg]);
+      setIsLoading(true);
+
+      try {
+        const res = await fetch("/api/ai/chat/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ steps }),
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to execute plan");
+        }
+
+        const { results } = await res.json();
+        const allSucceeded = results.every(
+          (r: { success: boolean }) => r.success
+        );
+
+        const summary = allSucceeded
+          ? `Successfully completed ${results.length} step${results.length > 1 ? "s" : ""}.`
+          : `Completed ${results.filter((r: { success: boolean }) => r.success).length} of ${results.length} steps. Some steps failed.`;
+
+        const details: Record<string, unknown> = {};
+        for (const r of results) {
+          if (r.data) {
+            Object.assign(details, r.data);
+          }
+          if (r.error) {
+            details[`error_${r.step_id}`] = r.error;
+          }
+        }
+
+        const response: AIResponse = {
+          type: "result",
+          domain: "general",
+          rationale_muted: `Executed plan: ${steps.map((s) => s.tool_name).join(" → ")}`,
+          clarification: null,
+          plan: null,
+          result: { summary, details },
+          permission_check: { allowed: true, reason_if_denied: null },
+        };
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === pendingMsg.id
+              ? { ...m, isPending: false, isExecuting: false, response, content: response.rationale_muted }
+              : m
+          )
+        );
+      } catch {
+        // Fallback: send "Confirm" as regular message to AI
+        setMessages((prev) => prev.filter((m) => m.id !== pendingMsg.id && m.id !== userMsg.id));
+        setIsLoading(false);
+        sendMessage("Confirm");
+        return;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLoading]
+  );
+
   const sendMessage = useCallback(
     async (text: string) => {
       if (isLoading) return;
@@ -50,6 +135,7 @@ export default function AiChatClient() {
         role: "assistant",
         content: "",
         isPending: true,
+        startedAt: Date.now(),
       };
 
       setMessages((prev) => [...prev, userMsg, pendingMsg]);
@@ -119,6 +205,8 @@ export default function AiChatClient() {
     [isLoading, messages]
   );
 
+  const personaState: PersonaState = isLoading ? "thinking" : "idle";
+
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -141,8 +229,8 @@ export default function AiChatClient() {
         <div className="mx-auto max-w-3xl space-y-4">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-100 to-indigo-100">
-                <Sparkles className="size-8 text-purple-600" />
+              <div className="mb-4">
+                <Persona state={personaState} variant="glint" className="size-24" />
               </div>
               <h2 className="text-xl font-semibold text-gray-900">
                 How can I help you today?
@@ -163,11 +251,13 @@ export default function AiChatClient() {
               </div>
             </div>
           ) : (
-            messages.map((msg) => (
+            messages.map((msg, i) => (
               <MessageBubble
                 key={msg.id}
                 message={msg}
                 onSend={sendMessage}
+                onExecutePlan={executePlan}
+                isLast={i === messages.length - 1}
               />
             ))
           )}

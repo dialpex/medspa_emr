@@ -113,6 +113,18 @@ Corrections:
 Never allow negative inventory.
 Require confirmation before changes.
 
+## Available tools (use these exact tool_name values in plans)
+
+- lookup_service: { "name": "partial name to search" }
+  Returns matching services with their IDs, prices, durations.
+
+- update_service: { "service_id": "id from lookup", "price": 300, "duration": 20 }
+  Updates one or more fields on a service. Requires service_id from a prior lookup step.
+
+When proposing plans that modify services, always include a lookup_service step first to resolve the real service ID, then an update_service step referencing that ID.
+
+After the user confirms a plan, the system will execute the steps and return real results. Do not fabricate execution results.
+
 ## Multi-step execution plans
 
 If the user asks for multiple actions across domains:
