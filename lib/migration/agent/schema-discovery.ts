@@ -13,6 +13,12 @@ import {
   writeQueryPatterns,
 } from "./schema-cache";
 import { SCHEMA_DISCOVERY_SYSTEM_PROMPT, buildDiscoveryUserPrompt } from "./prompts";
+import {
+  readDiscoveryMemoryForAgent,
+  addDiscoveryError,
+  extractCrossVendorPatterns,
+  type CapturedDiscoveryError,
+} from "./discovery-memory";
 
 export interface SeedQuery {
   entityType: string;
@@ -69,6 +75,7 @@ export async function discoverAndBuildQueries(
 
   const discoveredTypes: Record<string, CachedTypeInfo> = cachedSchema?.types || {};
   const discoveredQueries: Record<string, CachedQueryPattern> = cachedQueries?.patterns || {};
+  const discoveryErrors: CapturedDiscoveryError[] = [];
 
   const tools = buildDiscoveryTools({
     vendor,
@@ -76,9 +83,16 @@ export async function discoverAndBuildQueries(
     executor,
     discoveredTypes,
     discoveredQueries,
+    discoveryErrors,
   });
 
-  const userPrompt = buildDiscoveryUserPrompt(vendor, entityTypes, seedQueries);
+  // Load discovery memory for prompt injection
+  const discoveryMemory = await readDiscoveryMemoryForAgent(vendor);
+  if (discoveryMemory) {
+    console.log(`[schema-discovery] Loaded discovery memory for ${vendor}`);
+  }
+
+  const userPrompt = buildDiscoveryUserPrompt(vendor, entityTypes, seedQueries, discoveryMemory);
 
   console.log(`[schema-discovery] Starting discovery for ${vendor}: ${entityTypes.join(", ")}`);
   const startTime = Date.now();
@@ -100,6 +114,17 @@ export async function discoverAndBuildQueries(
   // Persist to cache
   await writeSchemaCache(vendor, discoveredTypes);
   await writeQueryPatterns(vendor, discoveredQueries);
+
+  // Persist discovery errors to memory
+  if (discoveryErrors.length > 0) {
+    console.log(`[schema-discovery] Persisting ${discoveryErrors.length} discovery errors for ${vendor}`);
+    for (const err of discoveryErrors) {
+      await addDiscoveryError(vendor, err);
+    }
+  }
+
+  // Extract cross-vendor patterns from working queries
+  await extractCrossVendorPatterns(vendor, discoveredQueries, discoveredTypes);
 
   return {
     queries: discoveredQueries,

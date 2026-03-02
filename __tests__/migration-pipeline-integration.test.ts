@@ -13,6 +13,17 @@ import {
   readMemoryForAgent,
   type MappingMemoryEntry,
 } from "../lib/migration/agent/mapping-memory";
+import {
+  readVendorDiscoveryMemory,
+  writeVendorDiscoveryMemory,
+  addDiscoveryError,
+  addSchemaQuirk,
+  readCrossVendorPatterns,
+  addCrossVendorPattern,
+  readDiscoveryMemoryForAgent,
+  type VendorDiscoveryMemory,
+} from "../lib/migration/agent/discovery-memory";
+import { parseGraphQLError } from "../lib/migration/agent/tools";
 import { buildMappingSystemPrompt } from "../lib/migration/agent/prompts";
 import { rm } from "fs/promises";
 import path from "path";
@@ -577,6 +588,198 @@ describe("Migration Pipeline Integration", () => {
       expect(prompt).toContain("data migration specialist");
       expect(prompt).toContain("PREVIOUS SUCCESSFUL MAPPINGS");
       expect(prompt).toContain("clients → patient");
+    });
+  });
+
+  describe("Discovery Memory", () => {
+    const DISCOVERY_CACHE_DIR = path.join(process.cwd(), ".migration-cache", "test-vendor-disc");
+    const SHARED_CACHE_DIR = path.join(process.cwd(), ".migration-cache", "_shared");
+
+    afterEach(async () => {
+      try {
+        await rm(DISCOVERY_CACHE_DIR, { recursive: true, force: true });
+        await rm(SHARED_CACHE_DIR, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    });
+
+    it("writes and reads vendor discovery memory", async () => {
+      const memory: VendorDiscoveryMemory = {
+        errors: [
+          {
+            errorMessage: "Cannot query field 'active' on type 'Location'",
+            correction: "activeAppointmentStateEnabled",
+            typeName: "Location",
+            fieldName: "active",
+            querySnippet: "{ locations { active } }",
+            hitCount: 1,
+            firstSeen: new Date().toISOString(),
+            lastSeen: new Date().toISOString(),
+          },
+        ],
+        quirks: [
+          {
+            note: "appointments require `from: Date!` and `to: Date!`",
+            category: "arguments",
+            entityTypes: ["appointments"],
+            addedAt: new Date().toISOString(),
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      };
+
+      await writeVendorDiscoveryMemory("test-vendor-disc", memory);
+
+      const read = await readVendorDiscoveryMemory("test-vendor-disc");
+      expect(read).not.toBeNull();
+      expect(read!.errors).toHaveLength(1);
+      expect(read!.errors[0].typeName).toBe("Location");
+      expect(read!.quirks).toHaveLength(1);
+      expect(read!.quirks[0].category).toBe("arguments");
+    });
+
+    it("deduplicates errors by message and increments hitCount", async () => {
+      const error = {
+        errorMessage: "Cannot query field 'active' on type 'Location'",
+        query: "{ locations { active } }",
+        typeName: "Location",
+        fieldName: "active",
+      };
+
+      await addDiscoveryError("test-vendor-disc", error);
+      await addDiscoveryError("test-vendor-disc", error);
+      await addDiscoveryError("test-vendor-disc", error);
+
+      const memory = await readVendorDiscoveryMemory("test-vendor-disc");
+      expect(memory).not.toBeNull();
+      expect(memory!.errors).toHaveLength(1);
+      expect(memory!.errors[0].hitCount).toBe(3);
+    });
+
+    it("enforces max 50 errors", async () => {
+      for (let i = 0; i < 55; i++) {
+        await addDiscoveryError("test-vendor-disc", {
+          errorMessage: `Error ${i}`,
+          query: `{ field${i} }`,
+          typeName: null,
+          fieldName: null,
+        });
+      }
+
+      const memory = await readVendorDiscoveryMemory("test-vendor-disc");
+      expect(memory).not.toBeNull();
+      expect(memory!.errors.length).toBeLessThanOrEqual(50);
+    });
+
+    it("deduplicates quirks by note", async () => {
+      await addSchemaQuirk("test-vendor-disc", {
+        note: "Service is plain list",
+        category: "type_shape",
+        entityTypes: ["services"],
+      });
+      await addSchemaQuirk("test-vendor-disc", {
+        note: "Service is plain list",
+        category: "type_shape",
+        entityTypes: ["services"],
+      });
+
+      const memory = await readVendorDiscoveryMemory("test-vendor-disc");
+      expect(memory!.quirks).toHaveLength(1);
+    });
+
+    it("accumulates cross-vendor patterns from multiple vendors", async () => {
+      await addCrossVendorPattern("vendor-a", {
+        pattern: "Relay cursor pagination: pageInfo { hasNextPage, endCursor }",
+        category: "pagination",
+      });
+      await addCrossVendorPattern("vendor-b", {
+        pattern: "Relay cursor pagination: pageInfo { hasNextPage, endCursor }",
+        category: "pagination",
+      });
+
+      const patterns = await readCrossVendorPatterns();
+      expect(patterns).not.toBeNull();
+      expect(patterns!.patterns).toHaveLength(1);
+      expect(patterns!.patterns[0].confirmedByVendors).toContain("vendor-a");
+      expect(patterns!.patterns[0].confirmedByVendors).toContain("vendor-b");
+      expect(patterns!.patterns[0].confidence).toBeGreaterThan(0.5);
+    });
+
+    it("produces agent-readable output", async () => {
+      await addDiscoveryError("test-vendor-disc", {
+        errorMessage: "Cannot query field 'active' on type 'Location'",
+        query: "{ locations { active } }",
+        typeName: "Location",
+        fieldName: "active",
+      }, "activeAppointmentStateEnabled");
+
+      await addDiscoveryError("test-vendor-disc", {
+        errorMessage: "Cannot query field 'state' on type 'Order'",
+        query: "{ orders { state } }",
+        typeName: "Order",
+        fieldName: "state",
+      });
+
+      await addSchemaQuirk("test-vendor-disc", {
+        note: "appointments require `from: Date!` and `to: Date!`",
+        category: "arguments",
+        entityTypes: ["appointments"],
+      });
+
+      await addCrossVendorPattern("test-vendor-disc", {
+        pattern: "Date range filters commonly use 'from'/'to' arguments",
+        category: "date_filtering",
+      });
+
+      const output = await readDiscoveryMemoryForAgent("test-vendor-disc");
+      expect(output).toBeTruthy();
+      expect(output).toContain("Known Issues");
+      expect(output).toContain("Location.active does NOT exist");
+      expect(output).toContain('Use "activeAppointmentStateEnabled" instead');
+      expect(output).toContain("Order.state does NOT exist");
+      expect(output).toContain("Schema Quirks");
+      expect(output).toContain("[arguments]");
+      expect(output).toContain("from: Date!");
+      expect(output).toContain("Common GraphQL Patterns");
+      expect(output).toContain("[date_filtering]");
+    });
+
+    it("returns undefined for unknown vendor", async () => {
+      const output = await readDiscoveryMemoryForAgent("nonexistent-vendor-xyz");
+      expect(output).toBeUndefined();
+    });
+  });
+
+  describe("parseGraphQLError", () => {
+    it("extracts field and type from 'Cannot query field' errors", () => {
+      const result = parseGraphQLError("Cannot query field 'active' on type 'Location'");
+      expect(result.fieldName).toBe("active");
+      expect(result.typeName).toBe("Location");
+    });
+
+    it("extracts from 'Unknown argument' errors", () => {
+      const result = parseGraphQLError("Unknown argument 'startDate' on field 'Query.appointments'");
+      expect(result.fieldName).toBe("startDate");
+      expect(result.typeName).toBe("Query");
+    });
+
+    it("extracts from 'Field doesn't exist' errors", () => {
+      const result = parseGraphQLError("Field 'menuItems' doesn't exist on type 'Business'");
+      expect(result.fieldName).toBe("menuItems");
+      expect(result.typeName).toBe("Business");
+    });
+
+    it("extracts argument name from 'In argument' errors", () => {
+      const result = parseGraphQLError('In argument "limit": Expected type "Int!", found "abc"');
+      expect(result.fieldName).toBe("limit");
+      expect(result.typeName).toBeNull();
+    });
+
+    it("returns nulls for unrecognized error formats", () => {
+      const result = parseGraphQLError("Something went wrong");
+      expect(result.fieldName).toBeNull();
+      expect(result.typeName).toBeNull();
     });
   });
 

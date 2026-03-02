@@ -154,6 +154,7 @@ IMPORTANT RULES:
 8. After a query works, store it with store_artifact so it's cached for next time.
 9. For pagination, look for: cursor/pageInfo patterns, limit/offset, or pageNumber/pageSize.
 10. For per-patient entities (photos, forms, documents), build queries that accept a client/patient ID.
+11. If the user prompt includes "Known Issues" or "Common GraphQL Patterns", ALWAYS consult these before building queries — they tell you which fields DO NOT exist and which argument names to use. This avoids wasting tool calls on known dead ends.
 
 WORKFLOW:
 1. read_cached_schema → check what's already known
@@ -178,11 +179,16 @@ When building queries, prefer fields that match our canonical model:
 export function buildDiscoveryUserPrompt(
   vendor: string,
   entityTypes: string[],
-  seedQueries: SeedQuery[]
+  seedQueries: SeedQuery[],
+  discoveryMemory?: string
 ): string {
   const parts = [
     `Discover the GraphQL schema for "${vendor}" and build working queries for these entity types: ${entityTypes.join(", ")}.`,
   ];
+
+  if (discoveryMemory) {
+    parts.push("\n" + discoveryMemory);
+  }
 
   if (seedQueries.length > 0) {
     parts.push(

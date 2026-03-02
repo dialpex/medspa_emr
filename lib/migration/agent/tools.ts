@@ -6,6 +6,7 @@ import type { MigrationCredentials } from "../providers/types";
 import { redactPHI, redactGraphQLErrors } from "./phi-redactor";
 import { readCacheForAgent } from "./schema-cache";
 import type { CachedTypeInfo, CachedQueryPattern } from "./schema-cache";
+import type { CapturedDiscoveryError } from "./discovery-memory";
 
 export type GraphQLExecutor = (
   credentials: MigrationCredentials,
@@ -13,13 +14,15 @@ export type GraphQLExecutor = (
   variables?: Record<string, unknown>
 ) => Promise<{ data?: Record<string, unknown>; errors?: Array<{ message: string }> }>;
 
-interface ToolContext {
+export interface ToolContext {
   vendor: string;
   credentials: MigrationCredentials;
   executor: GraphQLExecutor;
   // Mutable accumulators for the discovery session
   discoveredTypes: Record<string, CachedTypeInfo>;
   discoveredQueries: Record<string, CachedQueryPattern>;
+  // Error accumulator for discovery memory
+  discoveryErrors: CapturedDiscoveryError[];
 }
 
 /**
@@ -208,6 +211,17 @@ function executeGraphQLHandler(ctx: ToolContext): ToolHandler {
         const result = await ctx.executor(ctx.credentials, queryStr, variables);
 
         if (result.errors?.length) {
+          // Capture errors for discovery memory
+          for (const err of result.errors) {
+            const parsed = parseGraphQLError(err.message);
+            ctx.discoveryErrors.push({
+              errorMessage: err.message,
+              query: queryStr,
+              typeName: parsed.typeName,
+              fieldName: parsed.fieldName,
+            });
+          }
+
           return {
             errors: redactGraphQLErrors(result.errors),
             data: result.data ? redactPHI(result.data) : null,
@@ -295,6 +309,43 @@ function storeArtifactHandler(ctx: ToolContext): ToolHandler {
       return { stored: true, entityType, type: artifactType };
     },
   };
+}
+
+// --- Error Parsing ---
+
+/**
+ * Parse a GraphQL error message to extract type and field names.
+ * Handles common GraphQL error formats.
+ */
+export function parseGraphQLError(message: string): {
+  typeName: string | null;
+  fieldName: string | null;
+} {
+  // "Cannot query field 'X' on type 'Y'"
+  let match = message.match(/Cannot query field ['"](\w+)['"] on type ['"](\w+)['"]/);
+  if (match) {
+    return { fieldName: match[1], typeName: match[2] };
+  }
+
+  // "Unknown argument 'X' on field 'Y.Z'"
+  match = message.match(/Unknown argument ['"](\w+)['"] on field ['"](\w+)\.(\w+)['"]/);
+  if (match) {
+    return { fieldName: match[1], typeName: match[2] };
+  }
+
+  // "Field 'X' doesn't exist on type 'Y'"
+  match = message.match(/Field ['"](\w+)['"] doesn't exist on type ['"](\w+)['"]/);
+  if (match) {
+    return { fieldName: match[1], typeName: match[2] };
+  }
+
+  // 'In argument "X": Expected type "Y!", found Z'
+  match = message.match(/In argument ['"](\w+)['"]/);
+  if (match) {
+    return { fieldName: match[1], typeName: null };
+  }
+
+  return { typeName: null, fieldName: null };
 }
 
 // --- Helpers ---
