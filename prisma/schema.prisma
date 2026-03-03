@@ -65,8 +65,9 @@ model Clinic {
   notificationTemplates NotificationTemplate[]
   featureOverrides  ClinicFeatureOverride[]
   patientDocuments  PatientDocument[]
-  migrationJobs     MigrationJob[]
-  migrationRuns     MigrationRun[]
+  migrationJobs             MigrationJob[]
+  migrationRuns             MigrationRun[]
+  inventoryTransactions     InventoryTransaction[]
 }
 
 // ===========================================
@@ -120,6 +121,7 @@ model User {
   auditLogs            AuditLog[]
   photosTaken          Photo[]
   uploadedDocuments    PatientDocument[]
+  inventoryTransactions InventoryTransaction[]
 
   @@index([clinicId])
   @@index([email])
@@ -324,10 +326,44 @@ model Product {
   updatedAt      DateTime @updatedAt
 
   // Relations
-  clinic       Clinic        @relation(fields: [clinicId], references: [id])
-  invoiceItems InvoiceItem[]
+  clinic                Clinic                 @relation(fields: [clinicId], references: [id])
+  invoiceItems          InvoiceItem[]
+  inventoryTransactions InventoryTransaction[]
 
   @@index([clinicId])
+}
+
+// ===========================================
+// INVENTORY TRANSACTIONS
+// ===========================================
+
+enum InventoryTransactionType {
+  Receive
+  Adjust
+  Use
+}
+
+model InventoryTransaction {
+  id             String                   @id @default(cuid())
+  clinicId       String
+  productId      String
+  type           InventoryTransactionType
+  quantity       Int                      // positive = in, negative = out
+  lotNumber      String?
+  expirationDate DateTime?
+  unitCost       Float?
+  vendor         String?
+  reference      String?                  // invoice/PO number
+  notes          String?
+  createdAt      DateTime                 @default(now())
+  createdById    String
+
+  clinic    Clinic  @relation(fields: [clinicId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+  createdBy User    @relation(fields: [createdById], references: [id])
+
+  @@index([clinicId])
+  @@index([productId])
 }
 
 // ===========================================
@@ -785,6 +821,7 @@ enum AuditAction {
   ConversationView
   AiChat
   AiPlanExecute
+  AiPlanOrchestrate
   AiDraftCreated
   AiDraftApplied
   VoiceDraftRecorded

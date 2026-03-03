@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles } from "lucide-react";
-import { ChatInput } from "./chat-input";
+import { ChatInput, type ChatAttachment } from "./chat-input";
 import { MessageBubble } from "./message-bubble";
 import { Persona, type PersonaState } from "@/components/ai/persona";
 import type { AIResponse, PlanStep, ChatMessage } from "@/lib/agents/chat/types";
@@ -39,8 +39,21 @@ export default function AiChatClient() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
+  /** Build conversation history from current messages for API calls. */
+  const buildHistory = useCallback((): ChatMessage[] => {
+    return messages
+      .filter((m) => !m.isPending)
+      .map((m) => ({
+        role: m.role,
+        content:
+          m.role === "assistant" && m.response
+            ? JSON.stringify(m.response)
+            : m.content,
+      }));
+  }, [messages]);
+
   const executePlan = useCallback(
-    async (steps: PlanStep[]) => {
+    async (steps: PlanStep[], direct = false) => {
       if (isLoading) return;
 
       const userMsg: UIMessage = {
@@ -61,44 +74,23 @@ export default function AiChatClient() {
       setIsLoading(true);
 
       try {
+        const body: Record<string, unknown> = { steps };
+        if (!direct) {
+          body.messages = buildHistory();
+        }
+
         const res = await fetch("/api/ai/chat/execute", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ steps }),
+          body: JSON.stringify(body),
         });
 
         if (!res.ok) {
           throw new Error("Failed to execute plan");
         }
 
-        const { results } = await res.json();
-        const allSucceeded = results.every(
-          (r: { success: boolean }) => r.success
-        );
-
-        const summary = allSucceeded
-          ? `Successfully completed ${results.length} step${results.length > 1 ? "s" : ""}.`
-          : `Completed ${results.filter((r: { success: boolean }) => r.success).length} of ${results.length} steps. Some steps failed.`;
-
-        const details: Record<string, unknown> = {};
-        for (const r of results) {
-          if (r.data) {
-            Object.assign(details, r.data);
-          }
-          if (r.error) {
-            details[`error_${r.step_id}`] = r.error;
-          }
-        }
-
-        const response: AIResponse = {
-          type: "result",
-          domain: "general",
-          rationale_muted: `Executed plan: ${steps.map((s) => s.tool_name).join(" → ")}`,
-          clarification: null,
-          plan: null,
-          result: { summary, details },
-          permission_check: { allowed: true, reason_if_denied: null },
-        };
+        const data = await res.json();
+        const response: AIResponse = data.response;
 
         setMessages((prev) =>
           prev.map((m) =>
@@ -118,17 +110,24 @@ export default function AiChatClient() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLoading]
+    [isLoading, buildHistory]
   );
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, attachment?: ChatAttachment) => {
       if (isLoading) return;
+
+      // Compose message content: if attachment present, prepend invoice context
+      let messageContent = text;
+      if (attachment) {
+        const userText = text || "Process this invoice and update inventory.";
+        messageContent = `[Uploaded invoice: ${attachment.fileName}]\n\n${attachment.extractedText}\n\n${userText}`;
+      }
 
       const userMsg: UIMessage = {
         id: crypto.randomUUID(),
         role: "user",
-        content: text,
+        content: attachment ? `${text || "Process this invoice"} [${attachment.fileName}]` : text,
       };
       const pendingMsg: UIMessage = {
         id: crypto.randomUUID(),
@@ -144,16 +143,8 @@ export default function AiChatClient() {
       try {
         // Build conversation history for the API
         const history: ChatMessage[] = [
-          ...messages
-            .filter((m) => !m.isPending)
-            .map((m) => ({
-              role: m.role,
-              content:
-                m.role === "assistant" && m.response
-                  ? JSON.stringify(m.response)
-                  : m.content,
-            })),
-          { role: "user" as const, content: text },
+          ...buildHistory(),
+          { role: "user" as const, content: messageContent },
         ];
 
         const res = await fetch("/api/ai/chat", {
@@ -202,8 +193,31 @@ export default function AiChatClient() {
         setIsLoading(false);
       }
     },
-    [isLoading, messages]
+    [isLoading, buildHistory]
   );
+
+  const cancelPlan = useCallback(() => {
+    const userMsg: UIMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: "Cancel",
+    };
+    const assistantMsg: UIMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "Plan cancelled.",
+      response: {
+        type: "result",
+        domain: "general",
+        rationale_muted: "Plan cancelled.",
+        clarification: null,
+        plan: null,
+        result: { summary: "Plan cancelled. Let me know if you need anything else.", details: {} },
+        permission_check: { allowed: true, reason_if_denied: null },
+      },
+    };
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+  }, []);
 
   const personaState: PersonaState = isLoading ? "thinking" : "idle";
 
@@ -257,6 +271,7 @@ export default function AiChatClient() {
                 message={msg}
                 onSend={sendMessage}
                 onExecutePlan={executePlan}
+                onCancelPlan={cancelPlan}
                 isLast={i === messages.length - 1}
               />
             ))
@@ -265,7 +280,7 @@ export default function AiChatClient() {
       </div>
 
       {/* Input */}
-      <ChatInput onSend={sendMessage} disabled={isLoading} />
+      <ChatInput onSend={(msg, att) => sendMessage(msg, att)} disabled={isLoading} />
     </div>
   );
 }

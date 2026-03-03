@@ -4,7 +4,8 @@ import { getPatient, getPatientTimeline } from "@/lib/actions/patients";
 import { getTodayAppointments } from "@/lib/actions/today";
 import { getInvoices } from "@/lib/actions/invoices";
 import { getPayments } from "@/lib/actions/payments";
-import { getProductsForClinic } from "@/lib/actions/products";
+import { getProductsForClinic, getProduct, updateProduct } from "@/lib/actions/products";
+import { receiveStock, createProductFromInvoice } from "@/lib/actions/inventory";
 import type { AppointmentStatus } from "@prisma/client";
 import type { PlanStep } from "./types";
 
@@ -415,13 +416,138 @@ const toolRegistry: Record<string, ToolHandler> = {
           name: p.name,
           sku: p.sku,
           retailPrice: p.retailPrice,
+          wholesaleCost: p.wholesaleCost,
           inventoryCount: p.inventoryCount,
           isActive: p.isActive,
         })),
       },
     };
   },
+
+  receive_stock: async (args) => {
+    const productId = String(args.product_id ?? "");
+    const quantity = Number(args.quantity ?? 0);
+    if (!productId) {
+      return { success: false, error: "product_id is required" };
+    }
+    if (!quantity || quantity <= 0) {
+      return { success: false, error: "quantity must be greater than 0" };
+    }
+    const result = await receiveStock({
+      productId,
+      quantity,
+      lotNumber: args.lot_number ? String(args.lot_number) : undefined,
+      expirationDate: args.expiration_date ? String(args.expiration_date) : undefined,
+      unitCost: args.unit_cost != null ? Number(args.unit_cost) : undefined,
+      vendor: args.vendor ? String(args.vendor) : undefined,
+      reference: args.reference ? String(args.reference) : undefined,
+    });
+    return {
+      success: true,
+      data: {
+        product_id: productId,
+        product_name: result.productName,
+        quantity_received: result.quantityReceived,
+        new_count: result.newCount,
+        lot_number: result.lotNumber,
+        expiration_date: result.expirationDate,
+        transaction_id: result.transactionId,
+      },
+    };
+  },
+
+  create_product: async (args) => {
+    const name = String(args.name ?? "");
+    const wholesaleCost = Number(args.wholesale_cost ?? 0);
+    if (!name) {
+      return { success: false, error: "name is required" };
+    }
+    if (wholesaleCost < 0) {
+      return { success: false, error: "wholesale_cost cannot be negative" };
+    }
+    const result = await createProductFromInvoice({
+      name,
+      wholesaleCost,
+      category: args.category ? String(args.category) : undefined,
+      retailPrice: args.retail_price != null ? Number(args.retail_price) : undefined,
+      vendor: args.vendor ? String(args.vendor) : undefined,
+      sku: args.sku ? String(args.sku) : undefined,
+    });
+    return {
+      success: true,
+      data: {
+        id: result.id,
+        name: result.name,
+        wholesale_cost: result.wholesaleCost,
+        retail_price: result.retailPrice,
+      },
+    };
+  },
+
+  update_product: async (args) => {
+    const productId = String(args.product_id ?? "");
+    if (!productId) {
+      return { success: false, error: "product_id is required" };
+    }
+    const existing = await getProduct(productId);
+    if (!existing) {
+      return { success: false, error: `Product not found: ${productId}` };
+    }
+
+    const mergedInput = {
+      name: args.name != null ? String(args.name) : existing.name,
+      description: existing.description ?? undefined,
+      size: existing.size ?? undefined,
+      sku: existing.sku ?? undefined,
+      upc: existing.upc ?? undefined,
+      category: existing.category ?? undefined,
+      retailPrice: args.retail_price != null ? Number(args.retail_price) : existing.retailPrice,
+      wholesaleCost: args.wholesale_cost != null ? Number(args.wholesale_cost) : existing.wholesaleCost,
+      vendor: args.vendor != null ? String(args.vendor) : existing.vendor ?? undefined,
+      inventoryCount: existing.inventoryCount,
+      taxable: existing.taxable,
+    };
+
+    await updateProduct(productId, mergedInput);
+
+    return {
+      success: true,
+      data: {
+        product_id: productId,
+        updated_fields: Object.fromEntries(
+          Object.entries({
+            name: args.name,
+            wholesale_cost: args.wholesale_cost,
+            retail_price: args.retail_price,
+            vendor: args.vendor,
+          }).filter(([, v]) => v != null)
+        ),
+        previous: {
+          name: existing.name,
+          wholesaleCost: existing.wholesaleCost,
+          retailPrice: existing.retailPrice,
+          vendor: existing.vendor,
+        },
+        current: {
+          name: mergedInput.name,
+          wholesaleCost: mergedInput.wholesaleCost,
+          retailPrice: mergedInput.retailPrice,
+          vendor: mergedInput.vendor,
+        },
+      },
+    };
+  },
 };
+
+export const READ_ONLY_TOOLS = new Set([
+  "lookup_service", "lookup_patient", "lookup_provider", "lookup_room",
+  "get_appointments", "get_patient", "get_patient_timeline",
+  "get_today_appointments", "get_invoices", "get_payments", "lookup_product",
+]);
+
+export function isReadOnlyTool(toolName: string): boolean {
+  return READ_ONLY_TOOLS.has(toolName);
+}
 
 export function getToolHandler(toolName: string): ToolHandler | undefined {
   return toolRegistry[toolName];
