@@ -7,6 +7,64 @@ import { prisma } from "@/lib/prisma";
 import type { PlanStep } from "@/lib/agents/chat/types";
 import type { ToolResult } from "@/lib/agents/chat/tools";
 
+/**
+ * Extract a usable ID from a tool result's data.
+ * Handles common patterns: { matches: [{ id }] }, { id }, { appointments: [...] }, etc.
+ */
+function extractId(data: Record<string, unknown>): string | null {
+  // Direct id field (e.g. create_appointment result)
+  if (typeof data.id === "string") return data.id;
+
+  // Lookup tools return { matches: [...] }
+  if (Array.isArray(data.matches)) {
+    if (data.matches.length === 1 && data.matches[0]?.id) {
+      return String(data.matches[0].id);
+    }
+    return null; // 0 or multiple — can't auto-resolve
+  }
+
+  // Provider lookup returns { providers: [...] }
+  if (Array.isArray(data.providers) && data.providers.length === 1 && data.providers[0]?.id) {
+    return String(data.providers[0].id);
+  }
+
+  // Room lookup returns { rooms: [...] }
+  if (Array.isArray(data.rooms) && data.rooms.length === 1 && data.rooms[0]?.id) {
+    return String(data.rooms[0].id);
+  }
+
+  return null;
+}
+
+/**
+ * Resolve `<from_step_X>` placeholders in step args using previous step results.
+ */
+function resolveStepArgs(
+  args: Record<string, unknown>,
+  resultMap: Map<string, ToolResult>
+): Record<string, unknown> {
+  const resolved: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (typeof value === "string") {
+      const match = value.match(/^<from_step_(\w+)>$/);
+      if (match) {
+        const refStepId = match[1];
+        const refResult = resultMap.get(refStepId);
+        if (refResult?.success && refResult.data) {
+          const id = extractId(refResult.data);
+          if (id) {
+            resolved[key] = id;
+            continue;
+          }
+        }
+        // Placeholder couldn't be resolved — keep as-is so the tool gives a clear error
+      }
+    }
+    resolved[key] = value;
+  }
+  return resolved;
+}
+
 export async function POST(request: NextRequest) {
   try {
     await requireFeature("ai_chat");
@@ -23,10 +81,16 @@ export async function POST(request: NextRequest) {
     }
 
     const results: ToolResult[] = [];
+    const resultMap = new Map<string, ToolResult>();
 
     for (const step of steps) {
-      const result = await executePlanStep(step);
+      // Resolve <from_step_X> placeholders using previous step results
+      const resolvedArgs = resolveStepArgs(step.args, resultMap);
+      const resolvedStep = { ...step, args: resolvedArgs };
+
+      const result = await executePlanStep(resolvedStep);
       results.push(result);
+      resultMap.set(step.step_id, result);
 
       // Stop on first failure (partial results returned)
       if (!result.success) {
