@@ -48,6 +48,7 @@ export interface PlanResponse {
     execution_mode_prompt: boolean;
     steps: PlanStep[];
     confirm_prompt: string;
+    concrete?: boolean;
   };
   result: null;
   permission_check: { allowed: boolean; reason_if_denied: string | null };
