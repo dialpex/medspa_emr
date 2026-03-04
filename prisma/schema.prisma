@@ -382,6 +382,7 @@ enum ChartStatus {
   MDSigned
 }
 
+
 model Encounter {
   id                  String          @id @default(cuid())
   appointmentId       String          @unique
@@ -839,6 +840,7 @@ enum AuditAction {
   DocumentUpload
   DocumentView
   MigrationEntityImported
+  SettingsUpdate
 }
 
 model AuditLog {

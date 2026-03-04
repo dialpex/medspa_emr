@@ -712,6 +712,25 @@ By signing below, I confirm my consent to proceed with treatment.`,
     prisma.chartTemplate.create({
       data: {
         clinicId: clinic.id,
+        type: "chart",
+        name: "SOAP Note",
+        description: "Subjective, Objective, Assessment, Plan",
+        category: "General",
+        isSystem: true,
+        fieldsConfig: JSON.stringify([
+          { key: "subjective", label: "Subjective — Client reported status", type: "textarea", required: true, placeholder: "Patient's reported symptoms, history, and concerns..." },
+          { key: "objective", label: "Objective — Service provider findings", type: "textarea", required: true, placeholder: "Clinical findings, vital signs, examination results..." },
+          { key: "assessment", label: "Assessment — Client's response to services or treatments", type: "textarea", required: true, placeholder: "Diagnosis, clinical impression, and analysis..." },
+          { key: "plan", label: "Plan — Recommendations for future care", type: "textarea", required: true, placeholder: "Treatment plan, follow-up, prescriptions, referrals..." },
+          { key: "additional_notes", label: "Additional notes", type: "textarea", placeholder: "Any additional observations or notes..." },
+          { key: "provider_signature", label: "Service provider signature", type: "signature", required: true },
+          { key: "treatment_date", label: "Treatment date", type: "date", required: true },
+        ]),
+      },
+    }),
+    prisma.chartTemplate.create({
+      data: {
+        clinicId: clinic.id,
         type: "form",
         name: "Patient Intake Form",
         description: "New patient intake questionnaire",
