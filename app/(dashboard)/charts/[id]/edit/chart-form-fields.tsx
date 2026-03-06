@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { CameraIcon, XIcon } from "lucide-react";
-import type { TemplateFieldConfig } from "@/lib/types/charts";
+import { type TemplateFieldConfig, groupFieldsIntoRows, groupFieldsBySections } from "@/lib/types/charts";
 
 interface ChartFormFieldsProps {
   fields: TemplateFieldConfig[];
@@ -473,7 +473,239 @@ function PhotoSingleField({
   );
 }
 
+// --- Single field renderer (extracted for recursion in rows) ---
+
+function SingleField({
+  field,
+  values,
+  onChange,
+  disabled,
+  chartId,
+  patientId,
+}: {
+  field: TemplateFieldConfig;
+  values: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+  disabled?: boolean;
+  chartId: string;
+  patientId: string;
+}) {
+  const val = values[field.key] ?? field.defaultValue ?? "";
+
+  if (field.type === "heading") {
+    return (
+      <div className="pt-4 pb-1 border-b border-gray-200">
+        <h3 className="text-sm font-semibold text-gray-900">{field.label}</h3>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {field.label}
+        {field.required && <span className="text-red-500 ml-1">*</span>}
+      </label>
+
+      {(field.type === "text" || field.type === "first-name" || field.type === "last-name") && (
+        <input
+          type="text"
+          value={val}
+          onChange={(e) => onChange(field.key, e.target.value)}
+          disabled={disabled}
+          placeholder={field.placeholder || (field.type === "first-name" ? "First Name" : field.type === "last-name" ? "Last Name" : undefined)}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
+        />
+      )}
+
+      {field.type === "textarea" && (
+        <textarea
+          value={val}
+          onChange={(e) => onChange(field.key, e.target.value)}
+          disabled={disabled}
+          placeholder={field.placeholder}
+          rows={3}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50 break-words"
+        />
+      )}
+
+      {field.type === "number" && (
+        <input
+          type="number"
+          value={val}
+          onChange={(e) => onChange(field.key, e.target.value)}
+          disabled={disabled}
+          placeholder={field.placeholder}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
+        />
+      )}
+
+      {field.type === "date" && (
+        <input
+          type="date"
+          value={val}
+          onChange={(e) => onChange(field.key, e.target.value)}
+          disabled={disabled}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
+        />
+      )}
+
+      {field.type === "select" && (
+        <select
+          value={val}
+          onChange={(e) => onChange(field.key, e.target.value)}
+          disabled={disabled}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
+        >
+          <option value="">Select...</option>
+          {field.options?.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+      )}
+
+      {field.type === "multiselect" && (
+        <AreaPicker
+          options={field.options ?? []}
+          value={val ? parseJson(val, []) : []}
+          onChange={(v) => onChange(field.key, JSON.stringify(v))}
+          disabled={disabled}
+        />
+      )}
+
+      {field.type === "json-areas" && (
+        <AreaPicker
+          options={field.options ?? []}
+          value={val ? parseJson(val, []) : []}
+          onChange={(v) => onChange(field.key, JSON.stringify(v))}
+          disabled={disabled}
+        />
+      )}
+
+      {field.type === "json-products" && (
+        <ProductRows
+          value={val ? parseJson(val, []) : []}
+          onChange={(v) => onChange(field.key, JSON.stringify(v))}
+          disabled={disabled}
+        />
+      )}
+
+      {field.type === "checklist" && (
+        <ChecklistField
+          options={field.options ?? []}
+          value={val ? parseJson(val, []) : []}
+          onChange={(v) => onChange(field.key, JSON.stringify(v))}
+          disabled={disabled}
+        />
+      )}
+
+      {field.type === "signature" && (
+        <SignatureField
+          value={val}
+          onChange={(v) => onChange(field.key, v)}
+          disabled={disabled}
+          label={field.label}
+        />
+      )}
+
+      {field.type === "photo-pair" && (
+        <PhotoPairField
+          fieldKey={field.key}
+          photoLabels={field.photoLabels ?? ["Before", "After"]}
+          value={val ? parseJson(val, {}) : {}}
+          onChange={(v) => onChange(field.key, JSON.stringify(v))}
+          disabled={disabled}
+          chartId={chartId}
+          patientId={patientId}
+        />
+      )}
+
+      {field.type === "photo-single" && (
+        <PhotoSingleField
+          fieldKey={field.key}
+          value={val}
+          onChange={(v) => onChange(field.key, v)}
+          disabled={disabled}
+          chartId={chartId}
+          patientId={patientId}
+        />
+      )}
+
+      {field.type === "logo" && (
+        <PhotoSingleField
+          fieldKey={field.key}
+          value={val}
+          onChange={(v) => onChange(field.key, v)}
+          disabled={disabled}
+          chartId={chartId}
+          patientId={patientId}
+        />
+      )}
+    </div>
+  );
+}
+
 // --- Main Component ---
+
+function SectionRows({
+  sectionFields,
+  values,
+  onChange,
+  disabled,
+  chartId,
+  patientId,
+}: {
+  sectionFields: TemplateFieldConfig[];
+  values: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+  disabled?: boolean;
+  chartId: string;
+  patientId: string;
+}) {
+  const rows = groupFieldsIntoRows(sectionFields);
+
+  return (
+    <>
+      {rows.map((row) => {
+        if (row.length === 1 && (row[0].width ?? 100) === 100) {
+          return (
+            <SingleField
+              key={row[0].key}
+              field={row[0]}
+              values={values}
+              onChange={onChange}
+              disabled={disabled}
+              chartId={chartId}
+              patientId={patientId}
+            />
+          );
+        }
+        return (
+          <div
+            key={row.map((f) => f.key).join("-")}
+            className="gap-4"
+            style={{
+              display: "grid",
+              gridTemplateColumns: row.map((f) => `${f.width ?? 100}fr`).join(" "),
+            }}
+          >
+            {row.map((f) => (
+              <SingleField
+                key={f.key}
+                field={f}
+                values={values}
+                onChange={onChange}
+                disabled={disabled}
+                chartId={chartId}
+                patientId={patientId}
+              />
+            ))}
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 export function ChartFormFields({
   fields,
@@ -483,164 +715,29 @@ export function ChartFormFields({
   chartId,
   patientId,
 }: ChartFormFieldsProps) {
+  const secs = groupFieldsBySections(fields);
+  const hasSections = secs.header.length > 0 || secs.footer.length > 0;
+  const commonProps = { values, onChange, disabled, chartId, patientId };
+
+  if (!hasSections) {
+    return (
+      <div className="space-y-5 min-w-0 overflow-hidden">
+        <SectionRows sectionFields={fields} {...commonProps} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 min-w-0 overflow-hidden">
-      {fields.map((field) => {
-        const val = values[field.key] ?? field.defaultValue ?? "";
-
-        // Heading — section divider, no input
-        if (field.type === "heading") {
-          return (
-            <div key={field.key} className="pt-4 pb-1 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900">{field.label}</h3>
-            </div>
-          );
-        }
-
-        return (
-          <div key={field.key} className="min-w-0">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
-            </label>
-
-            {(field.type === "text" || field.type === "first-name" || field.type === "last-name") && (
-              <input
-                type="text"
-                value={val}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                disabled={disabled}
-                placeholder={field.placeholder || (field.type === "first-name" ? "First Name" : field.type === "last-name" ? "Last Name" : undefined)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-              />
-            )}
-
-            {field.type === "textarea" && (
-              <textarea
-                value={val}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                disabled={disabled}
-                placeholder={field.placeholder}
-                rows={3}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50 break-words"
-              />
-            )}
-
-            {field.type === "number" && (
-              <input
-                type="number"
-                value={val}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                disabled={disabled}
-                placeholder={field.placeholder}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-              />
-            )}
-
-            {field.type === "date" && (
-              <input
-                type="date"
-                value={val}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                disabled={disabled}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-              />
-            )}
-
-            {field.type === "select" && (
-              <select
-                value={val}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                disabled={disabled}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-              >
-                <option value="">Select...</option>
-                {field.options?.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-            )}
-
-            {field.type === "multiselect" && (
-              <AreaPicker
-                options={field.options ?? []}
-                value={val ? parseJson(val, []) : []}
-                onChange={(v) => onChange(field.key, JSON.stringify(v))}
-                disabled={disabled}
-              />
-            )}
-
-            {field.type === "json-areas" && (
-              <AreaPicker
-                options={field.options ?? []}
-                value={val ? parseJson(val, []) : []}
-                onChange={(v) => onChange(field.key, JSON.stringify(v))}
-                disabled={disabled}
-              />
-            )}
-
-            {field.type === "json-products" && (
-              <ProductRows
-                value={val ? parseJson(val, []) : []}
-                onChange={(v) => onChange(field.key, JSON.stringify(v))}
-                disabled={disabled}
-              />
-            )}
-
-            {field.type === "checklist" && (
-              <ChecklistField
-                options={field.options ?? []}
-                value={val ? parseJson(val, []) : []}
-                onChange={(v) => onChange(field.key, JSON.stringify(v))}
-                disabled={disabled}
-              />
-            )}
-
-            {field.type === "signature" && (
-              <SignatureField
-                value={val}
-                onChange={(v) => onChange(field.key, v)}
-                disabled={disabled}
-                label={field.label}
-              />
-            )}
-
-            {field.type === "photo-pair" && (
-              <PhotoPairField
-                fieldKey={field.key}
-                photoLabels={field.photoLabels ?? ["Before", "After"]}
-                value={val ? parseJson(val, {}) : {}}
-                onChange={(v) => onChange(field.key, JSON.stringify(v))}
-                disabled={disabled}
-                chartId={chartId}
-                patientId={patientId}
-              />
-            )}
-
-            {field.type === "photo-single" && (
-              <PhotoSingleField
-                fieldKey={field.key}
-                value={val}
-                onChange={(v) => onChange(field.key, v)}
-                disabled={disabled}
-                chartId={chartId}
-                patientId={patientId}
-              />
-            )}
-
-            {field.type === "logo" && (
-              <PhotoSingleField
-                fieldKey={field.key}
-                value={val}
-                onChange={(v) => onChange(field.key, v)}
-                disabled={disabled}
-                chartId={chartId}
-                patientId={patientId}
-              />
-            )}
-          </div>
-        );
-      })}
+      {secs.header.length > 0 && <SectionRows sectionFields={secs.header} {...commonProps} />}
+      {secs.header.length > 0 && secs.body.length > 0 && (
+        <div className="border-t border-gray-200 my-1" />
+      )}
+      {secs.body.length > 0 && <SectionRows sectionFields={secs.body} {...commonProps} />}
+      {(secs.header.length > 0 || secs.body.length > 0) && secs.footer.length > 0 && (
+        <div className="border-t border-gray-200 my-1" />
+      )}
+      {secs.footer.length > 0 && <SectionRows sectionFields={secs.footer} {...commonProps} />}
     </div>
   );
 }

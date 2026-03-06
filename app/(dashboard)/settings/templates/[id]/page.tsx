@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac";
 import { getTemplate } from "@/lib/actions/chart-templates";
 import { TemplateForm } from "../template-form";
-import { PageCard } from "@/components/ui/page-card";
+import { getLocationData } from "@/lib/actions/location";
 
 export default async function EditTemplatePage({
   params,
@@ -15,11 +15,12 @@ export default async function EditTemplatePage({
   const template = await getTemplate(id);
   if (!template) notFound();
 
+  const locationData = await getLocationData();
+  const clinicLogoUrl = locationData.logoUrl || undefined;
+
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <PageCard title="Edit Template">
-        <TemplateForm template={template} />
-      </PageCard>
+    <div className="h-[calc(100vh-64px)]">
+      <TemplateForm template={template} clinicLogoUrl={clinicLogoUrl} />
     </div>
   );
 }

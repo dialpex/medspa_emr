@@ -160,14 +160,14 @@ export function Sidebar({
 
   return (
     <aside
-      className={`relative sticky top-0 flex h-screen flex-col border-r border-gray-200 bg-white ${
+      className={`relative sticky top-0 z-30 flex h-screen flex-col border-r border-gray-200 bg-white ${
         collapsed ? "w-[72px]" : "w-[240px] transition-all duration-300 ease-in-out"
       }`}
     >
       {/* Collapse/expand toggle — floating circle on the edge */}
       <button
         onClick={toggleCollapse}
-        className="absolute -right-3.5 top-[3.85rem] z-10 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm hover:bg-gray-50 transition-colors"
+        className="absolute -right-3.5 top-[3.85rem] z-30 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm hover:bg-gray-50 transition-colors"
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {collapsed ? <ChevronRight className="size-4 text-gray-600" /> : <ChevronLeft className="size-4 text-gray-600" />}

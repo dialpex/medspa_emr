@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/rbac";
 import { TemplateForm } from "../template-form";
-import { PageCard } from "@/components/ui/page-card";
 import type { TemplateFieldConfig } from "@/lib/types/charts";
+import { getLocationData } from "@/lib/actions/location";
 
 interface ImportData {
   fields?: TemplateFieldConfig[];
@@ -38,11 +38,12 @@ export default async function NewTemplatePage({
     }
   }
 
+  const locationData = await getLocationData();
+  const clinicLogoUrl = locationData.logoUrl || undefined;
+
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <PageCard title="New Chart or Form">
-        <TemplateForm initialFields={initialFields} importMeta={importMeta} />
-      </PageCard>
+    <div className="h-[calc(100vh-64px)]">
+      <TemplateForm initialFields={initialFields} importMeta={importMeta} clinicLogoUrl={clinicLogoUrl} />
     </div>
   );
 }

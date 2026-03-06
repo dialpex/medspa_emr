@@ -1,5 +1,7 @@
 export type TemplateStatus = "Active" | "Draft" | "Archived";
 
+export type FormSection = "header" | "body" | "footer";
+
 export type FieldType =
   | "text"
   | "textarea"
@@ -28,6 +30,72 @@ export interface TemplateFieldConfig {
   placeholder?: string;
   /** For photo-pair: labels for before/after slots e.g. ["Before Photo", "After Photo"] */
   photoLabels?: [string, string];
+  /** Width as percentage (1-100). Defaults to 100 (full row). */
+  width?: number;
+  /** Which form section this field belongs to. Defaults to "body". */
+  section?: FormSection;
+}
+
+/**
+ * Groups consecutive fields into visual rows based on cumulative widths.
+ * - Headings always get their own row.
+ * - When cumulative width reaches 100 or would overflow, close the row and start a new one.
+ * - Fields without `width` default to 100 (full row).
+ */
+export function groupFieldsIntoRows(fields: TemplateFieldConfig[]): TemplateFieldConfig[][] {
+  const rows: TemplateFieldConfig[][] = [];
+  let currentRow: TemplateFieldConfig[] = [];
+  let currentWidth = 0;
+
+  for (const field of fields) {
+    const w = field.width ?? 100;
+
+    // Headings always get their own row
+    if (field.type === "heading") {
+      if (currentRow.length > 0) {
+        rows.push(currentRow);
+        currentRow = [];
+        currentWidth = 0;
+      }
+      rows.push([field]);
+      continue;
+    }
+
+    // Would overflow — close current row first
+    if (currentWidth + w > 100 && currentRow.length > 0) {
+      rows.push(currentRow);
+      currentRow = [];
+      currentWidth = 0;
+    }
+
+    currentRow.push(field);
+    currentWidth += w;
+
+    // Exactly 100 — close row
+    if (currentWidth >= 100) {
+      rows.push(currentRow);
+      currentRow = [];
+      currentWidth = 0;
+    }
+  }
+
+  if (currentRow.length > 0) {
+    rows.push(currentRow);
+  }
+
+  return rows;
+}
+
+/**
+ * Groups fields by their section property (header / body / footer).
+ * Fields without a section default to "body".
+ */
+export function groupFieldsBySections(fields: TemplateFieldConfig[]) {
+  return {
+    header: fields.filter((f) => f.section === "header"),
+    body: fields.filter((f) => !f.section || f.section === "body"),
+    footer: fields.filter((f) => f.section === "footer"),
+  };
 }
 
 export interface PointAnnotation {
