@@ -66,6 +66,28 @@ describe("groupFieldsIntoRows", () => {
     expect(rows[1][0].key).toBe("h");
   });
 
+  it("photo-pair always gets its own row", () => {
+    const fields = [
+      field({ key: "a", width: 50 }),
+      field({ key: "pp", type: "photo-pair" }),
+      field({ key: "b", width: 50 }),
+    ];
+    const rows = groupFieldsIntoRows(fields);
+    expect(rows).toHaveLength(3);
+    expect(rows[1][0].type).toBe("photo-pair");
+  });
+
+  it("logo always gets its own row", () => {
+    const fields = [
+      field({ key: "a", width: 50 }),
+      field({ key: "l", type: "logo" }),
+      field({ key: "b", width: 50 }),
+    ];
+    const rows = groupFieldsIntoRows(fields);
+    expect(rows).toHaveLength(3);
+    expect(rows[1][0].type).toBe("logo");
+  });
+
   it("returns empty array for empty input", () => {
     expect(groupFieldsIntoRows([])).toEqual([]);
   });

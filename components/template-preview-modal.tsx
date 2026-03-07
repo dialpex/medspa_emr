@@ -9,9 +9,10 @@ interface TemplatePreviewModalProps {
   name: string;
   fields: TemplateFieldConfig[];
   onClose: () => void;
+  clinicLogoUrl?: string;
 }
 
-export function TemplatePreviewModal({ name, fields, onClose }: TemplatePreviewModalProps) {
+export function TemplatePreviewModal({ name, fields, onClose, clinicLogoUrl }: TemplatePreviewModalProps) {
   const [formValues, setFormValues] = useState<Record<string, string>>({});
 
   return (
@@ -37,6 +38,7 @@ export function TemplatePreviewModal({ name, fields, onClose }: TemplatePreviewM
               onChange={(k, v) => setFormValues(prev => ({ ...prev, [k]: v }))}
               chartId=""
               patientId=""
+              clinicLogoUrl={clinicLogoUrl}
             />
           )}
         </div>

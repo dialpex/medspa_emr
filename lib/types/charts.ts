@@ -38,10 +38,12 @@ export interface TemplateFieldConfig {
 
 /**
  * Groups consecutive fields into visual rows based on cumulative widths.
- * - Headings always get their own row.
+ * - Fixed-width types (heading, photo-pair, logo) always get their own row.
  * - When cumulative width reaches 100 or would overflow, close the row and start a new one.
  * - Fields without `width` default to 100 (full row).
  */
+const FIXED_WIDTH_TYPES: ReadonlySet<FieldType> = new Set(["heading", "photo-pair", "logo"]);
+
 export function groupFieldsIntoRows(fields: TemplateFieldConfig[]): TemplateFieldConfig[][] {
   const rows: TemplateFieldConfig[][] = [];
   let currentRow: TemplateFieldConfig[] = [];
@@ -50,8 +52,8 @@ export function groupFieldsIntoRows(fields: TemplateFieldConfig[]): TemplateFiel
   for (const field of fields) {
     const w = field.width ?? 100;
 
-    // Headings always get their own row
-    if (field.type === "heading") {
+    // Fixed-width fields always get their own row
+    if (FIXED_WIDTH_TYPES.has(field.type)) {
       if (currentRow.length > 0) {
         rows.push(currentRow);
         currentRow = [];

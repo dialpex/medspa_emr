@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { CameraIcon } from "lucide-react";
 import { type TemplateFieldConfig, groupFieldsIntoRows, groupFieldsBySections } from "@/lib/types/charts";
 
@@ -11,6 +11,7 @@ interface ChartFormFieldsProps {
   disabled?: boolean;
   chartId: string;
   patientId: string;
+  clinicLogoUrl?: string;
 }
 
 function parseJson<T>(val: string, fallback: T): T {
@@ -182,6 +183,27 @@ function SignatureField({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
 
+  // Size the canvas buffer to match CSS size × devicePixelRatio for crisp rendering
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.scale(dpr, dpr);
+  }, []);
+
+  const getCanvasCoords = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  }, []);
+
   const startDraw = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (disabled) return;
     drawingRef.current = true;
@@ -189,10 +211,10 @@ function SignatureField({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
+    const { x, y } = getCanvasCoords(e);
     ctx.beginPath();
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-  }, [disabled]);
+    ctx.moveTo(x, y);
+  }, [disabled, getCanvasCoords]);
 
   const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!drawingRef.current || disabled) return;
@@ -200,13 +222,13 @@ function SignatureField({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
+    const { x, y } = getCanvasCoords(e);
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.strokeStyle = "#1a1a1a";
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.lineTo(x, y);
     ctx.stroke();
-  }, [disabled]);
+  }, [disabled, getCanvasCoords]);
 
   const endDraw = useCallback(() => {
     if (!drawingRef.current) return;
@@ -221,9 +243,11 @@ function SignatureField({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Re-apply scale after clear since some browsers reset transform
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     onChange("");
   }, [onChange]);
 
@@ -232,8 +256,6 @@ function SignatureField({
       <div className="relative border border-gray-300 rounded-lg overflow-hidden bg-white">
         <canvas
           ref={canvasRef}
-          width={500}
-          height={120}
           onMouseDown={startDraw}
           onMouseMove={draw}
           onMouseUp={endDraw}
@@ -304,18 +326,9 @@ function PhotoPanel({
         )}
       </div>
 
-      {/* Image area with checkerboard bg */}
+      {/* Image area */}
       {photoId ? (
-        <div
-          className="relative flex items-center justify-center p-4"
-          style={{
-            backgroundColor: "#f9fafb",
-            backgroundImage:
-              "linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)",
-            backgroundSize: "16px 16px",
-            backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
-          }}
-        >
+        <div className="relative flex items-center justify-center p-4 bg-gray-50">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`/api/photos/${photoId}`}
@@ -328,14 +341,7 @@ function PhotoPanel({
           type="button"
           disabled={disabled || uploading}
           onClick={() => inputRef.current?.click()}
-          className="w-full flex flex-col items-center justify-center gap-2 py-12 px-4 text-gray-400 hover:text-purple-500 hover:bg-purple-50/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            backgroundColor: "#f9fafb",
-            backgroundImage:
-              "linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)",
-            backgroundSize: "16px 16px",
-            backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
-          }}
+          className="w-full flex flex-col items-center justify-center gap-2 py-12 px-4 bg-gray-50 text-gray-400 hover:text-purple-500 hover:bg-purple-50/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {uploading ? (
             <>
@@ -428,6 +434,7 @@ function PhotoPairField({
 
 function PhotoSingleField({
   fieldKey,
+  label,
   value,
   onChange,
   disabled,
@@ -435,6 +442,7 @@ function PhotoSingleField({
   patientId,
 }: {
   fieldKey: string;
+  label: string;
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
@@ -462,7 +470,7 @@ function PhotoSingleField({
   return (
     <div className="max-w-md">
       <PhotoPanel
-        label={fieldKey.replace(/_/g, " ")}
+        label={label}
         photoId={value}
         onUpload={uploadPhoto}
         onRemove={() => onChange("")}
@@ -482,6 +490,7 @@ function SingleField({
   disabled,
   chartId,
   patientId,
+  clinicLogoUrl,
 }: {
   field: TemplateFieldConfig;
   values: Record<string, string>;
@@ -489,6 +498,7 @@ function SingleField({
   disabled?: boolean;
   chartId: string;
   patientId: string;
+  clinicLogoUrl?: string;
 }) {
   const val = values[field.key] ?? field.defaultValue ?? "";
 
@@ -623,6 +633,7 @@ function SingleField({
       {field.type === "photo-single" && (
         <PhotoSingleField
           fieldKey={field.key}
+          label={field.label || "Photo"}
           value={val}
           onChange={(v) => onChange(field.key, v)}
           disabled={disabled}
@@ -632,14 +643,20 @@ function SingleField({
       )}
 
       {field.type === "logo" && (
-        <PhotoSingleField
-          fieldKey={field.key}
-          value={val}
-          onChange={(v) => onChange(field.key, v)}
-          disabled={disabled}
-          chartId={chartId}
-          patientId={patientId}
-        />
+        <div className="flex justify-center">
+          {clinicLogoUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={clinicLogoUrl}
+              alt="Clinic logo"
+              className="max-h-[80px] max-w-[200px] object-contain"
+            />
+          ) : (
+            <div className="rounded-lg border-2 border-dashed border-gray-300 h-[80px] w-[200px] flex items-center justify-center text-sm text-gray-400">
+              Clinic Logo
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -654,6 +671,7 @@ function SectionRows({
   disabled,
   chartId,
   patientId,
+  clinicLogoUrl,
 }: {
   sectionFields: TemplateFieldConfig[];
   values: Record<string, string>;
@@ -661,6 +679,7 @@ function SectionRows({
   disabled?: boolean;
   chartId: string;
   patientId: string;
+  clinicLogoUrl?: string;
 }) {
   const rows = groupFieldsIntoRows(sectionFields);
 
@@ -677,6 +696,7 @@ function SectionRows({
               disabled={disabled}
               chartId={chartId}
               patientId={patientId}
+              clinicLogoUrl={clinicLogoUrl}
             />
           );
         }
@@ -698,6 +718,7 @@ function SectionRows({
                 disabled={disabled}
                 chartId={chartId}
                 patientId={patientId}
+                clinicLogoUrl={clinicLogoUrl}
               />
             ))}
           </div>
@@ -714,10 +735,11 @@ export function ChartFormFields({
   disabled,
   chartId,
   patientId,
+  clinicLogoUrl,
 }: ChartFormFieldsProps) {
   const secs = groupFieldsBySections(fields);
   const hasSections = secs.header.length > 0 || secs.footer.length > 0;
-  const commonProps = { values, onChange, disabled, chartId, patientId };
+  const commonProps = { values, onChange, disabled, chartId, patientId, clinicLogoUrl };
 
   if (!hasSections) {
     return (

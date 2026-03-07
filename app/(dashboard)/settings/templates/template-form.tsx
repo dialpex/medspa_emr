@@ -97,14 +97,20 @@ function supportsPlaceholder(type: FieldType) {
   return ["text", "number", "first-name", "last-name", "date", "textarea"].includes(type);
 }
 
+/** Fields that must remain full-width and cannot be resized or placed side-by-side */
+function isFixedWidth(type: FieldType) {
+  return ["heading", "photo-pair", "logo"].includes(type);
+}
+
+/** Derive default field label from the palette display name */
+const DEFAULT_LABELS: Record<string, string> = Object.fromEntries(
+  ALL_BLOCKS.map((b) => [b.type, b.label])
+);
+
 function createField(blockType: FieldType, width?: number, section?: FormSection): TemplateFieldConfig {
-  const defaultLabels: Partial<Record<FieldType, string>> = {
-    "first-name": "First Name",
-    "last-name": "Last Name",
-  };
   return {
     key: newFieldKey(),
-    label: defaultLabels[blockType] ?? "",
+    label: DEFAULT_LABELS[blockType] ?? "",
     type: blockType,
     required: false,
     ...(needsOptions(blockType) ? { options: [] } : {}),
@@ -286,16 +292,6 @@ function CanvasField({
         <div className="absolute inset-y-0 right-0 w-1/2 bg-purple-100/50 rounded-r pointer-events-none z-20 border-r-[4px] border-purple-500" />
       )}
 
-      {/* "Editing" badge — top right */}
-      {isSelected && (
-        <div className="absolute top-2 right-2 z-10">
-          <span className="bg-purple-600 text-white text-xs font-medium px-2.5 py-1 rounded-md inline-flex items-center gap-1">
-            <SettingsIcon className="size-3" />
-            Editing
-          </span>
-        </div>
-      )}
-
       {/* Drag grip — small purple pill on left edge, centered vertically */}
       <div
         draggable
@@ -319,7 +315,7 @@ function CanvasField({
       </div>
 
       {/* Right-edge resize handle */}
-      {field.type !== "heading" && (
+      {!isFixedWidth(field.type) && (
         <div
           onMouseDown={handleResizeMouseDown}
           className={`absolute top-0 right-0 bottom-0 w-[6px] cursor-col-resize z-20 transition-opacity ${
@@ -843,7 +839,7 @@ export function TemplateForm({ template, initialFields, importMeta, clinicLogoUr
   const handleBesideDrop = useCallback((fieldType: FieldType, targetFlatIndex: number, side: "left" | "right") => {
     setFields((prev) => {
       const targetField = prev[targetFlatIndex];
-      if (!targetField || targetField.type === "heading") {
+      if (!targetField || isFixedWidth(targetField.type) || isFixedWidth(fieldType)) {
         const nf = createField(fieldType, undefined, targetField?.section);
         const next = [...prev];
         next.splice(side === "left" ? targetFlatIndex : targetFlatIndex + 1, 0, nf);
@@ -900,9 +896,9 @@ export function TemplateForm({ template, initialFields, importMeta, clinicLogoUr
     setFields((prev) => {
       if (fromIndex === targetFlatIndex) return prev;
       const targetField = prev[targetFlatIndex];
-      if (!targetField || targetField.type === "heading") return prev;
-
+      if (!targetField || isFixedWidth(targetField.type)) return prev;
       const movedField = prev[fromIndex];
+      if (isFixedWidth(movedField.type)) return prev;
       const next = [...prev];
       next.splice(fromIndex, 1);
 
@@ -962,13 +958,26 @@ export function TemplateForm({ template, initialFields, importMeta, clinicLogoUr
     setDragSource("canvas");
   }, []);
 
-  /* -- Canvas drag over — detect between-row vs beside zones -- */
+  /* -- Canvas drag over — detect drop target with throttling -- */
+  const dragOverRaf = useRef<number | null>(null);
   const handleCanvasDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = dragSource === "palette" ? "copy" : "move";
 
+    // Throttle via rAF to avoid jank from high-frequency dragover events
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    if (dragOverRaf.current !== null) return;
+    dragOverRaf.current = requestAnimationFrame(() => {
+      dragOverRaf.current = null;
+      computeDropTarget(clientX, clientY);
+    });
+  }, [dragSource]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const computeDropTarget = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const isPalette = dragSource === "palette";
 
     const fieldEls = canvas.querySelectorAll("[data-field-index]");
 
@@ -978,37 +987,37 @@ export function TemplateForm({ template, initialFields, importMeta, clinicLogoUr
       const rect = el.getBoundingClientRect();
 
       if (
-        e.clientX >= rect.left && e.clientX <= rect.right &&
-        e.clientY >= rect.top && e.clientY <= rect.bottom
+        clientX >= rect.left && clientX <= rect.right &&
+        clientY >= rect.top && clientY <= rect.bottom
       ) {
         const flatIndex = parseInt(el.dataset.fieldIndex!, 10);
         const sectionEl = el.closest("[data-section]") as HTMLElement | null;
         const section = (sectionEl?.dataset.section as FormSection) || "body";
-        const relX = (e.clientX - rect.left) / rect.width;
-        const relY = (e.clientY - rect.top) / rect.height;
+        const relY = (clientY - rect.top) / rect.height;
 
-        // Narrow top/bottom bands → between-row drop (above/below)
-        if (relY < 0.15) {
-          setDropTarget({ type: "between", index: flatIndex, section });
-          return;
-        }
-        if (relY > 0.85) {
-          setDropTarget({ type: "between", index: flatIndex + 1, section });
-          return;
-        }
-
-        // Left/right zones → beside drop
-        if (relX < 0.35) {
-          setDropTarget({ type: "beside", flatIndex, side: "left" });
-          return;
-        }
-        if (relX > 0.65) {
-          setDropTarget({ type: "beside", flatIndex, side: "right" });
-          return;
+        // Palette drags: allow beside (side-by-side) drops via left/right zones
+        // Skip for fixed-width fields (they must stay full-width)
+        const targetFieldType = fieldsRef.current[flatIndex]?.type;
+        if (isPalette && targetFieldType && !isFixedWidth(targetFieldType)) {
+          const relX = (clientX - rect.left) / rect.width;
+          if (relY >= 0.15 && relY <= 0.85) {
+            if (relX < 0.35) {
+              setDropTarget({ type: "beside", flatIndex, side: "left" });
+              return;
+            }
+            if (relX > 0.65) {
+              setDropTarget({ type: "beside", flatIndex, side: "right" });
+              return;
+            }
+          }
         }
 
-        // Center zone → between-row at closest edge
-        setDropTarget({ type: "between", index: relY < 0.5 ? flatIndex : flatIndex + 1, section });
+        // Between-row drop: top half → above, bottom half → below
+        setDropTarget({
+          type: "between",
+          index: relY < 0.5 ? flatIndex : flatIndex + 1,
+          section,
+        });
         return;
       }
     }
@@ -1019,11 +1028,10 @@ export function TemplateForm({ template, initialFields, importMeta, clinicLogoUr
       const el = sectionZones[i] as HTMLElement;
       const rect = el.getBoundingClientRect();
       if (
-        e.clientX >= rect.left && e.clientX <= rect.right &&
-        e.clientY >= rect.top && e.clientY <= rect.bottom
+        clientX >= rect.left && clientX <= rect.right &&
+        clientY >= rect.top && clientY <= rect.bottom
       ) {
         const section = el.dataset.section as FormSection;
-        // Check if this section has fields — if not, use section drop target
         const sectionFields = fieldsRef.current.filter(
           (f) => (f.section || "body") === section
         );
@@ -1031,16 +1039,21 @@ export function TemplateForm({ template, initialFields, importMeta, clinicLogoUr
           setDropTarget({ type: "section", section });
           return;
         }
-        // Section has fields — find between-row position by Y within this section
+        // Find between-row position by Y
         const sectionFieldEls = el.querySelectorAll("[data-field-index]");
-        let targetIndex = fieldsRef.current.length;
+        let targetIndex = -1;
         for (let j = 0; j < sectionFieldEls.length; j++) {
           const fel = sectionFieldEls[j] as HTMLElement;
           const fRect = fel.getBoundingClientRect();
-          if (e.clientY < fRect.top + fRect.height / 2) {
+          if (clientY < fRect.top + fRect.height / 2) {
             targetIndex = parseInt(fel.dataset.fieldIndex!, 10);
             break;
           }
+        }
+        // Cursor is below all fields in this section — use last field's index + 1
+        if (targetIndex === -1) {
+          const lastEl = sectionFieldEls[sectionFieldEls.length - 1] as HTMLElement;
+          targetIndex = lastEl ? parseInt(lastEl.dataset.fieldIndex!, 10) + 1 : 0;
         }
         setDropTarget({ type: "between", index: targetIndex, section });
         return;
@@ -1620,7 +1633,7 @@ export function TemplateForm({ template, initialFields, importMeta, clinicLogoUr
                         )}
                       </div>
                     ) : (
-                      <div className="space-y-1">
+                      <div className="space-y-1 pt-1 pb-6">
                         {renderSectionRows(section)}
 
                         {/* Drop indicator at end of section */}
@@ -1651,6 +1664,7 @@ export function TemplateForm({ template, initialFields, importMeta, clinicLogoUr
           name={name}
           fields={fields}
           onClose={() => setShowPreview(false)}
+          clinicLogoUrl={clinicLogoUrl}
         />
       )}
 
