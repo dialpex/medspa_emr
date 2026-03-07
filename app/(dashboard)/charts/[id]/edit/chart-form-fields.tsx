@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { CameraIcon, XIcon } from "lucide-react";
+import { CameraIcon } from "lucide-react";
 import { type TemplateFieldConfig, groupFieldsIntoRows, groupFieldsBySections } from "@/lib/types/charts";
 
 interface ChartFormFieldsProps {

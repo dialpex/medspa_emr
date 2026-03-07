@@ -1,4 +1,4 @@
-import { type TemplateFieldConfig, groupFieldsIntoRows } from "@/lib/types/charts";
+import { type TemplateFieldConfig } from "@/lib/types/charts";
 
 function RequiredAsterisk({ field }: { field: TemplateFieldConfig }) {
   if (!field.required) return null;
@@ -197,33 +197,3 @@ export function FieldPreview({ field, clinicLogoUrl }: { field: TemplateFieldCon
   return null;
 }
 
-/** Renders fields grouped into visual rows based on their width property */
-export function FieldPreviewRows({ fields, clinicLogoUrl }: { fields: TemplateFieldConfig[]; clinicLogoUrl?: string }) {
-  const rows = groupFieldsIntoRows(fields);
-
-  return (
-    <div className="space-y-5">
-      {rows.map((row, ri) => {
-        if (row.length === 1 && (row[0].width ?? 100) === 100) {
-          return <FieldPreview key={row[0].key} field={row[0]} clinicLogoUrl={clinicLogoUrl} />;
-        }
-        return (
-          <div
-            key={row.map((f) => f.key).join("-")}
-            className="gap-4"
-            style={{
-              display: "grid",
-              gridTemplateColumns: row.map((f) => `${f.width ?? 100}fr`).join(" "),
-            }}
-          >
-            {row.map((f) => (
-              <div key={f.key} className="min-w-0">
-                <FieldPreview field={f} clinicLogoUrl={clinicLogoUrl} />
-              </div>
-            ))}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
