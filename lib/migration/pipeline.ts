@@ -1,9 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import type { MigrationJob, MigrationEntityType } from "@prisma/client";
 import type { MigrationProvider, MigrationCredentials, SourceForm, FormFieldContent } from "./providers/types";
+import type { TemplateFieldConfig, FieldType } from "@/lib/types/charts";
 import { decrypt } from "./crypto";
 import { detectDuplicate } from "./duplicate-detector";
-import { classifyAndMapForms } from "@/lib/agents/migration/legacy/agent";
+import { classifyForms } from "@/lib/agents/migration/classification";
+import { inferFieldTypes } from "@/lib/agents/migration/field-inference";
+import { getVendorKnowledge, type VendorKnowledge } from "@/lib/agents/migration/vendor-knowledge";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
@@ -340,77 +343,146 @@ async function importAppointments(
     return;
   }
 
-  while (true) {
-    if (await isPaused(job.id)) return;
+  // Helper to import a single appointment (providerId is guaranteed non-null by outer check)
+  async function importSingleAppointment(apt: import("./providers/types").SourceAppointment) {
+    if (!providerId) return;
+    const patientId = await resolveSourceId(job.id, "Patient", apt.patientSourceId);
+    if (!patientId) {
+      progress.Appointment.skipped++;
+      await logMigration(
+        job.id, "Appointment", apt.sourceId, null,
+        "skipped", `Patient ${apt.patientSourceId} not found in mapping`, undefined, apt.rawData
+      );
+      return;
+    }
 
-    const batch = await provider.fetchAppointments(credentials, { limit: BATCH_SIZE, cursor });
-    if (batch.data.length === 0) break;
+    let serviceId: string | null = null;
+    if (apt.serviceSourceId) {
+      serviceId = await resolveSourceId(job.id, "Service", apt.serviceSourceId);
+    }
 
-    if (batch.totalCount) progress.Appointment.total = batch.totalCount;
+    const startTime = new Date(apt.startTime);
+    const endTime = apt.endTime ? new Date(apt.endTime) : new Date(startTime.getTime() + 30 * 60000);
 
-    for (const apt of batch.data) {
+    const newApt = await prisma.appointment.create({
+      data: {
+        clinicId: job.clinicId,
+        patientId,
+        providerId,
+        serviceId,
+        startTime,
+        endTime,
+        status: "Completed",
+        notes: `[Imported from ${provider.source}] ${apt.notes || ""}`.trim(),
+        completedAt: startTime,
+      },
+    });
+
+    await createEntityMap(job.id, "Appointment", apt.sourceId, newApt.id);
+    progress.Appointment.imported++;
+    await logMigration(
+      job.id, "Appointment", apt.sourceId, newApt.id,
+      "imported",
+      serviceId
+        ? `Mapped service and patient`
+        : `Created without service mapping (service "${apt.serviceName}" not found)`,
+      undefined, apt.rawData
+    );
+  }
+
+  // Try bulk fetch first
+  const firstBatch = await provider.fetchAppointments(credentials, { limit: BATCH_SIZE, cursor });
+  let usedPerPatient = false;
+
+  if (firstBatch.data.length === 0 && provider.fetchPatientAppointments) {
+    // Bulk query returned empty — fall back to per-patient fetching
+    usedPerPatient = true;
+    await appendAgentLog(job.id, "Bulk appointment query empty — switching to per-patient fetching...");
+
+    const patientMaps = await prisma.migrationEntityMap.findMany({
+      where: { jobId: job.id, entityType: "Patient" },
+    });
+
+    for (const pMap of patientMaps) {
+      if (await isPaused(job.id)) return;
+
       try {
-        // Resolve patient
-        const patientId = await resolveSourceId(job.id, "Patient", apt.patientSourceId);
-        if (!patientId) {
-          progress.Appointment.skipped++;
-          await logMigration(
-            job.id, "Appointment", apt.sourceId, null,
-            "skipped", `Patient ${apt.patientSourceId} not found in mapping`, undefined, apt.rawData
-          );
-          continue;
+        const apts = await provider.fetchPatientAppointments(credentials, pMap.sourceId);
+        if (apts.length === 0) continue;
+
+        progress.Appointment.total += apts.length;
+
+        for (const apt of apts) {
+          try {
+            await importSingleAppointment(apt);
+          } catch (err) {
+            progress.Appointment.failed++;
+            await logMigration(
+              job.id, "Appointment", apt.sourceId, null,
+              "failed", undefined, err instanceof Error ? err.message : String(err), apt.rawData
+            );
+          }
         }
-
-        // Resolve service
-        let serviceId: string | null = null;
-        if (apt.serviceSourceId) {
-          serviceId = await resolveSourceId(job.id, "Service", apt.serviceSourceId);
-        }
-
-        const startTime = new Date(apt.startTime);
-        const endTime = apt.endTime ? new Date(apt.endTime) : new Date(startTime.getTime() + 30 * 60000);
-
-        const newApt = await prisma.appointment.create({
-          data: {
-            clinicId: job.clinicId,
-            patientId,
-            providerId,
-            serviceId,
-            startTime,
-            endTime,
-            status: "Completed",
-            notes: `[Imported from ${provider.source}] ${apt.notes || ""}`.trim(),
-            completedAt: startTime,
-          },
-        });
-
-        await createEntityMap(job.id, "Appointment", apt.sourceId, newApt.id);
-        progress.Appointment.imported++;
-        await logMigration(
-          job.id, "Appointment", apt.sourceId, newApt.id,
-          "imported",
-          serviceId
-            ? `Mapped service and patient`
-            : `Created without service mapping (service "${apt.serviceName}" not found)`,
-          undefined, apt.rawData
-        );
       } catch (err) {
-        progress.Appointment.failed++;
-        await logMigration(
-          job.id, "Appointment", apt.sourceId, null,
-          "failed", undefined, err instanceof Error ? err.message : String(err), apt.rawData
+        await appendAgentLog(
+          job.id,
+          `WARNING: Failed to fetch appointments for patient ${pMap.sourceId}: ${err instanceof Error ? err.message : String(err)}`
         );
       }
     }
-
-    cursor = batch.nextCursor;
-    await saveCheckpoint(job.id, "Appointment", cursor, progress);
-    if (!batch.nextCursor) break;
   }
 
+  if (!usedPerPatient) {
+    // Process first batch + continue paginating
+    if (firstBatch.data.length > 0) {
+      if (firstBatch.totalCount) progress.Appointment.total = firstBatch.totalCount;
+
+      for (const apt of firstBatch.data) {
+        try {
+          await importSingleAppointment(apt);
+        } catch (err) {
+          progress.Appointment.failed++;
+          await logMigration(
+            job.id, "Appointment", apt.sourceId, null,
+            "failed", undefined, err instanceof Error ? err.message : String(err), apt.rawData
+          );
+        }
+      }
+
+      cursor = firstBatch.nextCursor;
+      await saveCheckpoint(job.id, "Appointment", cursor, progress);
+
+      while (firstBatch.nextCursor) {
+        if (await isPaused(job.id)) return;
+
+        const batch = await provider.fetchAppointments(credentials, { limit: BATCH_SIZE, cursor });
+        if (batch.data.length === 0) break;
+
+        if (batch.totalCount) progress.Appointment.total = batch.totalCount;
+
+        for (const apt of batch.data) {
+          try {
+            await importSingleAppointment(apt);
+          } catch (err) {
+            progress.Appointment.failed++;
+            await logMigration(
+              job.id, "Appointment", apt.sourceId, null,
+              "failed", undefined, err instanceof Error ? err.message : String(err), apt.rawData
+            );
+          }
+        }
+
+        cursor = batch.nextCursor;
+        await saveCheckpoint(job.id, "Appointment", cursor, progress);
+        if (!batch.nextCursor) break;
+      }
+    }
+  }
+
+  await saveCheckpoint(job.id, "Appointment", undefined, progress);
   await appendAgentLog(
     job.id,
-    `Appointments complete: ${progress.Appointment.imported} imported, ${progress.Appointment.skipped} skipped, ${progress.Appointment.failed} failed`
+    `Appointments complete: ${progress.Appointment.imported} imported, ${progress.Appointment.skipped} skipped, ${progress.Appointment.failed} failed${usedPerPatient ? " (per-patient mode)" : ""}`
   );
 }
 
@@ -728,11 +800,224 @@ async function importPhotos(
   );
 }
 
-async function importForms(
+// ============================================================
+// Boulevard Field Type → Neuvvia FieldType Mapping
+// ============================================================
+
+export function mapBoulevardFieldType(blvdType: string): FieldType {
+  switch (blvdType) {
+    case "heading":
+      return "heading";
+    case "text":
+    case "connected_text":
+      return "text";
+    case "textarea":
+      return "textarea";
+    case "checkbox":
+      return "checklist";
+    case "date":
+    case "connected_date":
+      return "date";
+    case "dropdown":
+    case "select":
+    case "radio":
+      return "select";
+    case "signature":
+      return "signature";
+    case "image":
+      return "photo-single";
+    default:
+      return "text";
+  }
+}
+
+// ============================================================
+// ChartTemplate Auto-Generation from Forms
+// ============================================================
+
+interface TemplateGenResult {
+  /** Map of sourceTemplateId → generated ChartTemplate info */
+  templateMap: Map<string, { chartTemplateId: string; fieldKeyMap: Map<string, string> }>;
+  /** Cached forms data per patient (to avoid re-fetching in importForms) */
+  formsCache: Map<string, Array<SourceForm & { fields?: FormFieldContent[] }>>;
+}
+
+async function generateChartTemplates(
   job: MigrationJob,
   provider: MigrationProvider,
   credentials: MigrationCredentials,
   progress: EntityProgress
+): Promise<TemplateGenResult> {
+  const result: TemplateGenResult = {
+    templateMap: new Map(),
+    formsCache: new Map(),
+  };
+
+  if (!provider.fetchForms) return result;
+
+  await appendAgentLog(job.id, "Generating ChartTemplates from form structures...");
+  progress.ChartTemplate = progress.ChartTemplate || { total: 0, imported: 0, skipped: 0, failed: 0 };
+
+  const patientMaps = await prisma.migrationEntityMap.findMany({
+    where: { jobId: job.id, entityType: "Patient" },
+  });
+
+  // Pass 1: Collect field unions per source template
+  const templateFields = new Map<string, { name: string; fields: Map<string, FormFieldContent> }>();
+
+  for (const pMap of patientMaps) {
+    if (await isPaused(job.id)) return result;
+
+    try {
+      const formsResult = await provider.fetchForms(credentials, { cursor: pMap.sourceId });
+      if (formsResult.data.length === 0) continue;
+
+      const formsWithContent: Array<SourceForm & { fields?: FormFieldContent[] }> = [];
+      for (const form of formsResult.data) {
+        let fields: FormFieldContent[] | undefined;
+        if (provider.fetchFormContent) {
+          try {
+            fields = await provider.fetchFormContent(credentials, form.sourceId);
+            if (fields.length === 0) fields = undefined;
+          } catch {
+            // Content fetch failed — proceed with metadata-only
+          }
+        }
+        formsWithContent.push({ ...form, fields });
+
+        // Accumulate field union for this template
+        if (form.templateId && fields) {
+          let entry = templateFields.get(form.templateId);
+          if (!entry) {
+            entry = { name: form.templateName, fields: new Map() };
+            templateFields.set(form.templateId, entry);
+          }
+          for (const field of fields) {
+            if (!entry.fields.has(field.fieldId)) {
+              entry.fields.set(field.fieldId, field);
+            }
+          }
+        }
+      }
+
+      result.formsCache.set(pMap.sourceId, formsWithContent);
+    } catch (err) {
+      await appendAgentLog(
+        job.id,
+        `WARNING: Failed to fetch forms for patient ${pMap.sourceId} during template gen: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  // Pass 1.5: AI field type inference
+  const vendorKnowledge = getVendorKnowledge(provider.source);
+  const inferredTypesByTemplate = new Map<string, Map<string, FieldType>>();
+
+  for (const [sourceTemplateId, tmpl] of templateFields) {
+    try {
+      const inferred = await inferFieldTypes(tmpl.name, tmpl.fields, vendorKnowledge);
+      inferredTypesByTemplate.set(sourceTemplateId, inferred);
+      await appendAgentLog(
+        job.id,
+        `AI field inference for "${tmpl.name}": ${inferred.size} fields typed`
+      );
+    } catch (err) {
+      await appendAgentLog(
+        job.id,
+        `WARNING: Field inference failed for "${tmpl.name}": ${err instanceof Error ? err.message : String(err)} — using heuristic fallback`
+      );
+    }
+  }
+
+  // Pass 2: Create ChartTemplates
+  progress.ChartTemplate.total = templateFields.size;
+
+  for (const [sourceTemplateId, tmpl] of templateFields) {
+    try {
+      const fieldsConfig: TemplateFieldConfig[] = [];
+      const fieldKeyMap = new Map<string, string>();
+      const templateInferredTypes = inferredTypesByTemplate.get(sourceTemplateId);
+
+      for (const [fieldId, field] of tmpl.fields) {
+        const fieldKey = `blvd_${fieldId}`;
+        const fieldType = templateInferredTypes?.get(fieldId) ?? mapBoulevardFieldType(field.type);
+        fieldKeyMap.set(fieldId, fieldKey);
+
+        const config: TemplateFieldConfig = {
+          key: fieldKey,
+          label: field.label,
+          type: fieldType,
+        };
+
+        if (field.availableOptions && field.availableOptions.length > 0) {
+          config.options = field.availableOptions;
+        }
+
+        fieldsConfig.push(config);
+      }
+
+      if (fieldsConfig.length === 0) {
+        progress.ChartTemplate.skipped++;
+        continue;
+      }
+
+      // Check if a ChartTemplate already exists for this source template
+      const existingTemplate = await prisma.chartTemplate.findFirst({
+        where: {
+          clinicId: job.clinicId,
+          name: `[Imported] ${tmpl.name}`,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+
+      let chartTemplateId: string;
+      if (existingTemplate) {
+        chartTemplateId = existingTemplate.id;
+      } else {
+        const newTemplate = await prisma.chartTemplate.create({
+          data: {
+            clinicId: job.clinicId,
+            type: "chart",
+            name: `[Imported] ${tmpl.name}`,
+            description: `Auto-generated from Boulevard form template "${tmpl.name}"`,
+            fieldsConfig: JSON.stringify(fieldsConfig),
+            status: "Active",
+          },
+        });
+        chartTemplateId = newTemplate.id;
+      }
+
+      result.templateMap.set(sourceTemplateId, { chartTemplateId, fieldKeyMap });
+      progress.ChartTemplate.imported++;
+      await logMigration(
+        job.id, "ChartTemplate" as MigrationEntityType, sourceTemplateId, chartTemplateId,
+        "imported", `Created chart template "${tmpl.name}" with ${fieldsConfig.length} fields`
+      );
+    } catch (err) {
+      progress.ChartTemplate.failed++;
+      await logMigration(
+        job.id, "ChartTemplate" as MigrationEntityType, sourceTemplateId, null,
+        "failed", undefined, err instanceof Error ? err.message : String(err)
+      );
+    }
+  }
+
+  await saveCheckpoint(job.id, "ChartTemplate", undefined, progress);
+  await appendAgentLog(
+    job.id,
+    `ChartTemplates complete: ${progress.ChartTemplate.imported} created, ${progress.ChartTemplate.skipped} skipped (no fields), ${progress.ChartTemplate.failed} failed`
+  );
+
+  return result;
+}
+
+async function importForms(
+  job: MigrationJob,
+  provider: MigrationProvider,
+  credentials: MigrationCredentials,
+  progress: EntityProgress,
+  templateGenResult?: TemplateGenResult
 ) {
   if (!provider.fetchForms) {
     await appendAgentLog(job.id, "Provider does not support form import — skipping.");
@@ -760,28 +1045,37 @@ async function importForms(
     if (await isPaused(job.id)) return;
 
     try {
-      const result = await provider.fetchForms(credentials, { cursor: pMap.sourceId });
-      if (result.data.length === 0) continue;
+      // Use cached form data from template generation if available
+      let formsWithContent: Array<SourceForm & { fields?: FormFieldContent[] }>;
+      const cached = templateGenResult?.formsCache.get(pMap.sourceId);
+      if (cached) {
+        formsWithContent = cached;
+      } else {
+        const result = await provider.fetchForms(credentials, { cursor: pMap.sourceId });
+        if (result.data.length === 0) continue;
 
-      progress.Consent.total += result.data.length;
-
-      // Fetch form content for each form (if provider supports it)
-      const formsWithContent: Array<SourceForm & { fields?: FormFieldContent[] }> = [];
-      for (const form of result.data) {
-        let fields: FormFieldContent[] | undefined;
-        if (provider.fetchFormContent) {
-          try {
-            fields = await provider.fetchFormContent(credentials, form.sourceId);
-            if (fields.length === 0) fields = undefined;
-          } catch {
-            // Content fetch failed — proceed with metadata-only
+        formsWithContent = [];
+        for (const form of result.data) {
+          let fields: FormFieldContent[] | undefined;
+          if (provider.fetchFormContent) {
+            try {
+              fields = await provider.fetchFormContent(credentials, form.sourceId);
+              if (fields.length === 0) fields = undefined;
+            } catch {
+              // Content fetch failed — proceed with metadata-only
+            }
           }
+          formsWithContent.push({ ...form, fields });
         }
-        formsWithContent.push({ ...form, fields });
       }
 
-      // AI classification
-      const classification = await classifyAndMapForms(formsWithContent);
+      if (formsWithContent.length === 0) continue;
+
+      progress.Consent.total += formsWithContent.length;
+
+      // AI classification (with vendor knowledge)
+      const vendorKnowledge = getVendorKnowledge(provider.source);
+      const classification = await classifyForms(formsWithContent, vendorKnowledge);
 
       // Build lookup map
       const classMap = new Map(
@@ -812,6 +1106,75 @@ async function importForms(
               appointmentId = await resolveSourceId(job.id, "Appointment", form.appointmentSourceId);
             }
 
+            // Look up generated ChartTemplate for structured field rendering
+            const tmplInfo = form.templateId
+              ? templateGenResult?.templateMap.get(form.templateId)
+              : undefined;
+
+            // Build structured template values from form fields
+            let templateId: string | undefined;
+            let additionalNotes: string | null = chartData.narrativeText || null;
+
+            if (tmplInfo && form.fields) {
+              templateId = tmplInfo.chartTemplateId;
+              const templateValues: Record<string, string> = {};
+              for (const field of form.fields) {
+                const fieldKey = tmplInfo.fieldKeyMap.get(field.fieldId);
+                if (!fieldKey) continue;
+                if (field.type === "heading") continue;
+
+                if (field.selectedOptions && field.selectedOptions.length > 0) {
+                  templateValues[fieldKey] = JSON.stringify(field.selectedOptions);
+                } else if (field.type === "signature") {
+                  // Signature handling: try to download image if vendor stores signatures as images
+                  const sigVendorKnowledge = getVendorKnowledge(provider.source);
+                  if (
+                    sigVendorKnowledge?.signaturesAreImages &&
+                    field.value &&
+                    field.value.startsWith("http")
+                  ) {
+                    try {
+                      const sigFilename = `sig_${field.fieldId}.png`;
+                      const sigStoragePath = `storage/photos/${job.clinicId}/${pMap.targetId}/${sigFilename}`;
+                      await downloadFile(field.value, path.join(process.cwd(), sigStoragePath));
+
+                      const sigInitiator = await prisma.user.findFirst({
+                        where: { clinicId: job.clinicId, role: "Owner" },
+                        select: { id: true },
+                      });
+                      if (sigInitiator) {
+                        const sigPhoto = await prisma.photo.create({
+                          data: {
+                            clinicId: job.clinicId,
+                            patientId: pMap.targetId,
+                            takenById: sigInitiator.id,
+                            filename: sigFilename,
+                            storagePath: sigStoragePath,
+                            mimeType: "image/png",
+                            sizeBytes: 0,
+                            category: "signature",
+                            caption: `Signature from "${form.templateName}" [Imported from ${provider.source}]`,
+                          },
+                        });
+                        templateValues[fieldKey] = sigPhoto.storagePath;
+                        await appendAgentLog(job.id, `Downloaded signature image for field "${field.label}"`);
+                      } else {
+                        templateValues[fieldKey] = "[signed]";
+                      }
+                    } catch {
+                      templateValues[fieldKey] = "[signed]";
+                      await appendAgentLog(job.id, `Signature download failed for field "${field.label}" — stored as [signed]`);
+                    }
+                  } else {
+                    templateValues[fieldKey] = "[signed]";
+                  }
+                } else if (field.value) {
+                  templateValues[fieldKey] = field.value;
+                }
+              }
+              additionalNotes = JSON.stringify(templateValues);
+            }
+
             // Check if chart already exists for this appointment
             let existingChart = null;
             if (appointmentId) {
@@ -833,12 +1196,20 @@ async function importForms(
                 },
               });
 
+              // Update existing chart with template link if we have one
+              if (templateId) {
+                await prisma.chart.update({
+                  where: { id: existingChart.id },
+                  data: { templateId, additionalNotes },
+                });
+              }
+
               await createEntityMap(job.id, "Form", form.sourceId, existingChart.id);
               progress.Consent.imported++;
               await logMigration(
                 job.id, "Form", form.sourceId, existingChart.id,
                 "imported",
-                `Clinical form "${form.templateName}" added as treatment card to existing chart`,
+                `Clinical form "${form.templateName}" added as treatment card to existing chart${templateId ? " (with template)" : ""}`,
                 undefined, form.rawData
               );
             } else {
@@ -850,9 +1221,10 @@ async function importForms(
                   clinicId: job.clinicId,
                   patientId: pMap.targetId,
                   appointmentId: appointmentId || undefined,
+                  templateId: templateId || undefined,
                   status: "MDSigned",
                   chiefComplaint: chartData.chiefComplaint,
-                  additionalNotes: chartData.narrativeText || null,
+                  additionalNotes,
                   createdById: chartCreator?.id || null,
                   signedAt: chartDate,
                   createdAt: chartDate,
@@ -874,12 +1246,12 @@ async function importForms(
               await logMigration(
                 job.id, "Form", form.sourceId, newChart.id,
                 "imported",
-                `Clinical form "${form.templateName}" imported as chart with treatment card (${chartData.templateType})`,
+                `Clinical form "${form.templateName}" imported as chart with treatment card (${chartData.templateType})${templateId ? " — linked to auto-generated template" : ""}`,
                 undefined, form.rawData
               );
               await appendAgentLog(
                 job.id,
-                `Created chart from clinical form "${form.templateName}" (${chartData.templateType})`
+                `Created chart from clinical form "${form.templateName}" (${chartData.templateType})${templateId ? " with template" : ""}`
               );
             }
             continue;
@@ -1149,7 +1521,9 @@ export async function executeMigration(
   const credentials = decryptCredentials(job);
   const progress = parseProgress(job);
 
-  await appendAgentLog(job.id, "Migration started. Import order: Services → Patients → Appointments → Charts → Photos → Forms → Documents → Invoices");
+  await appendAgentLog(job.id, "Migration started. Import order: Services → Patients → Appointments → Charts → ChartTemplates → Forms → Documents → Photos → Invoices");
+
+  let templateGenResult: TemplateGenResult | undefined;
 
   try {
     // 1. Services (from mapping config, not pagination)
@@ -1179,15 +1553,15 @@ export async function executeMigration(
       if (await isPaused(job.id)) return;
     }
 
-    // 5. Photos (optional — depends on provider support)
-    if (!progress.Photo?.imported && !progress.Photo?.skipped) {
-      await importPhotos(job, provider, credentials, progress);
+    // 5. Generate ChartTemplates from form structures (before importing forms)
+    if (!progress.ChartTemplate?.imported && !progress.ChartTemplate?.skipped) {
+      templateGenResult = await generateChartTemplates(job, provider, credentials, progress);
       if (await isPaused(job.id)) return;
     }
 
     // 6. Forms/Consents (optional — depends on provider support)
     if (!progress.Consent?.imported && !progress.Consent?.skipped) {
-      await importForms(job, provider, credentials, progress);
+      await importForms(job, provider, credentials, progress, templateGenResult);
       if (await isPaused(job.id)) return;
     }
 
@@ -1197,7 +1571,13 @@ export async function executeMigration(
       if (await isPaused(job.id)) return;
     }
 
-    // 8. Invoices
+    // 8. Photos (optional — depends on provider support)
+    if (!progress.Photo?.imported && !progress.Photo?.skipped) {
+      await importPhotos(job, provider, credentials, progress);
+      if (await isPaused(job.id)) return;
+    }
+
+    // 9. Invoices
     const invDone = progress.Invoice && !parseCheckpoint(job).Invoice;
     if (!invDone) {
       await importInvoices(job, provider, credentials, progress);

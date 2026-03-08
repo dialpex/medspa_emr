@@ -47,3 +47,5 @@ export { OpenAIProvider } from "./openai";
 export { BedrockProvider } from "./bedrock";
 export { MockLLMProvider } from "./mock";
 export { extractJSON } from "./utils";
+export { completionWithRetry } from "./self-healing";
+export type { CompletionWithRetryOptions } from "./self-healing";
