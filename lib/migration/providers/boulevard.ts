@@ -30,37 +30,41 @@ interface GraphQLResponse {
  * Each component type has different answer fields (textAnswer, checkboxAnswer, dateAnswer, etc.).
  * Components are positioned on a grid (x, y, w, h) — we use `y` for sort ordering.
  */
+/**
+ * Boulevard form content query — uses `customForm.components` (the SUBMISSION with answers),
+ * NOT `customForm.version.components` (the template structure without answers).
+ * Each component type has different answer fields (textAnswer, checkboxAnswer, dateAnswer, etc.).
+ * Components are positioned on a grid (x, y, w, h) — we use `y` for sort ordering.
+ */
 const BOULEVARD_FORM_CONTENT_QUERY = `query GetFormContent($id: ID!) {
   customForm(id: $id) {
     id
     formUrl
-    version {
-      template { name }
-      components {
-        __typename
-        ... on CustomFormComponentTextV2 { id y value }
-        ... on CustomFormComponentTextInputV2 { id y label textAnswer placeholder connectedField }
-        ... on CustomFormComponentTextarea { id y label textAnswer textareaAnswer }
-        ... on CustomFormComponentText { id y label textAnswer }
-        ... on CustomFormComponentCheckboxV2 { id y label checkboxAnswer values { label } enableOther otherAnswer }
-        ... on CustomFormComponentCheckbox { id y label checkboxAnswer values { label } }
-        ... on CustomFormComponentDateV2 { id y label dateAnswer connectedField }
-        ... on CustomFormComponentDate { id y label dateAnswer }
-        ... on CustomFormComponentDropdownV2 { id y label dropdownAnswer values { label } }
-        ... on CustomFormComponentSelect { id y label selectAnswer values { label } }
-        ... on CustomFormComponentMultipleChoiceV2 { id y label radioAnswer values { label } }
-        ... on CustomFormComponentRadio { id y label radioAnswer values { label } }
-        ... on CustomFormComponentSignatureV2 { id y label }
-        ... on CustomFormComponentSignature { id y label }
-        ... on CustomFormComponentImageUploaderV2 { id y label }
-        ... on CustomFormComponentImageV2 { id y label src }
-        ... on CustomFormComponentH1 { id y label }
-        ... on CustomFormComponentH2 { id y label }
-        ... on CustomFormComponentDividerV2 { id y }
-        ... on CustomFormComponentLogoV2 { id y }
-        ... on CustomFormComponentLogo { id y }
-        ... on CustomFormComponentMarkdown { id y markdownContent }
-      }
+    version { template { name } }
+    components {
+      __typename
+      ... on CustomFormComponentTextV2 { id y value }
+      ... on CustomFormComponentTextInputV2 { id y label textAnswer placeholder connectedField }
+      ... on CustomFormComponentTextarea { id y label textAnswer textareaAnswer }
+      ... on CustomFormComponentText { id y label textAnswer }
+      ... on CustomFormComponentCheckboxV2 { id y label checkboxAnswer values { id label } enableOther otherAnswer }
+      ... on CustomFormComponentCheckbox { id y label checkboxAnswer values { id label } }
+      ... on CustomFormComponentDateV2 { id y label dateAnswer connectedField }
+      ... on CustomFormComponentDate { id y label dateAnswer }
+      ... on CustomFormComponentDropdownV2 { id y label dropdownAnswer values { id label } }
+      ... on CustomFormComponentSelect { id y label selectAnswer values { id label } }
+      ... on CustomFormComponentMultipleChoiceV2 { id y label radioAnswer values { id label } }
+      ... on CustomFormComponentRadio { id y label radioAnswer values { id label } }
+      ... on CustomFormComponentSignatureV2 { id y label }
+      ... on CustomFormComponentSignature { id y label }
+      ... on CustomFormComponentImageUploaderV2 { id y label }
+      ... on CustomFormComponentImageV2 { id y label src }
+      ... on CustomFormComponentH1 { id y label }
+      ... on CustomFormComponentH2 { id y label }
+      ... on CustomFormComponentDividerV2 { id y }
+      ... on CustomFormComponentLogoV2 { id y }
+      ... on CustomFormComponentLogo { id y }
+      ... on CustomFormComponentMarkdown { id y markdownContent }
     }
   }
 }`;
@@ -141,9 +145,12 @@ function parseBoulevardFormComponents(
       typename === "CustomFormComponentCheckbox"
     ) {
       const checkboxAnswer = (comp.checkboxAnswer as string[]) || [];
-      const values = (comp.values as Array<{ label: string }>) || [];
+      const values = (comp.values as Array<{ id?: string; label: string }>) || [];
       const otherAnswer = comp.otherAnswer as string | undefined;
-      const selected = [...checkboxAnswer];
+
+      // Resolve UUID answers to labels (root-level components return IDs, not labels)
+      const valueMap = new Map(values.filter(v => v.id).map(v => [v.id!, v.label]));
+      const selected = checkboxAnswer.map(a => valueMap.get(a) ?? a);
       if (otherAnswer) selected.push(otherAnswer);
 
       fields.push({
@@ -178,13 +185,18 @@ function parseBoulevardFormComponents(
     // Dropdowns
     if (typename === "CustomFormComponentDropdownV2") {
       const dropdownAnswer = (comp.dropdownAnswer as string[]) || [];
-      const values = (comp.values as Array<{ label: string }>) || [];
+      const values = (comp.values as Array<{ id?: string; label: string }>) || [];
+
+      // Resolve UUID answers to labels
+      const valueMap = new Map(values.filter(v => v.id).map(v => [v.id!, v.label]));
+      const resolved = dropdownAnswer.map(a => valueMap.get(a) ?? a);
+
       fields.push({
         fieldId: id,
         label: (comp.label as string) || "",
         type: "dropdown",
-        value: dropdownAnswer.join(", ") || null,
-        selectedOptions: dropdownAnswer.length > 0 ? dropdownAnswer : undefined,
+        value: resolved.join(", ") || null,
+        selectedOptions: resolved.length > 0 ? resolved : undefined,
         availableOptions: values.map((v) => v.label),
         sortOrder: y,
       });
@@ -194,13 +206,17 @@ function parseBoulevardFormComponents(
     // Selects
     if (typename === "CustomFormComponentSelect") {
       const selectAnswer = (comp.selectAnswer as string[]) || [];
-      const values = (comp.values as Array<{ label: string }>) || [];
+      const values = (comp.values as Array<{ id?: string; label: string }>) || [];
+
+      const valueMap = new Map(values.filter(v => v.id).map(v => [v.id!, v.label]));
+      const resolved = selectAnswer.map(a => valueMap.get(a) ?? a);
+
       fields.push({
         fieldId: id,
         label: (comp.label as string) || "",
         type: "select",
-        value: selectAnswer.join(", ") || null,
-        selectedOptions: selectAnswer.length > 0 ? selectAnswer : undefined,
+        value: resolved.join(", ") || null,
+        selectedOptions: resolved.length > 0 ? resolved : undefined,
         availableOptions: values.map((v) => v.label),
         sortOrder: y,
       });
@@ -212,12 +228,18 @@ function parseBoulevardFormComponents(
       typename === "CustomFormComponentMultipleChoiceV2" ||
       typename === "CustomFormComponentRadio"
     ) {
-      const values = (comp.values as Array<{ label: string }>) || [];
+      const values = (comp.values as Array<{ id?: string; label: string }>) || [];
+      const rawAnswer = (comp.radioAnswer as string) || null;
+
+      // Resolve UUID answer to label
+      const valueMap = new Map(values.filter(v => v.id).map(v => [v.id!, v.label]));
+      const resolved = rawAnswer ? (valueMap.get(rawAnswer) ?? rawAnswer) : null;
+
       fields.push({
         fieldId: id,
         label: (comp.label as string) || "",
         type: "radio",
-        value: (comp.radioAnswer as string) || null,
+        value: resolved,
         availableOptions: values.map((v) => v.label),
         sortOrder: y,
       });
@@ -1014,13 +1036,13 @@ export class BoulevardProvider implements MigrationProvider {
       );
 
       const formData = result.data?.customForm as Record<string, unknown> | null;
-      const version = formData?.version as { components?: Array<Record<string, unknown>> } | null;
+      const components = formData?.components as Array<Record<string, unknown>> | null;
 
-      if (!version?.components) {
+      if (!components) {
         return [];
       }
 
-      return parseBoulevardFormComponents(version.components);
+      return parseBoulevardFormComponents(components);
     } catch (err) {
       console.warn(
         `[Boulevard] Failed to fetch form content for ${formSourceId}: ${err instanceof Error ? err.message : String(err)}`
