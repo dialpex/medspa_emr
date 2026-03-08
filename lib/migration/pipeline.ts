@@ -6,6 +6,7 @@ import { decrypt } from "./crypto";
 import { detectDuplicate } from "./duplicate-detector";
 import { classifyForms } from "@/lib/agents/migration/classification";
 import { inferFieldTypes } from "@/lib/agents/migration/field-inference";
+import { classifyFieldSemantics, type FieldSemanticEntry } from "@/lib/agents/migration/field-classification";
 import { getVendorKnowledge, type VendorKnowledge } from "@/lib/agents/migration/vendor-knowledge";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -230,7 +231,8 @@ async function importPatients(
   job: MigrationJob,
   provider: MigrationProvider,
   credentials: MigrationCredentials,
-  progress: EntityProgress
+  progress: EntityProgress,
+  patientLimit?: number
 ) {
   await appendAgentLog(job.id, "Importing patients...");
   const checkpoint = parseCheckpoint(job);
@@ -242,12 +244,17 @@ async function importPatients(
   while (true) {
     if (await isPaused(job.id)) return;
 
-    const batch = await provider.fetchPatients(credentials, { limit: BATCH_SIZE, cursor });
+    const remaining = patientLimit ? patientLimit - totalProcessed : BATCH_SIZE;
+    const fetchLimit = patientLimit ? Math.min(BATCH_SIZE, remaining) : BATCH_SIZE;
+    const batch = await provider.fetchPatients(credentials, { limit: fetchLimit, cursor });
     if (batch.data.length === 0) break;
 
-    if (batch.totalCount) progress.Patient.total = batch.totalCount;
+    if (batch.totalCount) progress.Patient.total = patientLimit ? Math.min(patientLimit, batch.totalCount) : batch.totalCount;
 
-    for (const patient of batch.data) {
+    // Trim batch if it exceeds the remaining limit
+    const patients = patientLimit ? batch.data.slice(0, remaining) : batch.data;
+
+    for (const patient of patients) {
       try {
         // Check for duplicates
         const dupResult = await detectDuplicate(job.clinicId, patient);
@@ -301,11 +308,12 @@ async function importPatients(
       }
     }
 
-    totalProcessed += batch.data.length;
+    totalProcessed += patients.length;
     cursor = batch.nextCursor;
     await saveCheckpoint(job.id, "Patient", cursor, progress);
     await appendAgentLog(job.id, `Patients: ${totalProcessed} processed so far...`);
 
+    if (patientLimit && totalProcessed >= patientLimit) break;
     if (!batch.nextCursor) break;
   }
 
@@ -831,13 +839,32 @@ export function mapBoulevardFieldType(blvdType: string): FieldType {
   }
 }
 
+/**
+ * Generate a human-readable snake_case template key from a field label.
+ * Returns null if the label is empty or can't produce a valid key.
+ */
+function generateTemplateKey(label: string): string | null {
+  const key = label
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 4)
+    .join("_");
+  return key || null;
+}
+
 // ============================================================
 // ChartTemplate Auto-Generation from Forms
 // ============================================================
 
 interface TemplateGenResult {
   /** Map of sourceTemplateId → generated ChartTemplate info */
-  templateMap: Map<string, { chartTemplateId: string; fieldKeyMap: Map<string, string> }>;
+  templateMap: Map<string, {
+    chartTemplateId: string;
+    fieldKeyMap: Map<string, string>;
+    fieldClassifications: Map<string, FieldSemanticEntry>;
+  }>;
   /** Cached forms data per patient (to avoid re-fetching in importForms) */
   formsCache: Map<string, Array<SourceForm & { fields?: FormFieldContent[] }>>;
 }
@@ -929,7 +956,37 @@ async function generateChartTemplates(
     }
   }
 
-  // Pass 2: Create ChartTemplates
+  // Pass 1.6: AI field semantic classification
+  const classificationsByTemplate = new Map<string, Map<string, FieldSemanticEntry>>();
+
+  for (const [sourceTemplateId, tmpl] of templateFields) {
+    try {
+      const classified = await classifyFieldSemantics(tmpl.name, tmpl.fields, vendorKnowledge);
+      classificationsByTemplate.set(sourceTemplateId, classified);
+
+      // Log classification counts
+      let demographicCount = 0, medicalCount = 0, clinicalCount = 0, adminCount = 0;
+      for (const entry of classified.values()) {
+        switch (entry.category) {
+          case "patient_demographic": demographicCount++; break;
+          case "patient_medical": medicalCount++; break;
+          case "clinical_content": clinicalCount++; break;
+          case "administrative": adminCount++; break;
+        }
+      }
+      await appendAgentLog(
+        job.id,
+        `Field classification for "${tmpl.name}": ${clinicalCount} clinical, ${demographicCount} demographic (skipped), ${medicalCount} medical, ${adminCount} administrative`
+      );
+    } catch (err) {
+      await appendAgentLog(
+        job.id,
+        `WARNING: Field classification failed for "${tmpl.name}": ${err instanceof Error ? err.message : String(err)} — keeping all fields`
+      );
+    }
+  }
+
+  // Pass 2: Create ChartTemplates (with semantic filtering and meaningful keys)
   progress.ChartTemplate.total = templateFields.size;
 
   for (const [sourceTemplateId, tmpl] of templateFields) {
@@ -937,9 +994,21 @@ async function generateChartTemplates(
       const fieldsConfig: TemplateFieldConfig[] = [];
       const fieldKeyMap = new Map<string, string>();
       const templateInferredTypes = inferredTypesByTemplate.get(sourceTemplateId);
+      const templateClassifications = classificationsByTemplate.get(sourceTemplateId);
 
       for (const [fieldId, field] of tmpl.fields) {
-        const fieldKey = `blvd_${fieldId}`;
+        const classification = templateClassifications?.get(fieldId);
+
+        // Skip patient demographics (data already on patient record)
+        if (classification?.category === "patient_demographic") continue;
+
+        // Skip administrative headings (demographics section headers)
+        if (classification?.category === "administrative") continue;
+
+        // Use meaningful key from classification, or generate from label, or fall back to blvd_UUID
+        const fieldKey = classification?.templateKey
+          ?? generateTemplateKey(field.label)
+          ?? `blvd_${fieldId}`;
         const fieldType = templateInferredTypes?.get(fieldId) ?? mapBoulevardFieldType(field.type);
         fieldKeyMap.set(fieldId, fieldKey);
 
@@ -980,7 +1049,7 @@ async function generateChartTemplates(
             clinicId: job.clinicId,
             type: "chart",
             name: `[Imported] ${tmpl.name}`,
-            description: `Auto-generated from Boulevard form template "${tmpl.name}"`,
+            description: `Auto-generated from ${provider.source} form template "${tmpl.name}"`,
             fieldsConfig: JSON.stringify(fieldsConfig),
             status: "Active",
           },
@@ -988,7 +1057,11 @@ async function generateChartTemplates(
         chartTemplateId = newTemplate.id;
       }
 
-      result.templateMap.set(sourceTemplateId, { chartTemplateId, fieldKeyMap });
+      result.templateMap.set(sourceTemplateId, {
+        chartTemplateId,
+        fieldKeyMap,
+        fieldClassifications: templateClassifications ?? new Map(),
+      });
       progress.ChartTemplate.imported++;
       await logMigration(
         job.id, "ChartTemplate" as MigrationEntityType, sourceTemplateId, chartTemplateId,
@@ -1118,10 +1191,70 @@ async function importForms(
             if (tmplInfo && form.fields) {
               templateId = tmplInfo.chartTemplateId;
               const templateValues: Record<string, string> = {};
+
+              // Look up imported patient for connected field resolution + medical enrichment
+              const importedPatient = await prisma.patient.findUnique({
+                where: { id: pMap.targetId },
+                select: {
+                  firstName: true, lastName: true, dateOfBirth: true,
+                  email: true, phone: true, gender: true,
+                  address: true, city: true, state: true, zipCode: true,
+                  allergies: true, medicalNotes: true,
+                },
+              });
+
               for (const field of form.fields) {
                 const fieldKey = tmplInfo.fieldKeyMap.get(field.fieldId);
+                const classification = tmplInfo.fieldClassifications.get(field.fieldId);
+
+                // Skip patient demographics — data already on patient record
+                if (classification?.category === "patient_demographic") continue;
+
+                // Enrich patient record from patient_medical fields
+                if (classification?.category === "patient_medical" && classification.patientField && importedPatient) {
+                  const currentValue = importedPatient[classification.patientField as keyof typeof importedPatient];
+                  const fieldValue = field.selectedOptions?.length
+                    ? field.selectedOptions.join(", ")
+                    : field.value;
+
+                  // Only fill if currently empty on patient and form has data
+                  if (!currentValue && fieldValue) {
+                    await prisma.patient.update({
+                      where: { id: pMap.targetId },
+                      data: { [classification.patientField]: fieldValue },
+                    });
+                    await appendAgentLog(
+                      job.id,
+                      `Enriched patient ${classification.patientField} from form "${form.templateName}"`
+                    );
+                  }
+                  continue;
+                }
+
+                // Skip administrative fields and fields without a key mapping
+                if (classification?.category === "administrative") continue;
                 if (!fieldKey) continue;
                 if (field.type === "heading") continue;
+
+                // Resolve connected field values from patient record when field.value is null
+                let resolvedValue = field.value;
+                if (!resolvedValue && field.connectedFieldName && importedPatient) {
+                  const connectedMap: Record<string, string | null | undefined> = {
+                    "first name": importedPatient.firstName,
+                    "last name": importedPatient.lastName,
+                    "date of birth": importedPatient.dateOfBirth?.toISOString().split("T")[0],
+                    "email": importedPatient.email,
+                    "phone number": importedPatient.phone,
+                    "phone": importedPatient.phone,
+                  };
+                  const connectedKey = field.connectedFieldName.toLowerCase();
+                  for (const [key, val] of Object.entries(connectedMap)) {
+                    if (connectedKey.includes(key) && val) {
+                      resolvedValue = val;
+                      break;
+                    }
+                  }
+                }
 
                 if (field.selectedOptions && field.selectedOptions.length > 0) {
                   templateValues[fieldKey] = JSON.stringify(field.selectedOptions);
@@ -1168,8 +1301,8 @@ async function importForms(
                   } else {
                     templateValues[fieldKey] = "[signed]";
                   }
-                } else if (field.value) {
-                  templateValues[fieldKey] = field.value;
+                } else if (resolvedValue) {
+                  templateValues[fieldKey] = resolvedValue;
                 }
               }
               additionalNotes = JSON.stringify(templateValues);
@@ -1516,7 +1649,8 @@ async function importDocuments(
  */
 export async function executeMigration(
   job: MigrationJob,
-  provider: MigrationProvider
+  provider: MigrationProvider,
+  options?: { patientLimit?: number }
 ): Promise<void> {
   const credentials = decryptCredentials(job);
   const progress = parseProgress(job);
@@ -1535,7 +1669,7 @@ export async function executeMigration(
     // 2. Patients
     const patientDone = progress.Patient && !parseCheckpoint(job).Patient;
     if (!patientDone) {
-      await importPatients(job, provider, credentials, progress);
+      await importPatients(job, provider, credentials, progress, options?.patientLimit);
       if (await isPaused(job.id)) return;
     }
 

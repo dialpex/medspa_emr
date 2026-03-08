@@ -11,6 +11,8 @@ export interface VendorKnowledge {
   signaturesAreImages: boolean;
   /** Classification hints for form categorization */
   classificationHints: string;
+  /** Hints for field semantic classification (demographics, clinical, etc.) */
+  fieldClassificationHints?: string;
 }
 
 export const BOULEVARD_KNOWLEDGE: VendorKnowledge = {
@@ -40,6 +42,15 @@ export const BOULEVARD_KNOWLEDGE: VendorKnowledge = {
     "Boulevard 'Pre-Treatment Checklist' forms are typically clinical_chart (they document clinical observations before treatment).",
     "Boulevard 'Treatment Consent and Record' forms combine consent + clinical data — classify as clinical_chart if they have injection/treatment fields, otherwise consent.",
     "Boulevard 'Aftercare Instructions' are consent-type documents (post-care instructions).",
+  ].join("\n"),
+  fieldClassificationHints: [
+    "Boulevard `connected_text` and `connected_date` fields auto-populate from the patient profile — their `connectedFieldName` value tells you exactly which patient field they map to.",
+    "Common connectedFieldName values: 'First name', 'Last name', 'Email', 'Phone number', 'Date of birth'.",
+    "A field labeled 'Age' in a demographics section is equivalent to dateOfBirth — both map to the patient's date of birth.",
+    "Boulevard forms often have a 'Client Information' or 'Demographics' heading followed by connected fields for name/DOB/etc. — these are all patient_demographic.",
+    "Fields labeled 'Allergies' or 'Known Allergies' should be classified as patient_medical with patientField 'allergies'.",
+    "Fields labeled 'Medical History', 'Medical Conditions', or 'Health History' should be classified as patient_medical with patientField 'medicalNotes'.",
+    "Heading fields in a demographics section (e.g., 'Client Information', 'Patient Information') are administrative.",
   ].join("\n"),
 };
 

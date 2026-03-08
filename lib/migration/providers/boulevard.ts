@@ -18,6 +18,7 @@ const BOULEVARD_BASE = "https://dashboard.boulevard.io";
 const BOULEVARD_SESSION_URL = `${BOULEVARD_BASE}/auth/sessions`;
 const BOULEVARD_IDENTITY_URL = `${BOULEVARD_BASE}/auth/identities`;
 const BOULEVARD_GRAPH_URL = `${BOULEVARD_BASE}/api/v1.0/graph`;
+const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 interface GraphQLResponse {
   data?: Record<string, unknown>;
@@ -110,12 +111,14 @@ function parseBoulevardFormComponents(
       typename === "CustomFormComponentTextInputV2" ||
       typename === "CustomFormComponentText"
     ) {
+      const connectedField = comp.connectedField as string | undefined;
       fields.push({
         fieldId: id,
         label: (comp.label as string) || "",
-        type: (comp.connectedField as string) ? "connected_text" : "text",
+        type: connectedField ? "connected_text" : "text",
         value: (comp.textAnswer as string) || null,
         sortOrder: y,
+        connectedFieldName: connectedField || undefined,
       });
       continue;
     }
@@ -160,12 +163,14 @@ function parseBoulevardFormComponents(
       typename === "CustomFormComponentDateV2" ||
       typename === "CustomFormComponentDate"
     ) {
+      const connectedField = comp.connectedField as string | undefined;
       fields.push({
         fieldId: id,
         label: (comp.label as string) || "",
-        type: (comp.connectedField as string) ? "connected_date" : "date",
+        type: connectedField ? "connected_date" : "date",
         value: (comp.dateAnswer as string) || null,
         sortOrder: y,
+        connectedFieldName: connectedField || undefined,
       });
       continue;
     }
@@ -326,6 +331,7 @@ export class BoulevardProvider implements MigrationProvider {
         Accept: "application/json",
         Origin: BOULEVARD_BASE,
         Referer: `${BOULEVARD_BASE}/login-v2/`,
+        "User-Agent": BROWSER_UA,
       },
       body: JSON.stringify({
         email: credentials.email,
@@ -349,6 +355,7 @@ export class BoulevardProvider implements MigrationProvider {
       headers: {
         Accept: "application/json",
         Cookie: this.sessionCookies,
+        "User-Agent": BROWSER_UA,
       },
       redirect: "manual",
     });
@@ -382,6 +389,7 @@ export class BoulevardProvider implements MigrationProvider {
       Cookie: this.sessionCookies,
       Origin: BOULEVARD_BASE,
       Referer: `${BOULEVARD_BASE}/home`,
+      "User-Agent": BROWSER_UA,
     };
 
     if (this.csrfToken) {
@@ -594,9 +602,11 @@ export class BoulevardProvider implements MigrationProvider {
   ): Promise<FetchResult<SourceService>> {
     // Boulevard dashboard API: try multiple query patterns for services
     const queries = [
-      // Pattern 1: menuItems on business
+      // Pattern 1: menuCategories → menuItems (Boulevard's current schema)
+      `query { business { id menuCategories { name menuItems { id name description disabled duration price } } } }`,
+      // Pattern 2: menuItem list on business (legacy)
       `query { business { id menuItems { id name description disabled duration price category { name } } } }`,
-      // Pattern 2: services on business
+      // Pattern 3: services connection on business (legacy)
       `query { business { id services { edges { node { id name description disabled duration price category { name } } } } } }`,
     ];
 
@@ -610,9 +620,18 @@ export class BoulevardProvider implements MigrationProvider {
         const business = result.data?.business as Record<string, unknown> | undefined;
         if (!business) continue;
 
-        // Try to extract items from either menuItems or services.edges
+        // Try to extract items from menuCategories, menuItems, or services.edges
         let items: Array<Record<string, unknown>> = [];
-        if (business.menuItems) {
+        let categoryMap = new Map<string, string>(); // item id → category name
+        if (business.menuCategories) {
+          const cats = business.menuCategories as Array<{ name: string; menuItems: Array<Record<string, unknown>> }>;
+          for (const cat of cats) {
+            for (const item of cat.menuItems || []) {
+              items.push(item);
+              if (item.id) categoryMap.set(item.id as string, cat.name);
+            }
+          }
+        } else if (business.menuItems) {
           items = business.menuItems as Array<Record<string, unknown>>;
         } else if (business.services) {
           const services = business.services as { edges?: Array<{ node: Record<string, unknown> }> };
@@ -629,7 +648,7 @@ export class BoulevardProvider implements MigrationProvider {
             description: (n.description as string) || undefined,
             duration: (n.duration as number) || undefined,
             price: (n.price as number) || undefined,
-            category: cat?.name,
+            category: cat?.name || categoryMap.get(n.id as string),
             isActive: !(n.disabled as boolean),
             rawData: n,
           };
@@ -654,6 +673,90 @@ export class BoulevardProvider implements MigrationProvider {
     // For now, return empty — appointments will come from per-patient fetching in v.next.
     console.warn("  [boulevard] fetchAppointments: bulk query not available in dashboard API, skipping");
     return { data: [], totalCount: 0 };
+  }
+
+  async fetchPatientAppointments(
+    credentials: MigrationCredentials,
+    clientSourceId: string
+  ): Promise<SourceAppointment[]> {
+    // Boulevard appointments are per-client. Try multiple query patterns.
+    const queries = [
+      // Pattern 1: previousAppointments on client (Boulevard's current schema)
+      `query($id: ID!) {
+        client(id: $id) {
+          previousAppointments { edges { node {
+            id startAt endAt state notes
+            appointmentServices { service { id name } staff { firstName lastName } }
+          } } }
+        }
+      }`,
+      // Pattern 2: upcomingAppointments field name
+      `query($id: ID!) {
+        client(id: $id) {
+          upcomingAppointments { edges { node {
+            id startAt endAt state notes
+            appointmentServices { service { id name } staff { firstName lastName } }
+          } } }
+        }
+      }`,
+      // Pattern 3: appointmentsForDate field name (fallback)
+      `query($id: ID!) {
+        client(id: $id) {
+          appointments { edges { node {
+            id startAt endAt state notes
+            appointmentServices { service { id name } staff { firstName lastName } }
+          } } }
+        }
+      }`,
+    ];
+
+    for (const queryStr of queries) {
+      try {
+        const result = await this.query(credentials, queryStr, { id: clientSourceId });
+        if (result.errors?.length && !result.data) continue;
+
+        const clientData = result.data?.client as Record<string, unknown> | null;
+        if (!clientData) continue;
+
+        // Try to extract from any of the field names
+        const aptsData = (clientData.previousAppointments || clientData.upcomingAppointments || clientData.appointments) as {
+          edges?: Array<{ node: Record<string, unknown> }>;
+        } | null;
+
+        if (!aptsData?.edges?.length) continue;
+
+        return aptsData.edges.map((edge) => {
+          const n = edge.node;
+          const services = (n.appointmentServices as Array<{
+            service?: { id?: string; name?: string };
+            staff?: { firstName?: string; lastName?: string };
+          }>) || [];
+          const firstService = services[0];
+          const staffName = firstService?.staff
+            ? `${firstService.staff.firstName || ""} ${firstService.staff.lastName || ""}`.trim()
+            : undefined;
+
+          return {
+            sourceId: n.id as string,
+            patientSourceId: clientSourceId,
+            providerName: staffName,
+            serviceSourceId: firstService?.service?.id,
+            serviceName: firstService?.service?.name,
+            startTime: (n.startAt as string) || new Date().toISOString(),
+            endTime: (n.endAt as string) || undefined,
+            status: (n.state as string) || "COMPLETED",
+            notes: (n.notes as string) || undefined,
+            rawData: n,
+          };
+        });
+      } catch {
+        continue;
+      }
+    }
+
+    // All patterns failed — log warning and return empty
+    console.warn(`  [boulevard] fetchPatientAppointments: no working query pattern for client ${clientSourceId}`);
+    return [];
   }
 
   async fetchInvoices(

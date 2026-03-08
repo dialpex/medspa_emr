@@ -15,23 +15,60 @@ import {
 type FormWithFields = SourceForm & { fields?: FormFieldContent[] };
 type Classification = FormClassificationResponse["classifications"][number];
 
+/** Maximum forms per AI classification batch */
+const MAX_FORMS_PER_BATCH = 30;
+
 /**
  * Check if a form has clinical field indicators (units, injection site, etc.)
+ * Skips heading fields — their labels are often full HTML paragraphs containing
+ * clinical words (consent text, risk disclosures) that trigger false positives.
  */
 function hasClinicalFields(fields?: FormFieldContent[]): boolean {
   if (!fields || fields.length === 0) return false;
-  return fields.some((f) =>
+  const dataFields = fields.filter((f) => f.type !== "heading");
+  return dataFields.some((f) =>
     CLINICAL_FIELD_INDICATORS.some((pattern) => pattern.test(f.label))
   );
 }
 
+/** Labels that indicate demographics/connected fields — skip from narrative */
+const DEMOGRAPHIC_LABEL_PATTERNS = [
+  /\bfirst\s*name\b/i,
+  /\blast\s*name\b/i,
+  /\bdate\s*of\s*birth\b/i,
+  /\bdob\b/i,
+  /^age$/i,
+  /\bemail\b/i,
+  /\bphone\b/i,
+  /\bgender\b/i,
+  /\bsex\b/i,
+  /\baddress\b/i,
+  /^city$/i,
+  /^state$/i,
+  /\bzip\s*(code)?\b/i,
+  /\bpostal\b/i,
+];
+
+function isDemographicField(field: FormFieldContent): boolean {
+  // Connected fields are always demographics
+  if (field.type === "connected_text" || field.type === "connected_date") return true;
+  if (field.connectedFieldName) return true;
+  // Label-based detection
+  return DEMOGRAPHIC_LABEL_PATTERNS.some((p) => p.test(field.label));
+}
+
 /**
  * Build chart data from form fields for clinical_chart classification.
+ * Skips demographics and connected fields — only includes actual clinical content.
  */
 function buildChartData(form: FormWithFields): Classification["chartData"] {
   const dataFields =
     form.fields?.filter(
-      (f) => f.type !== "heading" && f.type !== "signature" && f.type !== "image"
+      (f) =>
+        f.type !== "heading" &&
+        f.type !== "signature" &&
+        f.type !== "image" &&
+        !isDemographicField(f)
     ) || [];
 
   const narrativeLines: string[] = [];
@@ -252,69 +289,85 @@ export async function classifyForms(
     return { classifications: [...preFiltered, ...heuristicResults] };
   }
 
-  // Phase 2: AI classification for ambiguous forms
+  // Phase 2: AI classification for ambiguous forms (batched for large sets)
   const vendorContext = buildClassificationVendorContext(vendorKnowledge?.classificationHints);
   const system = ENHANCED_CLASSIFICATION_SYSTEM_PROMPT.replace("{vendorContext}", vendorContext);
 
-  const formMetadata = remaining.map(buildFormMetadata);
-  const userMessage = `Classify these ${remaining.length} forms from a MedSpa migration:\n\n${JSON.stringify(formMetadata, null, 2)}`;
+  // Split into batches if needed
+  const batches: FormWithFields[][] = [];
+  for (let i = 0; i < remaining.length; i += MAX_FORMS_PER_BATCH) {
+    batches.push(remaining.slice(i, i + MAX_FORMS_PER_BATCH));
+  }
 
-  try {
-    const { result: aiResult } = await completionWithRetry<FormClassificationResponse>(
-      provider,
-      system,
-      userMessage,
-      { temperature: 0.2, maxTokens: 4096 },
-      (parsed) => {
-        if (!parsed.classifications || !Array.isArray(parsed.classifications)) {
-          return { valid: false, error: "Response must have a 'classifications' array." };
+  if (batches.length > 1) {
+    console.log(`[classification] Splitting ${remaining.length} forms into ${batches.length} batches`);
+  }
+
+  const allAiResults: Classification[] = [];
+
+  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+    const batch = batches[batchIdx];
+    const batchLabel = batches.length > 1 ? ` (batch ${batchIdx + 1}/${batches.length})` : "";
+
+    const formMetadata = batch.map(buildFormMetadata);
+    const maxTokens = Math.min(8192, batch.length * 120);
+    const userMessage = `Classify these ${batch.length} forms from a MedSpa migration${batchLabel}:\n\n${JSON.stringify(formMetadata, null, 2)}`;
+
+    try {
+      const { result: aiResult } = await completionWithRetry<FormClassificationResponse>(
+        provider,
+        system,
+        userMessage,
+        { temperature: 0.2, maxTokens },
+        (parsed) => {
+          if (!parsed.classifications || !Array.isArray(parsed.classifications)) {
+            return { valid: false, error: "Response must have a 'classifications' array." };
+          }
+          const validTypes = new Set(["consent", "clinical_chart", "intake", "skip"]);
+          const invalid = parsed.classifications.filter(
+            (c) => !validTypes.has(c.classification)
+          );
+          if (invalid.length > 0) {
+            return {
+              valid: false,
+              error: `Invalid classifications: ${invalid.map((c) => `${c.formSourceId}: "${c.classification}"`).join(", ")}. Must be one of: consent, clinical_chart, intake, skip`,
+            };
+          }
+          return { valid: true };
         }
-        const validTypes = new Set(["consent", "clinical_chart", "intake", "skip"]);
-        const invalid = parsed.classifications.filter(
-          (c) => !validTypes.has(c.classification)
-        );
-        if (invalid.length > 0) {
-          return {
-            valid: false,
-            error: `Invalid classifications: ${invalid.map((c) => `${c.formSourceId}: "${c.classification}"`).join(", ")}. Must be one of: consent, clinical_chart, intake, skip`,
-          };
+      );
+
+      // Build chart data for any clinical_chart classifications from AI
+      const aiClassifications = aiResult.classifications.map((cls) => {
+        if (cls.classification === "clinical_chart" && !cls.chartData) {
+          const form = batch.find((f) => f.sourceId === cls.formSourceId);
+          if (form) {
+            return { ...cls, chartData: buildChartData(form) };
+          }
         }
-        return { valid: true };
+        return cls;
+      });
+
+      // Merge AI results with heuristic fallback for any forms AI missed in this batch
+      const aiMap = new Map(aiClassifications.map((c) => [c.formSourceId, c]));
+      for (const form of batch) {
+        const aiCls = aiMap.get(form.sourceId);
+        if (aiCls) {
+          allAiResults.push(aiCls);
+        } else {
+          allAiResults.push(heuristicClassify(form));
+        }
       }
-    );
-
-    // Build chart data for any clinical_chart classifications from AI
-    // that need chart data populated
-    const aiClassifications = aiResult.classifications.map((cls) => {
-      if (cls.classification === "clinical_chart" && !cls.chartData) {
-        const form = remaining.find((f) => f.sourceId === cls.formSourceId);
-        if (form) {
-          return { ...cls, chartData: buildChartData(form) };
-        }
-      }
-      return cls;
-    });
-
-    // Merge pre-filtered + AI results, with heuristic fallback for any
-    // forms that AI missed
-    const aiMap = new Map(aiClassifications.map((c) => [c.formSourceId, c]));
-    const aiResults: Classification[] = [];
-    for (const form of remaining) {
-      const aiCls = aiMap.get(form.sourceId);
-      if (aiCls) {
-        aiResults.push(aiCls);
-      } else {
-        aiResults.push(heuristicClassify(form));
+    } catch (err) {
+      // Per-batch AI failure — fall back to heuristics for this batch only
+      console.warn(
+        `[classification] AI failed${batchLabel}, using heuristic fallback: ${err instanceof Error ? err.message : String(err)}`
+      );
+      for (const form of batch) {
+        allAiResults.push(heuristicClassify(form));
       }
     }
-
-    return { classifications: [...preFiltered, ...aiResults] };
-  } catch (err) {
-    // Full AI failure — fall back to heuristics for remaining forms
-    console.warn(
-      `[classification] AI failed, using heuristic fallback: ${err instanceof Error ? err.message : String(err)}`
-    );
-    const heuristicResults = remaining.map(heuristicClassify);
-    return { classifications: [...preFiltered, ...heuristicResults] };
   }
+
+  return { classifications: [...preFiltered, ...allAiResults] };
 }

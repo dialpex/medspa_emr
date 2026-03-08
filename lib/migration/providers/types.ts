@@ -125,6 +125,8 @@ export interface FormFieldContent {
   availableOptions?: string[];
   /** Position in form layout (y coordinate — for ordering components top-to-bottom) */
   sortOrder?: number;
+  /** Name of the connected patient field (e.g., "First name", "Last name", "Date of birth") */
+  connectedFieldName?: string;
 }
 
 export interface SourceForm {
@@ -242,4 +244,13 @@ export interface MigrationProvider {
     credentials: MigrationCredentials,
     options?: FetchOptions
   ): Promise<FetchResult<SourceDocument>>;
+
+  /**
+   * Fetch appointments for a specific patient. Used as fallback when
+   * bulk fetchAppointments() returns empty (e.g., Boulevard).
+   */
+  fetchPatientAppointments?(
+    credentials: MigrationCredentials,
+    clientSourceId: string
+  ): Promise<SourceAppointment[]>;
 }
