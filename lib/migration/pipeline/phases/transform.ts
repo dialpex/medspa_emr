@@ -125,10 +125,20 @@ async function enrichFormsWithClassification(
 
   if (rawForms.length === 0) return;
 
-  // Build form objects for classification
-  const formsForClassification = rawForms.map((f) => ({
+  // Deduplicate forms by templateId for classification — classification depends
+  // on template structure (name, fields, isInternal), not per-submission data.
+  // This reduces AI calls from O(forms) to O(unique templates).
+  const templateRepresentatives = new Map<string, typeof rawForms[0]>();
+  for (const f of rawForms) {
+    const key = f.templateId || f.templateName || f.sourceId;
+    if (!templateRepresentatives.has(key)) {
+      templateRepresentatives.set(key, f);
+    }
+  }
+
+  const formsForClassification = Array.from(templateRepresentatives.values()).map((f) => ({
     sourceId: f.sourceId,
-    patientSourceId: "", // Not needed for classification
+    patientSourceId: "",
     templateName: f.templateName || "Unknown",
     templateId: f.templateId,
     status: f.status || "completed",
@@ -142,11 +152,35 @@ async function enrichFormsWithClassification(
     rawData: undefined as unknown as Record<string, unknown>,
   }));
 
-  // Run AI classification
+  if (formsForClassification.length < rawForms.length) {
+    console.log(`[transform] Classification dedup: ${rawForms.length} forms → ${formsForClassification.length} unique templates`);
+  }
+
+  // Run AI classification on unique templates only
   const classification = await classifyForms(formsForClassification, vendorKnowledge);
-  const classMap = new Map(
-    classification.classifications.map((c) => [c.formSourceId, c])
+
+  // Build classMap: map every form sourceId to its template's classification
+  const templateClassMap = new Map(
+    classification.classifications.map((c) => {
+      // Find which template key this representative belongs to
+      const rep = rawForms.find((f) => f.sourceId === c.formSourceId);
+      const key = rep?.templateId || rep?.templateName || c.formSourceId;
+      return [key, c] as const;
+    })
   );
+
+  // Expand classification back to all forms
+  const classMap = new Map<string, typeof classification.classifications[0]>();
+  for (const form of rawForms) {
+    const key = form.templateId || form.templateName || form.sourceId;
+    const cls = templateClassMap.get(key);
+    if (cls) {
+      classMap.set(form.sourceId, {
+        ...cls,
+        formSourceId: form.sourceId,
+      });
+    }
+  }
 
   // Build field unions per template for chart template generation
   const templateFieldUnions = new Map<string, {

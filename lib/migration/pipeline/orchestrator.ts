@@ -24,6 +24,12 @@ import {
 import { executeLoad, executePromote } from "./phases/load";
 import { executeReconcile } from "./phases/reconcile";
 import { writeMappingMemory, type MappingMemoryEntry } from "@/lib/agents/migration/mapping-memory";
+import {
+  KnowledgeStore,
+  distill,
+  getIntelligenceSummary,
+  type RunOutcome,
+} from "@/lib/agents/migration/knowledge";
 
 export type MigrationPhase =
   | "ingest"
@@ -56,11 +62,13 @@ export class MigrationOrchestrator {
   private store: ArtifactStore;
   private provider?: MigrationProvider;
   private autoApprove: boolean;
+  private knowledgeStore: KnowledgeStore;
 
   constructor(config: OrchestratorConfig) {
     this.store = config.store;
     this.provider = config.provider;
     this.autoApprove = config.autoApprove || false;
+    this.knowledgeStore = new KnowledgeStore();
   }
 
   // Run a single phase
@@ -193,6 +201,14 @@ export class MigrationOrchestrator {
 
   private async phaseIngest(run: MigrationRun): Promise<void> {
     await this.updateRun(run.id, { status: "Ingesting", currentPhase: "ingest" });
+
+    // Log agent intelligence state at run start
+    try {
+      const summary = await getIntelligenceSummary(this.knowledgeStore, run.sourceVendor);
+      console.log(summary);
+    } catch {
+      // Non-critical — knowledge store may not exist yet
+    }
 
     const progress = JSON.parse(run.progress || "{}");
     const ingestInput: IngestInput = {
@@ -511,7 +527,38 @@ export class MigrationOrchestrator {
       }),
     });
 
-    // Persist mapping memory for cross-run learning
+    // Distill knowledge from this run — the agent learns from every migration
+    if (report.status !== "failed") {
+      try {
+        // Build entity match rates from reconciliation entries
+        const entityMatchRates: Record<string, number> = {};
+        for (const entry of report.reconciliation) {
+          entityMatchRates[entry.entityType] = entry.sourceCount > 0
+            ? entry.promotedCount / entry.sourceCount
+            : 0;
+        }
+
+        const outcome: RunOutcome = {
+          runId: run.id,
+          vendor: run.sourceVendor,
+          clinicId: run.clinicId,
+          approvedMappingSpec: mappingSpec,
+          reconciliation: {
+            entityMatchRates,
+            totalSource: report.totalSourceRecords,
+            totalPromoted: report.totalPromotedRecords,
+            totalFailed: report.totalFailedRecords,
+          },
+          errors: [],
+        };
+        await distill(this.knowledgeStore, outcome);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.log(`[orchestrator] Knowledge distillation failed (non-critical): ${msg}`);
+      }
+    }
+
+    // Persist mapping memory for cross-run learning (legacy — will be superseded by knowledge store)
     if (mappingSpec && report.status !== "failed") {
       try {
         // Build correction history from all mapping spec versions

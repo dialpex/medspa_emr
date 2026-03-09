@@ -68,14 +68,14 @@ export class AgentEnhancedProvider implements MigrationProvider {
     this.executor = this.getExecutor(credentials);
 
     try {
+      // Only discover entities that need AI query discovery.
+      // Per-patient entities (photos, forms, documents) are handled directly
+      // by the base provider via patient-scoped queries — no discovery needed.
       const entityTypes = [
         "patients",
         "services",
         "appointments",
         "invoices",
-        "photos",
-        "forms",
-        "documents",
       ];
 
       const result = await discoverAndBuildQueries(
@@ -147,7 +147,29 @@ export class AgentEnhancedProvider implements MigrationProvider {
     credentials: MigrationCredentials,
     options?: FetchOptions
   ): Promise<FetchResult<SourceAppointment>> {
-    // Appointments are complex (per-date-range, per-client) — use base
+    // Try discovered query (location-based with date range)
+    const agentQuery = this.discoveredQueries["appointments"];
+    if (agentQuery?.verified && this.executor && this.locationId) {
+      try {
+        // Use discovered query with actual locationId and wide date range
+        const variables = {
+          ...agentQuery.variables,
+          locationId: this.locationId,
+          from: "2020-01-01",
+          to: new Date().toISOString().split("T")[0],
+        };
+        const result = await this.executor(credentials, agentQuery.query, variables);
+        if (result.data && !result.errors?.length) {
+          const appointments = this.extractAppointments(result.data);
+          if (appointments.length > 0) {
+            console.log(`[enhanced-provider] fetchAppointments: ${appointments.length} via agent query`);
+            return { data: appointments, totalCount: appointments.length };
+          }
+        }
+      } catch (err) {
+        console.warn(`[enhanced-provider] Agent query for appointments failed, falling back: ${err instanceof Error ? err.message : err}`);
+      }
+    }
     return this.base.fetchAppointments(credentials, options);
   }
 
@@ -155,6 +177,26 @@ export class AgentEnhancedProvider implements MigrationProvider {
     credentials: MigrationCredentials,
     options?: FetchOptions
   ): Promise<FetchResult<SourceInvoice>> {
+    // Try discovered query first
+    const agentQuery = this.discoveredQueries["invoices"];
+    if (agentQuery?.verified && this.executor) {
+      try {
+        const variables = {
+          ...agentQuery.variables,
+          locationId: this.locationId || agentQuery.variables?.locationId,
+        };
+        const result = await this.executor(credentials, agentQuery.query, variables);
+        if (result.data && !result.errors?.length) {
+          const invoices = this.extractInvoices(result.data);
+          if (invoices.length > 0) {
+            console.log(`[enhanced-provider] fetchInvoices: ${invoices.length} via agent query`);
+            return { data: invoices, totalCount: invoices.length };
+          }
+        }
+      } catch (err) {
+        console.warn(`[enhanced-provider] Agent query for invoices failed, falling back: ${err instanceof Error ? err.message : err}`);
+      }
+    }
     return this.base.fetchInvoices(credentials, options);
   }
 
@@ -195,6 +237,75 @@ export class AgentEnhancedProvider implements MigrationProvider {
 
   // --- Helpers ---
 
+  private extractAppointments(data: Record<string, unknown>): SourceAppointment[] {
+    // Discovered query shape: location.appointments = [{ id, startAt, endAt, ... }]
+    const location = data.location as Record<string, unknown> | undefined;
+    if (!location) return [];
+
+    const appointments = location.appointments as Array<Record<string, unknown>> | undefined;
+    if (!Array.isArray(appointments) || appointments.length === 0) return [];
+
+    return appointments.map((n) => {
+      const client = n.client as { id?: string; firstName?: string; lastName?: string } | null;
+      const services = (n.appointmentServices as Array<{
+        service?: { id?: string; name?: string };
+      }>) || [];
+      const staff = n.staff as { id?: string; firstName?: string; lastName?: string } | null;
+      const firstService = services[0];
+      const staffName = staff
+        ? `${staff.firstName || ""} ${staff.lastName || ""}`.trim()
+        : undefined;
+
+      return {
+        sourceId: (n.id as string) || (n.clientId as string) || "",
+        patientSourceId: client?.id || (n.clientId as string) || "",
+        providerName: staffName,
+        serviceSourceId: firstService?.service?.id,
+        serviceName: firstService?.service?.name,
+        startTime: (n.startAt as string) || new Date().toISOString(),
+        endTime: (n.endAt as string) || undefined,
+        status: (n.state as string) || (n.cancelled ? "CANCELLED" : "COMPLETED"),
+        notes: (n.notes as string) || undefined,
+        rawData: n,
+      };
+    });
+  }
+
+  private extractInvoices(data: Record<string, unknown>): SourceInvoice[] {
+    // Try multiple response shapes for orders/invoices
+    const orders = data.orders as Record<string, unknown> | undefined;
+    if (!orders) return [];
+
+    // Shape: orders.entries or orders.results or direct array
+    let items: Array<Record<string, unknown>> = [];
+    if (Array.isArray(orders.entries)) {
+      items = orders.entries;
+    } else if (Array.isArray(orders.results)) {
+      items = orders.results;
+    } else if (Array.isArray(orders)) {
+      items = orders as unknown as Array<Record<string, unknown>>;
+    }
+
+    if (items.length === 0) return [];
+
+    return items.map((n) => {
+      const client = n.client as { id: string } | null;
+      return {
+        sourceId: n.id as string,
+        patientSourceId: client?.id || "",
+        invoiceNumber: (n.number as string) || undefined,
+        status: (n.state as string) || (n.status as string) || "unknown",
+        total: (n.total as number) || 0,
+        subtotal: (n.subtotal as number) || undefined,
+        taxAmount: (n.totalTax as number) || undefined,
+        notes: (n.note as string) || (n.notes as string) || undefined,
+        paidAt: (n.closedAt as string) || undefined,
+        lineItems: [],
+        rawData: n,
+      };
+    });
+  }
+
   private extractServices(data: Record<string, unknown>): SourceService[] {
     // Navigate common GraphQL response shapes for services
     const business = data.business as Record<string, unknown> | undefined;
@@ -205,10 +316,24 @@ export class AgentEnhancedProvider implements MigrationProvider {
     if (business.menuItems) {
       items = business.menuItems as Array<Record<string, unknown>>;
     } else if (business.services) {
-      const services = business.services as {
-        edges?: Array<{ node: Record<string, unknown> }>;
-      };
-      items = services.edges?.map((e) => e.node) || [];
+      const services = business.services as unknown;
+      if (Array.isArray(services)) {
+        // Flat array shape: business.services = [{ id, name, ... }]
+        items = services;
+      } else {
+        // Connection shape: business.services.edges = [{ node: { ... } }]
+        const conn = services as { edges?: Array<{ node: Record<string, unknown> }> };
+        items = conn.edges?.map((e) => e.node) || [];
+      }
+    } else if (business.menuCategories) {
+      // Hierarchical shape: business.menuCategories = [{ name, menuItems: [...] }]
+      const cats = business.menuCategories as Array<{ name: string; menuItems?: Array<Record<string, unknown>> }>;
+      for (const cat of cats) {
+        for (const item of cat.menuItems || []) {
+          item._categoryName = cat.name;
+          items.push(item);
+        }
+      }
     }
 
     return items.map((n) => {
@@ -217,10 +342,11 @@ export class AgentEnhancedProvider implements MigrationProvider {
         sourceId: n.id as string,
         name: (n.name as string) || "",
         description: (n.description as string) || undefined,
-        duration: (n.duration as number) || undefined,
-        price: (n.price as number) || undefined,
-        category: cat?.name,
-        isActive: !(n.disabled as boolean),
+        // Handle both legacy (duration/price) and current (defaultDuration/defaultPrice/basePrice) fields
+        duration: (n.duration as number) || (n.defaultDuration as number) || undefined,
+        price: (n.price as number) || (n.defaultPrice as number) || (n.basePrice as number) || undefined,
+        category: cat?.name || (n._categoryName as string) || undefined,
+        isActive: n.active !== undefined ? !!(n.active) : !(n.disabled as boolean),
         rawData: n,
       };
     });

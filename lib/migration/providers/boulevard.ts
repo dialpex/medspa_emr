@@ -690,11 +690,67 @@ export class BoulevardProvider implements MigrationProvider {
     credentials: MigrationCredentials,
     _options?: FetchOptions
   ): Promise<FetchResult<SourceAppointment>> {
-    // Boulevard dashboard API: appointments may not have a bulk list query.
-    // They're typically queried per-date-range or per-client.
-    // For now, return empty — appointments will come from per-patient fetching in v.next.
-    console.warn("  [boulevard] fetchAppointments: bulk query not available in dashboard API, skipping");
-    return { data: [], totalCount: 0 };
+    if (!this.locationId) {
+      console.warn("  [boulevard] fetchAppointments: no locationId, skipping");
+      return { data: [], totalCount: 0 };
+    }
+
+    // Boulevard requires location-based appointment query with date range
+    try {
+      const result = await this.query(
+        credentials,
+        `query GetAppointments($locationId: ID!, $from: Date!, $to: Date!) {
+          location(id: $locationId) {
+            appointments(from: $from, to: $to) {
+              id startAt endAt duration state cancelled
+              clientId
+              client { id firstName lastName email }
+              staff { id firstName lastName }
+              appointmentServices { service { id name } }
+            }
+          }
+        }`,
+        {
+          locationId: this.locationId,
+          from: "2020-01-01",
+          to: new Date().toISOString().split("T")[0],
+        }
+      );
+
+      const location = result.data?.location as Record<string, unknown> | undefined;
+      const appointments = location?.appointments as Array<Record<string, unknown>> | undefined;
+
+      if (!appointments?.length) {
+        return { data: [], totalCount: 0 };
+      }
+
+      const data: SourceAppointment[] = appointments.map((n) => {
+        const client = n.client as { id?: string; firstName?: string; lastName?: string } | null;
+        const services = (n.appointmentServices as Array<{
+          service?: { id?: string; name?: string };
+        }>) || [];
+        const staff = n.staff as { firstName?: string; lastName?: string } | null;
+        const staffName = staff ? `${staff.firstName || ""} ${staff.lastName || ""}`.trim() : undefined;
+
+        return {
+          sourceId: n.id as string,
+          patientSourceId: client?.id || (n.clientId as string) || "",
+          providerName: staffName,
+          serviceSourceId: services[0]?.service?.id,
+          serviceName: services[0]?.service?.name,
+          startTime: (n.startAt as string) || new Date().toISOString(),
+          endTime: (n.endAt as string) || undefined,
+          status: (n.state as string) || (n.cancelled ? "CANCELLED" : "COMPLETED"),
+          notes: (n.notes as string) || undefined,
+          rawData: n,
+        };
+      });
+
+      return { data, totalCount: data.length };
+    } catch (err) {
+      console.warn(`  [boulevard] fetchAppointments: query failed — ${err instanceof Error ? err.message : err}`);
+      return { data: [], totalCount: 0 };
+    }
   }
 
   async fetchPatientAppointments(
@@ -796,16 +852,16 @@ export class BoulevardProvider implements MigrationProvider {
         credentials,
         `query GetOrders($locationId: ID!, $limit: Int) {
           orders(locationId: $locationId, limit: $limit) {
-            results {
+            entries {
               id
               client { id }
               number
-              state
               total
-              subtotal
+              totalPaid
               totalTax
-              notes
+              note
               closedAt
+              txnDate
             }
             total
           }
@@ -814,25 +870,25 @@ export class BoulevardProvider implements MigrationProvider {
       );
 
       const orders = result.data?.orders as {
-        results?: Array<Record<string, unknown>>;
+        entries?: Array<Record<string, unknown>>;
         total?: number;
       } | undefined;
 
-      if (!orders?.results?.length) {
+      if (!orders?.entries?.length) {
         return { data: [], totalCount: orders?.total || 0 };
       }
 
-      const data: SourceInvoice[] = orders.results.map((n) => {
+      const data: SourceInvoice[] = orders.entries.map((n) => {
         const client = n.client as { id: string } | null;
         return {
           sourceId: n.id as string,
           patientSourceId: client?.id || "",
           invoiceNumber: (n.number as string) || undefined,
-          status: (n.state as string) || "unknown",
+          status: (n.closedAt ? "paid" : "open"),
           total: (n.total as number) || 0,
-          subtotal: (n.subtotal as number) || undefined,
+          subtotal: undefined,
           taxAmount: (n.totalTax as number) || undefined,
-          notes: (n.notes as string) || undefined,
+          notes: (n.note as string) || undefined,
           paidAt: (n.closedAt as string) || undefined,
           lineItems: [],
           rawData: n,
@@ -1167,10 +1223,25 @@ export class BoulevardProvider implements MigrationProvider {
         query: `query { business { id menuItems { id name description disabled duration price category { name } } } }`,
       },
       {
+        entityType: "appointments",
+        query: `query GetAppointments($locationId: ID!, $from: Date!, $to: Date!) {
+          location(id: $locationId) {
+            appointments(from: $from, to: $to) {
+              id startAt endAt duration state cancelled
+              clientId
+              client { id firstName lastName email }
+              staff { id firstName lastName }
+              appointmentServices { service { id name } }
+            }
+          }
+        }`,
+        variables: { locationId: "", from: "2024-01-01", to: "2024-12-31" },
+      },
+      {
         entityType: "invoices",
         query: `query GetOrders($locationId: ID!, $limit: Int) {
           orders(locationId: $locationId, limit: $limit) {
-            results { id client { id } number state total subtotal totalTax notes closedAt }
+            entries { id client { id } number total totalPaid totalTax note closedAt txnDate }
             total
           }
         }`,

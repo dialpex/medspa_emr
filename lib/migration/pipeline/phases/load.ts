@@ -370,37 +370,55 @@ async function promoteChart(
     appointmentId = entityMap.get(payload.canonicalAppointmentId) ?? null;
   }
 
-  // If chart already exists for this appointment, merge into it
+  // Dedup: check if chart already exists (by appointment OR by patient+template+date)
+  const chartDate = payload.signedAt ? new Date(payload.signedAt) : new Date();
+  const chiefComplaint = payload.chiefComplaint || payload.templateName || null;
+
+  let existingChartId: string | null = null;
   if (appointmentId) {
-    const existingChart = await prisma.chart.findFirst({
+    const existing = await prisma.chart.findFirst({
       where: { appointmentId, deletedAt: null },
       select: { id: true },
     });
+    existingChartId = existing?.id ?? null;
+  }
+  if (!existingChartId && chiefComplaint) {
+    // Cross-run dedup: same patient + same template + same date = same chart
+    const existing = await prisma.chart.findFirst({
+      where: {
+        patientId,
+        chiefComplaint,
+        signedAt: chartDate,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    existingChartId = existing?.id ?? null;
+  }
 
-    if (existingChart) {
-      // Merge template data into existing chart
-      const updateData: Record<string, unknown> = {};
-      if (payload.templateName) {
-        const templateId = await findOrCreateChartTemplate(
-          clinicId, payload.templateName, payload.templateFields, ctx
-        );
-        if (templateId) updateData.templateId = templateId;
-      }
-      if (payload.templateValues) {
-        updateData.additionalNotes = JSON.stringify(payload.templateValues);
-      }
-      if (Object.keys(updateData).length > 0) {
-        await prisma.chart.update({
-          where: { id: existingChart.id },
-          data: updateData,
-        });
-      }
-
-      // Enrich patient from form fields
-      await enrichPatientFromFormFields(patientId, payload.sourceFormFields);
-
-      return existingChart.id;
+  if (existingChartId) {
+    // Merge template data into existing chart
+    const updateData: Record<string, unknown> = {};
+    if (payload.templateName) {
+      const templateIdForUpdate = await findOrCreateChartTemplate(
+        clinicId, payload.templateName, payload.templateFields, ctx
+      );
+      if (templateIdForUpdate) updateData.templateId = templateIdForUpdate;
     }
+    if (payload.templateValues) {
+      updateData.additionalNotes = JSON.stringify(payload.templateValues);
+    }
+    if (Object.keys(updateData).length > 0) {
+      await prisma.chart.update({
+        where: { id: existingChartId },
+        data: updateData,
+      });
+    }
+
+    // Enrich patient from form fields
+    await enrichPatientFromFormFields(patientId, payload.sourceFormFields);
+
+    return existingChartId;
   }
 
   // Create chart template if template metadata exists
@@ -411,8 +429,6 @@ async function promoteChart(
     ) ?? undefined;
   }
 
-  const chartDate = payload.signedAt ? new Date(payload.signedAt) : new Date();
-
   const chart = await prisma.chart.create({
     data: {
       clinicId,
@@ -420,7 +436,7 @@ async function promoteChart(
       appointmentId: appointmentId || undefined,
       templateId,
       status: "MDSigned",
-      chiefComplaint: payload.chiefComplaint || payload.templateName || null,
+      chiefComplaint,
       additionalNotes: payload.templateValues
         ? JSON.stringify(payload.templateValues)
         : payload.sections?.map((s) => `${s.title}: ${s.content}`).join("\n") || null,

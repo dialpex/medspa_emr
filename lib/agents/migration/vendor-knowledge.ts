@@ -36,6 +36,9 @@ export const BOULEVARD_KNOWLEDGE: VendorKnowledge = {
     "Boulevard checkbox fields may have an 'other' free-text option in addition to predefined values.",
     "Boulevard forms are versioned — the same template can have different component structures across versions.",
     "Boulevard photo and document URLs are CDN links (e.g. https://cdn.boulevard.io/...) — map to downloadUrl, never to artifactKey.",
+    "Boulevard GraphQL API uses 'entries' not 'results' for order pagination, 'note' not 'notes' for order notes, and has no 'state'/'subtotal' fields on orders.",
+    "Boulevard services use 'defaultDuration'/'defaultPrice'/'basePrice' fields, not 'duration'/'price'. 'active'/'visible' booleans instead of 'disabled'.",
+    "Boulevard appointments require location-based queries with date range (location.appointments(from, to)), not client-based bulk queries.",
   ],
   signaturesAreImages: true,
   classificationHints: [
