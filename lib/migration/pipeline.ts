@@ -993,6 +993,7 @@ async function generateChartTemplates(
     try {
       const fieldsConfig: TemplateFieldConfig[] = [];
       const fieldKeyMap = new Map<string, string>();
+      const seenFieldKeys = new Set<string>();
       const templateInferredTypes = inferredTypesByTemplate.get(sourceTemplateId);
       const templateClassifications = classificationsByTemplate.get(sourceTemplateId);
 
@@ -1011,6 +1012,11 @@ async function generateChartTemplates(
           ?? `blvd_${fieldId}`;
         const fieldType = templateInferredTypes?.get(fieldId) ?? mapBoulevardFieldType(field.type);
         fieldKeyMap.set(fieldId, fieldKey);
+
+        // Deduplicate: Boulevard forms have multiple versions with different UUIDs
+        // but identical logical fields — only include each field key once
+        if (seenFieldKeys.has(fieldKey)) continue;
+        seenFieldKeys.add(fieldKey);
 
         const config: TemplateFieldConfig = {
           key: fieldKey,
@@ -1043,6 +1049,11 @@ async function generateChartTemplates(
       let chartTemplateId: string;
       if (existingTemplate) {
         chartTemplateId = existingTemplate.id;
+        // Update fieldsConfig on re-run (fixes duplicate fields from prior runs)
+        await prisma.chartTemplate.update({
+          where: { id: chartTemplateId },
+          data: { fieldsConfig: JSON.stringify(fieldsConfig) },
+        });
       } else {
         const newTemplate = await prisma.chartTemplate.create({
           data: {
@@ -1257,7 +1268,7 @@ async function importForms(
                 }
 
                 if (field.selectedOptions && field.selectedOptions.length > 0) {
-                  templateValues[fieldKey] = JSON.stringify(field.selectedOptions);
+                  templateValues[fieldKey] = field.selectedOptions.join(", ");
                 } else if (field.type === "signature") {
                   // Signature handling: try to download image if vendor stores signatures as images
                   const sigVendorKnowledge = getVendorKnowledge(provider.source);

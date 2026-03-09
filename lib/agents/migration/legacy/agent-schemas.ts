@@ -23,7 +23,7 @@ export const DISCOVERY_SCHEMA = {
             properties: {
               type: {
                 type: "string",
-                enum: ["Patient", "Service", "Appointment", "Invoice", "Photo"],
+                enum: ["Patient", "Service", "Appointment", "Invoice", "Photo", "Form", "Document"],
               },
               count: { type: "number" },
               sampleNames: {
@@ -247,7 +247,7 @@ export const FORM_CLASSIFICATION_SCHEMA = {
 export interface DiscoveryResponse {
   summary: string;
   entities: Array<{
-    type: "Patient" | "Service" | "Appointment" | "Invoice" | "Photo";
+    type: "Patient" | "Service" | "Appointment" | "Invoice" | "Photo" | "Form" | "Document";
     count: number;
     sampleNames: string[];
   }>;

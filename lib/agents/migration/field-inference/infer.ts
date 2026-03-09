@@ -66,6 +66,51 @@ function buildFieldMetadata(field: FormFieldContent) {
   };
 }
 
+/** Maximum fields per AI batch — keeps JSON payloads small enough for reliable parsing */
+const MAX_FIELDS_PER_BATCH = 40;
+
+/**
+ * Infer field types for a single batch of fields via AI.
+ * Returns a Map of fieldId → FieldType for successfully inferred fields.
+ * On failure, returns null (caller should use heuristic fallback for this batch).
+ */
+async function inferBatch(
+  templateName: string,
+  batchFields: [string, FormFieldContent][],
+  system: string,
+  provider: ReturnType<typeof getLLMProvider>,
+  batchIndex: number,
+  totalBatches: number
+): Promise<Map<string, FieldType> | null> {
+  const fieldMetadata = batchFields.map(([, field]) => buildFieldMetadata(field));
+  const expectedFieldIds = batchFields.map(([id]) => id);
+  const batchLabel = totalBatches > 1 ? ` (batch ${batchIndex + 1}/${totalBatches})` : "";
+  const maxTokens = Math.min(8192, batchFields.length * 100);
+
+  const userMessage = `Infer field types for template "${templateName}"${batchLabel} with ${batchFields.length} fields:\n\n${JSON.stringify(fieldMetadata, null, 2)}`;
+
+  try {
+    const { result: aiResult, attempts } = await completionWithRetry<FieldInferenceResult>(
+      provider,
+      system,
+      userMessage,
+      { temperature: 0.1, maxTokens },
+      (parsed) => validateFieldInference(parsed, expectedFieldIds)
+    );
+
+    if (attempts > 1) {
+      console.log(`[field-inference] Template "${templateName}"${batchLabel}: AI succeeded after ${attempts} attempts`);
+    }
+
+    return new Map(aiResult.fields.map((f) => [f.fieldId, f.fieldType]));
+  } catch (err) {
+    console.warn(
+      `[field-inference] AI failed for template "${templateName}"${batchLabel}, using heuristic fallback: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return null;
+  }
+}
+
 /**
  * Infer field types for all fields in a template using AI with heuristic fallback.
  *
@@ -73,7 +118,8 @@ function buildFieldMetadata(field: FormFieldContent) {
  * - Injects vendor knowledge into prompt when available
  * - Uses completionWithRetry() with field type validation
  * - Per-field heuristic fallback for any fields AI misses or returns invalid types
- * - 1 LLM call per template (batched), max 2 with retry
+ * - Large templates (>MAX_FIELDS_PER_BATCH fields) are split into batches
+ *   with per-batch heuristic fallback on failure (not all-or-nothing)
  */
 export async function inferFieldTypes(
   templateName: string,
@@ -94,50 +140,33 @@ export async function inferFieldTypes(
     return result;
   }
 
-  // Build PHI-safe metadata for all fields
-  const fieldMetadata = Array.from(fields.entries()).map(([, field]) =>
-    buildFieldMetadata(field)
-  );
-
   const vendorContext = buildVendorContext(vendorKnowledge?.fieldTypeHints);
   const system = FIELD_INFERENCE_SYSTEM_PROMPT.replace("{vendorContext}", vendorContext);
 
-  const userMessage = `Infer field types for template "${templateName}" with ${fields.size} fields:\n\n${JSON.stringify(fieldMetadata, null, 2)}`;
+  // Split into batches if needed
+  const allEntries = Array.from(fields.entries());
+  const batches: [string, FormFieldContent][][] = [];
+  for (let i = 0; i < allEntries.length; i += MAX_FIELDS_PER_BATCH) {
+    batches.push(allEntries.slice(i, i + MAX_FIELDS_PER_BATCH));
+  }
 
-  const expectedFieldIds = Array.from(fields.keys());
+  if (batches.length > 1) {
+    console.log(`[field-inference] Template "${templateName}": splitting ${fields.size} fields into ${batches.length} batches`);
+  }
 
-  try {
-    const { result: aiResult, attempts } = await completionWithRetry<FieldInferenceResult>(
-      provider,
-      system,
-      userMessage,
-      { temperature: 0.1, maxTokens: 4096 },
-      (parsed) => validateFieldInference(parsed, expectedFieldIds)
-    );
+  // Run batches sequentially (avoids rate limiting, keeps costs predictable)
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    const aiMap = await inferBatch(templateName, batch, system, provider, i, batches.length);
 
-    if (attempts > 1) {
-      console.log(`[field-inference] Template "${templateName}": AI succeeded after ${attempts} attempts`);
-    }
-
-    // Use AI results, with per-field heuristic fallback for safety
-    const aiMap = new Map(aiResult.fields.map((f) => [f.fieldId, f.fieldType]));
-
-    for (const [fieldId, field] of fields) {
-      const aiType = aiMap.get(fieldId);
+    for (const [fieldId, field] of batch) {
+      const aiType = aiMap?.get(fieldId);
       if (aiType) {
         result.set(fieldId, aiType);
       } else {
-        // AI missed this field — fallback to heuristic
+        // AI missed this field or batch failed — fallback to heuristic
         result.set(fieldId, heuristicFieldType(field));
       }
-    }
-  } catch (err) {
-    // Full AI failure — fall back to heuristics for all fields
-    console.warn(
-      `[field-inference] AI failed for template "${templateName}", using heuristic fallback: ${err instanceof Error ? err.message : String(err)}`
-    );
-    for (const [fieldId, field] of fields) {
-      result.set(fieldId, heuristicFieldType(field));
     }
   }
 

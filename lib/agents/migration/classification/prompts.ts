@@ -9,42 +9,46 @@ export const HIGH_CONFIDENCE_PATTERNS: Array<{
   classification: "consent" | "clinical_chart" | "intake" | "skip";
   confidence: number;
 }> = [
-  // Consent patterns — very high confidence
-  { pattern: /\bhipaa\b/i, classification: "consent", confidence: 0.98 },
-  { pattern: /\bconsent\s+(form|to\s+treat)/i, classification: "consent", confidence: 0.95 },
-  { pattern: /\bwaiver\b/i, classification: "consent", confidence: 0.95 },
-  { pattern: /\bauthorization\b/i, classification: "consent", confidence: 0.93 },
-  { pattern: /\bfinancial\s+policy\b/i, classification: "consent", confidence: 0.95 },
-  { pattern: /\baftercare\s+instructions?\b/i, classification: "consent", confidence: 0.93 },
-  { pattern: /\bpost[- ]?(care|treatment)\s+instructions?\b/i, classification: "consent", confidence: 0.93 },
-
-  // Intake patterns
-  { pattern: /\bmedical\s+history\b/i, classification: "intake", confidence: 0.95 },
-  { pattern: /\bpatient\s+(intake|registration)\b/i, classification: "intake", confidence: 0.95 },
-  { pattern: /\bhealth\s+(questionnaire|history)\b/i, classification: "intake", confidence: 0.93 },
-
-  // Clinical chart patterns
+  // Clinical chart — check FIRST (most specific, prevents consent patterns from stealing them)
   { pattern: /\btreatment\s+record\b/i, classification: "clinical_chart", confidence: 0.93 },
   { pattern: /\bprocedure\s+(note|chart|record)\b/i, classification: "clinical_chart", confidence: 0.93 },
   { pattern: /\bclinical\s+(chart|assessment|note)\b/i, classification: "clinical_chart", confidence: 0.93 },
+  { pattern: /\bpatient\s+chart\b/i, classification: "clinical_chart", confidence: 0.90 },
+
+  // Consent — broad patterns AFTER clinical
+  { pattern: /\bhipaa\b/i, classification: "consent", confidence: 0.98 },
+  { pattern: /\bconsent\b/i, classification: "consent", confidence: 0.95 },
+  { pattern: /\bwaiver\b/i, classification: "consent", confidence: 0.95 },
+  { pattern: /\bauthorization\b/i, classification: "consent", confidence: 0.93 },
+  { pattern: /\bpolicy\b/i, classification: "consent", confidence: 0.93 },
+  { pattern: /\bpost\s+procedure\b/i, classification: "consent", confidence: 0.93 },
+  { pattern: /\bpost[- ]?(care|treatment)(\s+(care|instructions))?\b/i, classification: "consent", confidence: 0.93 },
+  { pattern: /\baftercare\b/i, classification: "consent", confidence: 0.93 },
+  { pattern: /\brelease\b/i, classification: "consent", confidence: 0.90 },
+  { pattern: /\bnerve\s+block\b/i, classification: "consent", confidence: 0.90 },
+  { pattern: /\binstructions\b/i, classification: "consent", confidence: 0.88 },
+
+  // Intake — after consent
+  { pattern: /\bintake\b/i, classification: "intake", confidence: 0.95 },
+  { pattern: /\bmedical\s+history\b/i, classification: "intake", confidence: 0.95 },
+  { pattern: /\bpatient\s+(intake|registration)\b/i, classification: "intake", confidence: 0.95 },
+  { pattern: /\b(health|medical)\s+(questionnaire|history|assessment)\b/i, classification: "intake", confidence: 0.93 },
+  { pattern: /\bquestionnaire\b/i, classification: "intake", confidence: 0.90 },
+  { pattern: /\bassessment\s*(checklist|form)?\b/i, classification: "intake", confidence: 0.88 },
 ];
 
 /**
  * Field labels that strongly suggest clinical_chart regardless of form name.
  */
 export const CLINICAL_FIELD_INDICATORS = [
-  /\bunits?\b/i,
   /\binjection\s*sites?\b/i,
-  /\bdevice\b/i,
-  /\benergy\b/i,
-  /\bpulse\s*width\b/i,
-  /\bspot\s*size\b/i,
   /\blot\s*number\b/i,
   /\bdilution\b/i,
-  /\bpre[- ]?treatment\b/i,
-  /\bpost[- ]?treatment\b/i,
-  /\bcomplications?\b/i,
-  /\btreatment\s*area\b/i,
+  /\bpulse\s*width\b/i,
+  /\bspot\s*size\b/i,
+  /\bunits?\s*(injected|administered|used)\b/i,
+  /\bdevice\s*(serial|model|setting)\b/i,
+  /\benergy\s*(level|setting|j\/cm)\b/i,
 ];
 
 export const ENHANCED_CLASSIFICATION_SYSTEM_PROMPT = `You are a MedSpa data migration specialist. Classify each form into one of four categories for the target Neuvvia EMR system.

@@ -107,6 +107,37 @@ export async function discoverSourceData(
     photoCount = photos.totalCount ?? photos.data.length;
   }
 
+  // Sample forms and documents from first 5 patients (per-patient entities)
+  let formCount = 0;
+  let documentCount = 0;
+  const samplePatients = patients.data.slice(0, 5);
+  const sampleSize = Math.min(5, patients.data.length);
+
+  if (sampleSize > 0) {
+    for (const p of samplePatients) {
+      if (provider.fetchForms) {
+        try {
+          const forms = await provider.fetchForms(credentials, { cursor: p.sourceId });
+          formCount += forms.data.length;
+        } catch {
+          // Non-critical — continue sampling
+        }
+      }
+      if (provider.fetchDocuments) {
+        try {
+          const docs = await provider.fetchDocuments(credentials, { cursor: p.sourceId });
+          documentCount += docs.data.length;
+        } catch {
+          // Non-critical — continue sampling
+        }
+      }
+    }
+    // Extrapolate to total patient count
+    const totalPatients = patients.totalCount ?? patients.data.length;
+    formCount = Math.round((formCount / sampleSize) * totalPatients);
+    documentCount = Math.round((documentCount / sampleSize) * totalPatients);
+  }
+
   const userMessage = `Analyze this source data for migration:
 
 PATIENTS (${patients.totalCount ?? patients.data.length} total, showing first ${patients.data.length}):
@@ -145,16 +176,20 @@ ${JSON.stringify(invoices.data.slice(0, 10).map(i => ({
   status: i.status,
 })), null, 2)}
 
-PHOTOS: ${photoCount} total`;
+PHOTOS: ${photoCount} total
+FORMS: ~${formCount} total (estimated from ${sampleSize}-patient sample)
+DOCUMENTS: ~${documentCount} total (estimated from ${sampleSize}-patient sample)`;
 
   const mockDiscovery: DiscoveryResponse = {
-    summary: `I found ${patients.totalCount ?? patients.data.length} patients, ${appointments.totalCount ?? appointments.data.length} appointments, ${services.totalCount ?? services.data.length} services, ${invoices.totalCount ?? invoices.data.length} invoices, and ${photoCount} photos in the source platform.`,
+    summary: `I found ${patients.totalCount ?? patients.data.length} patients, ${appointments.totalCount ?? appointments.data.length} appointments, ${services.totalCount ?? services.data.length} services, ${invoices.totalCount ?? invoices.data.length} invoices, ${photoCount} photos, ~${formCount} forms, and ~${documentCount} documents in the source platform.`,
     entities: [
       { type: "Patient", count: patients.totalCount ?? patients.data.length, sampleNames: patients.data.slice(0, 3).map(p => `${p.firstName} ${p.lastName}`) },
       { type: "Service", count: services.totalCount ?? services.data.length, sampleNames: services.data.slice(0, 3).map(s => s.name) },
       { type: "Appointment", count: appointments.totalCount ?? appointments.data.length, sampleNames: [] },
       { type: "Invoice", count: invoices.totalCount ?? invoices.data.length, sampleNames: [] },
       { type: "Photo", count: photoCount, sampleNames: [] },
+      { type: "Form", count: formCount, sampleNames: [] },
+      { type: "Document", count: documentCount, sampleNames: [] },
     ],
     issues: detectDataIssues(patients.data, services.data, appointments.data),
     recommendations: [
