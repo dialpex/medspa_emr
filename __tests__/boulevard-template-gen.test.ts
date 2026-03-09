@@ -1,58 +1,58 @@
 import { describe, it, expect } from "vitest";
-import { mapBoulevardFieldType } from "@/lib/migration/pipeline";
+import { mapFieldType } from "@/lib/migration/pipeline/phases/transform";
 
-describe("mapBoulevardFieldType", () => {
+describe("mapFieldType (Boulevard field type mapping)", () => {
   it("maps heading → heading", () => {
-    expect(mapBoulevardFieldType("heading")).toBe("heading");
+    expect(mapFieldType("heading")).toBe("heading");
   });
 
   it("maps text → text", () => {
-    expect(mapBoulevardFieldType("text")).toBe("text");
+    expect(mapFieldType("text")).toBe("text");
   });
 
   it("maps connected_text → text", () => {
-    expect(mapBoulevardFieldType("connected_text")).toBe("text");
+    expect(mapFieldType("connected_text")).toBe("text");
   });
 
   it("maps textarea → textarea", () => {
-    expect(mapBoulevardFieldType("textarea")).toBe("textarea");
+    expect(mapFieldType("textarea")).toBe("textarea");
   });
 
   it("maps checkbox → checklist", () => {
-    expect(mapBoulevardFieldType("checkbox")).toBe("checklist");
+    expect(mapFieldType("checkbox")).toBe("checklist");
   });
 
   it("maps date → date", () => {
-    expect(mapBoulevardFieldType("date")).toBe("date");
+    expect(mapFieldType("date")).toBe("date");
   });
 
   it("maps connected_date → date", () => {
-    expect(mapBoulevardFieldType("connected_date")).toBe("date");
+    expect(mapFieldType("connected_date")).toBe("date");
   });
 
   it("maps dropdown → select", () => {
-    expect(mapBoulevardFieldType("dropdown")).toBe("select");
+    expect(mapFieldType("dropdown")).toBe("select");
   });
 
   it("maps select → select", () => {
-    expect(mapBoulevardFieldType("select")).toBe("select");
+    expect(mapFieldType("select")).toBe("select");
   });
 
   it("maps radio → select", () => {
-    expect(mapBoulevardFieldType("radio")).toBe("select");
+    expect(mapFieldType("radio")).toBe("select");
   });
 
   it("maps signature → signature", () => {
-    expect(mapBoulevardFieldType("signature")).toBe("signature");
+    expect(mapFieldType("signature")).toBe("signature");
   });
 
   it("maps image → photo-single", () => {
-    expect(mapBoulevardFieldType("image")).toBe("photo-single");
+    expect(mapFieldType("image")).toBe("photo-single");
   });
 
   it("defaults unknown types to text", () => {
-    expect(mapBoulevardFieldType("unknown_type")).toBe("text");
-    expect(mapBoulevardFieldType("")).toBe("text");
-    expect(mapBoulevardFieldType("foobar")).toBe("text");
+    expect(mapFieldType("unknown_type")).toBe("text");
+    expect(mapFieldType("")).toBe("text");
+    expect(mapFieldType("foobar")).toBe("text");
   });
 });

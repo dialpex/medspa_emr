@@ -13,7 +13,8 @@ import {
   proposeServiceMappings as agentProposeMappings,
   generateVerificationReport as agentVerify,
 } from "@/lib/agents/migration/discovery";
-import { executeMigration as runPipeline } from "@/lib/migration/pipeline";
+import { MigrationOrchestrator } from "@/lib/migration/pipeline/orchestrator";
+import { LocalArtifactStore } from "@/lib/migration/storage/local-store";
 
 type ActionResult<T = null> =
   | { success: true; data: T }
@@ -284,12 +285,12 @@ export async function approveMappingAndStart(
       data: { status: "Migrating" },
     });
 
-    // Run pipeline async (fire and forget — client polls for status)
+    // Bridge: create MigrationRun from MigrationJob and run orchestrator
     const provider = getMigrationProvider(job.source);
-    const updatedJob = await prisma.migrationJob.findUnique({ where: { id: jobId } });
-    if (updatedJob) {
-      runPipeline(updatedJob, provider).catch(async (err) => {
-        console.error("[Migration] Pipeline error:", err);
+
+    runOrchestratorFromJob(job.id, job.clinicId, job.source, user.id, provider).catch(
+      async (err) => {
+        console.error("[Migration] Orchestrator error:", err);
         await prisma.migrationJob.update({
           where: { id: jobId },
           data: {
@@ -297,14 +298,87 @@ export async function approveMappingAndStart(
             errorMessage: err instanceof Error ? err.message : String(err),
           },
         });
-      });
-    }
+      }
+    );
 
     revalidatePath(`/settings/migration/${jobId}`);
     return { success: true, data: null };
   } catch (error) {
     if (error instanceof AuthorizationError) return { success: false, error: error.message };
     throw error;
+  }
+}
+
+/**
+ * Bridge: runs the orchestrator pipeline from a MigrationJob context.
+ * Creates a MigrationRun, runs all phases with autoApprove, then
+ * syncs status back to MigrationJob for the UI.
+ */
+async function runOrchestratorFromJob(
+  jobId: string,
+  clinicId: string,
+  source: string,
+  userId: string,
+  provider: import("@/lib/migration/providers/types").MigrationProvider
+): Promise<void> {
+  // Read credentials from MigrationJob
+  const job = await prisma.migrationJob.findUniqueOrThrow({
+    where: { id: jobId },
+    select: { credentialsEncrypted: true, mappingConfig: true },
+  });
+
+  // Create MigrationRun
+  const run = await prisma.migrationRun.create({
+    data: {
+      clinicId,
+      sourceVendor: source.toLowerCase(),
+      status: "Created",
+      startedById: userId,
+      startedAt: new Date(),
+      progress: JSON.stringify({
+        credentials: job.credentialsEncrypted
+          ? JSON.parse(
+              (await import("@/lib/migration/crypto")).decrypt(job.credentialsEncrypted)
+            )
+          : undefined,
+        encryptedCredentials: job.credentialsEncrypted,
+        mappingConfig: job.mappingConfig ? JSON.parse(job.mappingConfig) : undefined,
+      }),
+    },
+  });
+
+  const store = new LocalArtifactStore();
+  const orchestrator = new MigrationOrchestrator({
+    store,
+    provider,
+    autoApprove: true,
+  });
+
+  try {
+    const report = await orchestrator.runFull(run.id);
+
+    // Sync result back to MigrationJob
+    await prisma.migrationJob.update({
+      where: { id: jobId },
+      data: {
+        status: "Verifying",
+        progress: JSON.stringify({
+          orchestratorRunId: run.id,
+          report,
+        }),
+      },
+    });
+  } catch (err) {
+    // Sync failure back to MigrationJob
+    await prisma.migrationJob.update({
+      where: { id: jobId },
+      data: {
+        status: "Failed",
+        errorMessage: err instanceof Error ? err.message : String(err),
+        progress: JSON.stringify({ orchestratorRunId: run.id }),
+      },
+    });
+    throw err;
   }
 }
 
@@ -352,12 +426,19 @@ export async function resumeMigration(
       data: { status: "Migrating" },
     });
 
-    // Resume pipeline
-    const provider = getMigrationProvider(job.source);
-    const updatedJob = await prisma.migrationJob.findUnique({ where: { id: jobId } });
-    if (updatedJob) {
-      runPipeline(updatedJob, provider).catch(async (err) => {
-        console.error("[Migration] Pipeline error:", err);
+    // Resume via orchestrator — find the associated MigrationRun
+    const progress = JSON.parse(job.progress);
+    if (progress.orchestratorRunId) {
+      const store = new LocalArtifactStore();
+      const provider = getMigrationProvider(job.source);
+      const orchestrator = new MigrationOrchestrator({
+        store,
+        provider,
+        autoApprove: true,
+      });
+
+      orchestrator.resume(progress.orchestratorRunId).catch(async (err) => {
+        console.error("[Migration] Orchestrator resume error:", err);
         await prisma.migrationJob.update({
           where: { id: jobId },
           data: {
@@ -475,7 +556,7 @@ export async function completeMigration(
       select: { entityType: true, status: true, aiReasoning: true, errorMessage: true },
     });
 
-    const report = await agentVerify(logs);
+    const report = agentVerify(logs);
 
     await prisma.migrationJob.update({
       where: { id: jobId },

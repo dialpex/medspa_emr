@@ -1,14 +1,12 @@
 #!/usr/bin/env npx tsx
 /**
- * E2E Migration Pilot — runs the EXACT production migration pipeline with a patient limit.
+ * E2E Migration Pilot — runs the production orchestrator pipeline with a patient limit.
  *
  * This exercises the identical code path as clicking "Approve & Start Migration" in the UI:
  *   1. Setup: Find/create clinic + owner user in dev.db
- *   2. Create MigrationJob (encrypt credentials, create DB record)
- *   3. Discovery: AI agent analyzes source data
- *   4. Mapping: AI proposes service mappings, auto-resolve all as create_new
- *   5. Execute: Full pipeline with patientLimit
- *   6. Report: Print final counts
+ *   2. Create MigrationRun (with credentials)
+ *   3. Run orchestrator: Ingest → Profile → Draft Mapping → [auto-approve] → Transform → Validate → Load → Reconcile
+ *   4. Report: Print final reconciliation
  *
  * Usage:
  *   BOULEVARD_EMAIL=... BOULEVARD_PASSWORD=... npx tsx scripts/test-migration-e2e.ts --limit=5
@@ -23,9 +21,8 @@ import * as readline from "readline";
 import { randomBytes } from "crypto";
 import { BoulevardProvider } from "../lib/migration/providers/boulevard";
 import type { MigrationCredentials } from "../lib/migration/providers/types";
-import { encrypt } from "../lib/migration/crypto";
-import { discoverSourceData, proposeServiceMappings } from "../lib/agents/migration/discovery";
-import { executeMigration } from "../lib/migration/pipeline";
+import { MigrationOrchestrator } from "../lib/migration/pipeline/orchestrator";
+import { LocalArtifactStore } from "../lib/migration/storage/local-store";
 import { prisma } from "../lib/prisma";
 
 // ---------------------------------------------------------------------------
@@ -92,10 +89,11 @@ async function main() {
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
   const llmLabel = hasAnthropic ? "Anthropic" : hasOpenAI ? "OpenAI" : "NONE (heuristic/mock only)";
 
-  hr("E2E Migration Pilot");
+  hr("E2E Migration Pilot (Orchestrator)");
   console.log(`  Patient limit : ${patientLimit}`);
   console.log(`  LLM provider  : ${llmLabel}`);
   console.log(`  Source vendor  : Boulevard`);
+  console.log(`  Pipeline       : 8-phase orchestrator`);
 
   // -----------------------------------------------------------------------
   // Step 1: Authenticate to Boulevard
@@ -118,11 +116,10 @@ async function main() {
   if (conn.locationId) console.log(`Location ID: ${conn.locationId}`);
 
   // -----------------------------------------------------------------------
-  // Step 2: Setup clinic + owner in dev.db
+  // Step 2: Find clinic & owner in dev.db
   // -----------------------------------------------------------------------
   hr("Step 2: Find clinic & owner");
 
-  // Use the first existing clinic (simulates a user who already has a clinic set up)
   const clinic = await prisma.clinic.findFirst({
     orderBy: { createdAt: "asc" },
   });
@@ -144,147 +141,74 @@ async function main() {
   console.log(`Using owner: ${owner.name} (${owner.id})`);
 
   // -----------------------------------------------------------------------
-  // Step 3: Create MigrationJob
+  // Step 3: Create MigrationRun
   // -----------------------------------------------------------------------
-  hr("Step 3: Create MigrationJob");
+  hr("Step 3: Create MigrationRun");
 
-  const encryptedCreds = encrypt(JSON.stringify(credentials));
-
-  const job = await prisma.migrationJob.create({
+  const run = await prisma.migrationRun.create({
     data: {
       clinicId: clinic.id,
-      source: "Boulevard",
-      status: "Discovering",
-      credentialsEncrypted: encryptedCreds,
-      connectionValidatedAt: new Date(),
+      sourceVendor: "boulevard",
+      status: "Created",
       startedById: owner.id,
       startedAt: new Date(),
-      progress: "{}",
+      progress: JSON.stringify({
+        credentials,
+        patientLimit,
+      }),
     },
   });
-  console.log(`Created MigrationJob: ${job.id}`);
-
-  // Store locationId in sourceDiscovery for document fetching
-  if (conn.locationId) {
-    await prisma.migrationJob.update({
-      where: { id: job.id },
-      data: { sourceDiscovery: JSON.stringify({ locationId: conn.locationId }) },
-    });
-  }
+  console.log(`Created MigrationRun: ${run.id}`);
 
   // -----------------------------------------------------------------------
-  // Step 4: Discovery — AI agent analyzes source data
+  // Step 4: Run Orchestrator (all 8 phases)
   // -----------------------------------------------------------------------
-  hr("Step 4: Discovery");
+  hr(`Step 4: Run Orchestrator (limit=${patientLimit})`);
 
-  console.log("Running AI discovery agent...");
-  const discovery = await discoverSourceData(job, provider);
-
-  console.log(`\nDiscovery summary: ${discovery.summary}\n`);
-  for (const entity of discovery.entities) {
-    console.log(`  ${entity.type.padEnd(15)} ${String(entity.count).padStart(6)} records`);
-  }
-  if (discovery.issues.length > 0) {
-    console.log(`\n  Issues:`);
-    for (const issue of discovery.issues) {
-      console.log(`    [${issue.severity.toUpperCase()}] ${issue.description}`);
-    }
-  }
-
-  // Save discovery to job
-  await prisma.migrationJob.update({
-    where: { id: job.id },
-    data: {
-      sourceDiscovery: JSON.stringify({ ...discovery, locationId: conn.locationId }),
-      status: "MappingInProgress",
-    },
+  const store = new LocalArtifactStore();
+  const orchestrator = new MigrationOrchestrator({
+    store,
+    provider,
+    autoApprove: true,
   });
 
-  // -----------------------------------------------------------------------
-  // Step 5: Service Mapping — AI proposes, we auto-resolve as create_new
-  // -----------------------------------------------------------------------
-  hr("Step 5: Service Mapping");
-
-  // Fetch existing Neuvvia services for the clinic
-  const neuvviaServices = await prisma.service.findMany({
-    where: { clinicId: clinic.id },
-    select: { id: true, name: true, category: true, price: true },
-  });
-  console.log(`Existing Neuvvia services: ${neuvviaServices.length}`);
-
-  console.log("Running AI mapping agent...");
-  const mappingResult = await proposeServiceMappings(job, provider, neuvviaServices);
-
-  console.log(`\nMapping results: ${mappingResult.mappings.length} services`);
-  console.log(`  Auto-resolved: ${mappingResult.autoResolved}`);
-  console.log(`  Needs input: ${mappingResult.needsInput}\n`);
-
-  // Auto-resolve all as create_new for pilot (unless already mapped)
-  const resolvedMappings = mappingResult.mappings.map((m) => ({
-    sourceId: m.sourceId,
-    sourceName: m.sourceName,
-    action: m.action === "map_existing" ? "map_existing" as const : "create_new" as const,
-    targetId: m.targetId,
-    targetName: m.targetName,
-  }));
-
-  for (const m of resolvedMappings) {
-    const action = m.action === "map_existing" ? `-> ${m.targetName}` : "(create new)";
-    console.log(`  ${m.sourceName.padEnd(40)} ${action}`);
-  }
-
-  // Save mapping config to job
-  await prisma.migrationJob.update({
-    where: { id: job.id },
-    data: {
-      mappingConfig: JSON.stringify({ mappings: resolvedMappings }),
-      status: "Migrating",
-    },
-  });
-
-  // Reload job to get latest data
-  const freshJob = await prisma.migrationJob.findUniqueOrThrow({
-    where: { id: job.id },
-  });
-
-  // -----------------------------------------------------------------------
-  // Step 6: Execute Migration — the real pipeline with limit
-  // -----------------------------------------------------------------------
-  hr(`Step 6: Execute Migration (limit=${patientLimit})`);
-
-  console.log("Starting migration pipeline...\n");
+  console.log("Starting 8-phase pipeline...\n");
   const startTime = Date.now();
 
   try {
-    await executeMigration(freshJob, provider, { patientLimit });
+    const report = await orchestrator.runFull(run.id);
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`\nPipeline completed in ${elapsed}s`);
+
+    // -----------------------------------------------------------------------
+    // Step 5: Print Results
+    // -----------------------------------------------------------------------
+    hr("Step 5: Results");
+
+    console.log(`Status: ${report.status}`);
+    console.log(`Completeness: ${report.overallCompleteness}%\n`);
+
+    console.log("Reconciliation:");
+    for (const entry of report.reconciliation) {
+      console.log(
+        `  ${entry.entityType.padEnd(15)} source=${String(entry.sourceCount).padStart(4)}  staged=${String(entry.stagedCount).padStart(4)}  promoted=${String(entry.promotedCount).padStart(4)}  failed=${String(entry.failedCount).padStart(4)}  match=${entry.matchRate}%`
+      );
+    }
+
+    console.log(`\nTotal: ${report.totalSourceRecords} source → ${report.totalPromotedRecords} promoted, ${report.totalFailedRecords} failed`);
+
+    if (report.unresolvedExceptions > 0) {
+      console.log(`\n⚠ ${report.unresolvedExceptions} unresolved exceptions — review audit events`);
+    }
   } catch (err) {
-    console.error(`\nMigration FAILED: ${err instanceof Error ? err.message : String(err)}`);
-    // Still print report below for partial results
-  }
-
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`\nMigration pipeline completed in ${elapsed}s`);
-
-  // -----------------------------------------------------------------------
-  // Step 7: Report — query DB for final counts
-  // -----------------------------------------------------------------------
-  hr("Step 7: Results");
-
-  const finalJob = await prisma.migrationJob.findUniqueOrThrow({
-    where: { id: job.id },
-    select: { status: true, progress: true, agentLog: true },
-  });
-
-  console.log(`Job status: ${finalJob.status}\n`);
-
-  // Parse and display progress
-  const progress = JSON.parse(finalJob.progress);
-  console.log("Import progress:");
-  for (const [entity, counts] of Object.entries(progress) as Array<[string, { total: number; imported: number; skipped: number; failed: number }]>) {
-    console.log(`  ${entity.padEnd(15)} imported=${String(counts.imported).padStart(4)}  skipped=${String(counts.skipped).padStart(4)}  failed=${String(counts.failed).padStart(4)}  total=${String(counts.total).padStart(4)}`);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.error(`\nPipeline FAILED after ${elapsed}s: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // Query actual DB counts for the clinic
+  hr("DB Counts");
+
   const [patients, appointments, charts, services, photos, consents, documents, invoices] = await Promise.all([
     prisma.patient.count({ where: { clinicId: clinic.id } }),
     prisma.appointment.count({ where: { clinicId: clinic.id } }),
@@ -296,7 +220,6 @@ async function main() {
     prisma.invoice.count({ where: { clinicId: clinic.id } }),
   ]);
 
-  console.log("\nDB counts for clinic:");
   console.log(`  Patients     : ${patients}`);
   console.log(`  Services     : ${services}`);
   console.log(`  Appointments : ${appointments}`);
@@ -306,18 +229,23 @@ async function main() {
   console.log(`  Documents    : ${documents}`);
   console.log(`  Invoices     : ${invoices}`);
 
-  // Print agent log summary (last 20 lines)
-  if (finalJob.agentLog) {
-    const logLines = finalJob.agentLog.split("\n");
-    const tail = logLines.slice(-20);
-    console.log(`\nAgent log (last ${tail.length} of ${logLines.length} lines):`);
-    for (const line of tail) {
-      console.log(`  ${line}`);
+  // Print audit events summary
+  const auditEvents = await prisma.migrationAuditEvent.findMany({
+    where: { runId: run.id },
+    orderBy: { createdAt: "asc" },
+    select: { phase: true, action: true, createdAt: true },
+  });
+
+  if (auditEvents.length > 0) {
+    hr("Audit Trail");
+    for (const event of auditEvents) {
+      const ts = event.createdAt.toISOString().substring(11, 19);
+      console.log(`  [${ts}] ${event.phase}: ${event.action}`);
     }
   }
 
   hr("Done");
-  console.log(`\nOpen the app (npm run dev) and check the Patient Directory to verify ${patientLimit} patients with their data.`);
+  console.log(`\nOpen the app (npm run dev) and check the Patient Directory to verify imported data.`);
 }
 
 main()

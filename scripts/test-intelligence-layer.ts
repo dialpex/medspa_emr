@@ -23,7 +23,7 @@ import type { MigrationCredentials, SourceForm, FormFieldContent } from "../lib/
 import { inferFieldTypes, heuristicFieldType } from "../lib/agents/migration/field-inference";
 import { classifyForms } from "../lib/agents/migration/classification";
 import { getVendorKnowledge } from "../lib/agents/migration/vendor-knowledge";
-import { mapBoulevardFieldType } from "../lib/migration/pipeline";
+import { mapFieldType as mapBoulevardFieldType } from "../lib/migration/pipeline/phases/transform";
 
 function prompt(question: string, hidden = false): Promise<string> {
   return new Promise((resolve) => {

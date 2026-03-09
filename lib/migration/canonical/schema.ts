@@ -44,6 +44,13 @@ export interface CanonicalChartSection {
   type?: string;
 }
 
+export interface CanonicalChartTemplateField {
+  key: string;
+  label: string;
+  type: string;
+  options?: string[];
+}
+
 export interface CanonicalChart {
   canonicalId: string;
   sourceRecordId: string;
@@ -53,6 +60,21 @@ export interface CanonicalChart {
   chiefComplaint?: string;
   sections: CanonicalChartSection[];
   signedAt?: string;
+  // Template metadata (from form classification + field inference)
+  templateName?: string;
+  templateFields?: CanonicalChartTemplateField[];
+  templateValues?: Record<string, string>;
+  // Source form metadata for enrichment
+  sourceFormFields?: Array<{
+    fieldId: string;
+    label: string;
+    value?: string;
+    selectedOptions?: string[];
+    type: string;
+    connectedFieldName?: string;
+    category?: string;    // patient_demographic | patient_medical | clinical_content | administrative
+    patientField?: string; // for patient_medical: which patient field to enrich
+  }>;
 }
 
 export interface CanonicalEncounter {
@@ -75,6 +97,13 @@ export interface CanonicalConsent {
   signedByName?: string;
   content?: string;
   status: string;
+  // Snapshot of form field data for consent records
+  formFields?: Array<{
+    label: string;
+    value?: string;
+    selectedOptions?: string[];
+  }>;
+  sourceMetadata?: Record<string, unknown>;
 }
 
 export interface CanonicalPhoto {
@@ -88,6 +117,7 @@ export interface CanonicalPhoto {
   caption?: string;
   takenAt?: string;
   artifactKey: string; // reference to ArtifactStore binary
+  downloadUrl?: string; // vendor URL for deferred download during promote
 }
 
 export interface CanonicalDocument {
@@ -98,6 +128,18 @@ export interface CanonicalDocument {
   mimeType?: string;
   category?: string;
   artifactKey: string;
+  downloadUrl?: string; // vendor URL for deferred download during promote
+}
+
+export interface CanonicalService {
+  canonicalId: string;
+  sourceRecordId: string;
+  name: string;
+  description?: string;
+  duration?: number;
+  price?: number;
+  category?: string;
+  isActive?: boolean;
 }
 
 export interface CanonicalInvoiceLineItem {
@@ -131,7 +173,8 @@ export type CanonicalRecord =
   | CanonicalConsent
   | CanonicalPhoto
   | CanonicalDocument
-  | CanonicalInvoice;
+  | CanonicalInvoice
+  | CanonicalService;
 
 export type CanonicalEntityType =
   | "patient"
@@ -141,7 +184,8 @@ export type CanonicalEntityType =
   | "consent"
   | "photo"
   | "document"
-  | "invoice";
+  | "invoice"
+  | "service";
 
 // Canonical schema description for SafeContext (no PHI)
 export interface CanonicalFieldDescription {

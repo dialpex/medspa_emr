@@ -236,6 +236,19 @@ const VALIDATORS: Record<CanonicalEntityType, (record: never) => ValidationResul
   photo: validatePhoto as (record: never) => ValidationResult,
   document: validateDocument as (record: never) => ValidationResult,
   invoice: validateInvoice as (record: never) => ValidationResult,
+  service: ((record: never) => {
+    const r = record as { name?: string; canonicalId?: string };
+    const errors: ValidationError[] = [];
+    if (!r.name) errors.push({
+      field: "name",
+      code: "V001",
+      entityType: "service",
+      canonicalId: r.canonicalId || "unknown",
+      message: "name is required",
+      severity: "error",
+    });
+    return { valid: errors.length === 0, errors, warnings: [] };
+  }) as (record: never) => ValidationResult,
 };
 
 export function validateRecord(entityType: CanonicalEntityType, record: CanonicalRecord): ValidationResult {

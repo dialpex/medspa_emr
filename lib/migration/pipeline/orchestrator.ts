@@ -469,7 +469,7 @@ export class MigrationOrchestrator {
     });
 
     // Promote staged records to domain tables
-    const promoteResult = await executePromote(run.id, run.clinicId);
+    const promoteResult = await executePromote(run.id, run.clinicId, this.store);
 
     await this.updateRun(run.id, {
       status: "Loaded",
