@@ -742,20 +742,32 @@ async function enrichPatientFromFormFields(
   });
   if (!patient) return;
 
+  const updates: Record<string, string> = {};
+
   for (const field of sourceFormFields) {
     if (field.category !== "patient_medical" || !field.patientField) continue;
 
-    const currentValue = patient[field.patientField as keyof typeof patient];
     const fieldValue = field.selectedOptions?.length
       ? field.selectedOptions.join(", ")
       : field.value;
+    if (!fieldValue) continue;
 
-    if (!currentValue && fieldValue) {
-      await prisma.patient.update({
-        where: { id: patientId },
-        data: { [field.patientField]: fieldValue },
-      });
+    const currentValue = patient[field.patientField as keyof typeof patient] as string | null;
+
+    if (!currentValue) {
+      // Empty — set directly
+      updates[field.patientField] = fieldValue;
+    } else if (!currentValue.includes(fieldValue)) {
+      // Append new data (avoid duplicates)
+      updates[field.patientField] = `${currentValue}; ${fieldValue}`;
     }
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await prisma.patient.update({
+      where: { id: patientId },
+      data: updates,
+    });
   }
 }
 

@@ -15,8 +15,7 @@ import type { FormFieldContent } from "../../providers/types";
 import type { FieldSemanticEntry } from "@/lib/agents/migration/field-classification";
 import { createAdapter } from "../../adapters";
 import { classifyForms } from "@/lib/agents/migration/classification";
-import { inferFieldTypes } from "@/lib/agents/migration/field-inference";
-import { classifyFieldSemantics } from "@/lib/agents/migration/field-classification";
+import { analyzeFields } from "@/lib/agents/migration/field-analysis";
 import { getVendorKnowledge } from "@/lib/agents/migration/vendor-knowledge";
 
 export interface TransformInput {
@@ -169,7 +168,7 @@ async function enrichFormsWithClassification(
     }
   }
 
-  // Run field inference + semantic classification per template (for clinical charts)
+  // Combined field analysis per template (type inference + semantic classification in one AI call)
   const inferredTypesByTemplate = new Map<string, Map<string, string>>();
   const classificationsByTemplate = new Map<string, Map<string, FieldSemanticEntry>>();
 
@@ -188,17 +187,11 @@ async function enrichFormsWithClassification(
     if (!tmpl) continue;
 
     try {
-      const inferred = await inferFieldTypes(tmpl.name, tmpl.fields, vendorKnowledge);
-      inferredTypesByTemplate.set(templateId, inferred as Map<string, string>);
+      const { types, semantics } = await analyzeFields(tmpl.name, tmpl.fields, vendorKnowledge);
+      inferredTypesByTemplate.set(templateId, types as Map<string, string>);
+      classificationsByTemplate.set(templateId, semantics);
     } catch {
-      // Heuristic fallback handled internally
-    }
-
-    try {
-      const classified = await classifyFieldSemantics(tmpl.name, tmpl.fields, vendorKnowledge);
-      classificationsByTemplate.set(templateId, classified);
-    } catch {
-      // Keep all fields if classification fails
+      // Heuristic fallback handled internally by analyzeFields
     }
   }
 
@@ -239,7 +232,11 @@ async function enrichFormsWithClassification(
       const seenFieldKeys = new Set<string>();
 
       if (tmplFields && rawForm.fields) {
-        for (const [fieldId, field] of tmplFields.fields) {
+        // Sort template fields by source form layout order
+        const sortedFields = Array.from(tmplFields.fields.entries()).sort(
+          ([, a], [, b]) => (a.sortOrder ?? Infinity) - (b.sortOrder ?? Infinity)
+        );
+        for (const [fieldId, field] of sortedFields) {
           const semCls = fieldClassifications?.get(fieldId);
 
           // Skip demographics and admin

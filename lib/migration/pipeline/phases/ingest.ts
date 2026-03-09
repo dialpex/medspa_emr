@@ -183,6 +183,24 @@ async function executeApiIngest(
         }
       }
 
+      // Hydrate forms with field content if provider supports it
+      if (entityType === "forms" && provider.fetchFormContent && allRecords.length > 0) {
+        let hydrated = 0;
+        for (const record of allRecords) {
+          const form = record as Record<string, unknown>;
+          try {
+            const fields = await provider.fetchFormContent!(creds, form.sourceId as string);
+            if (fields.length > 0) {
+              form.fields = fields;
+              hydrated++;
+            }
+          } catch {
+            // Content fetch failed for this form — continue without fields
+          }
+        }
+        console.log(`  [ingest] forms: hydrated ${hydrated}/${allRecords.length} with field content`);
+      }
+
       if (allRecords.length > 0) {
         const data = Buffer.from(JSON.stringify(allRecords, null, 2));
         const ref = await store.put(input.runId, `${entityType}.json`, data);
