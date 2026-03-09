@@ -16,48 +16,6 @@ interface TestUser {
 // Inline test functions mirroring server action logic (no Next.js deps)
 // ---------------------------------------------------------------------------
 
-async function testUpdateTreatmentCard(
-  cardId: string,
-  data: { narrativeText?: string; structuredData?: string },
-  user: TestUser
-): Promise<{ success: boolean; error?: string }> {
-  if (!hasPermission(user.role, "charts", "edit")) {
-    return { success: false, error: `Permission denied: ${user.role} cannot edit charts` };
-  }
-
-  const card = await prisma.treatmentCard.findUnique({
-    where: { id: cardId },
-    include: {
-      chart: {
-        select: { id: true, clinicId: true, status: true, encounter: { select: { status: true } } },
-      },
-    },
-  });
-  if (!card) return { success: false, error: "Treatment card not found" };
-  if (user.clinicId !== card.chart.clinicId) return { success: false, error: "Access denied" };
-
-  const isDraft = card.chart.encounter
-    ? card.chart.encounter.status === "Draft"
-    : card.chart.status === "Draft";
-  if (!isDraft) {
-    const isFinalized = card.chart.encounter
-      ? card.chart.encounter.status === "Finalized"
-      : card.chart.status === "MDSigned";
-    return {
-      success: false,
-      error: isFinalized
-        ? "Encounter finalized. Changes require addendum."
-        : "Cannot edit treatment cards on a non-draft chart",
-    };
-  }
-
-  const updateData: Record<string, string> = {};
-  if (data.narrativeText !== undefined) updateData.narrativeText = data.narrativeText;
-  if (data.structuredData !== undefined) updateData.structuredData = data.structuredData;
-  await prisma.treatmentCard.update({ where: { id: cardId }, data: updateData });
-  return { success: true };
-}
-
 async function testUploadMedia(
   chartId: string,
   user: TestUser
@@ -168,12 +126,11 @@ async function testAnnotationUpdate(
     where: { id: photoId, clinicId: user.clinicId, deletedAt: null },
     include: {
       chart: { select: { encounter: { select: { status: true } }, status: true } },
-      treatmentCard: { select: { chart: { select: { encounter: { select: { status: true } }, status: true } } } },
     },
   });
   if (!photo) return { success: false, error: "Photo not found" };
 
-  const chartRef = photo.chart ?? photo.treatmentCard?.chart;
+  const chartRef = photo.chart;
   if (chartRef) {
     const isFinalized = chartRef.encounter
       ? chartRef.encounter.status === "Finalized"
@@ -230,7 +187,6 @@ describe("Addendum + Immutability Enforcement", () => {
     await prisma.auditLog.deleteMany({ where: { entityId: { in: [...createdEncounterIds, ...createdChartIds] } } });
     await prisma.addendum.deleteMany({ where: { encounterId: { in: createdEncounterIds } } });
     await prisma.photo.deleteMany({ where: { chartId: { in: createdChartIds } } });
-    await prisma.treatmentCard.deleteMany({ where: { chartId: { in: createdChartIds } } });
     await prisma.chart.deleteMany({ where: { id: { in: createdChartIds } } });
     await prisma.encounter.deleteMany({ where: { id: { in: createdEncounterIds } } });
     await prisma.appointment.deleteMany({ where: { id: { in: createdAppointmentIds } } });
@@ -276,43 +232,9 @@ describe("Addendum + Immutability Enforcement", () => {
       },
     });
     createdChartIds.push(chart.id);
-    const card = await prisma.treatmentCard.create({
-      data: {
-        chartId: chart.id,
-        templateType: "Injectable",
-        title: "Test Card",
-        narrativeText: "Original narrative",
-        structuredData: "{}",
-        sortOrder: 0,
-      },
-    });
 
-    return { encounter, chart, card, appointment };
+    return { encounter, chart, appointment };
   }
-
-  // ---- Immutability: Treatment Card ----
-
-  it("Cannot update treatment card after encounter is finalized", async () => {
-    const { card } = await createFinalizedEncounter(provider.id);
-    const result = await testUpdateTreatmentCard(
-      card.id,
-      { narrativeText: "Modified after finalize" },
-      provider
-    );
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("Encounter finalized. Changes require addendum.");
-  });
-
-  it("Cannot update treatment card structuredData after encounter is finalized", async () => {
-    const { card } = await createFinalizedEncounter(provider.id);
-    const result = await testUpdateTreatmentCard(
-      card.id,
-      { structuredData: '{"productName":"Botox"}' },
-      provider
-    );
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("finalized");
-  });
 
   // ---- Immutability: Media Upload ----
 

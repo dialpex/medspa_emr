@@ -34,10 +34,6 @@ async function testExportPdf(
       chart: {
         include: {
           photos: { where: { deletedAt: null } },
-          treatmentCards: {
-            orderBy: { sortOrder: "asc" },
-            include: { photos: { where: { deletedAt: null } } },
-          },
         },
       },
     },

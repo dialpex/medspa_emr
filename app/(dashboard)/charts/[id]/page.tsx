@@ -82,7 +82,7 @@ export default async function ChartDetailPage({
             </a>
           )}
           {canProviderSign && (
-            <ProviderSignButton chartId={id} treatmentCards={chart.treatmentCards} />
+            <ProviderSignButton chartId={id} />
           )}
           {canSign && <ChartSignButton chartId={id} />}
           {canCoSign && <CoSignButton chartId={id} />}

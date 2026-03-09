@@ -409,17 +409,8 @@ export async function checkOutAppointment(id: string) {
 }
 
 // ===========================================
-// BEGIN SERVICE (unified start session + create chart + treatment card)
+// BEGIN SERVICE (unified start session + create chart)
 // ===========================================
-
-function deriveTreatmentCardType(serviceCategory: string | null | undefined): "Injectable" | "Laser" | "Esthetics" | "Other" {
-  if (!serviceCategory) return "Other";
-  const lower = serviceCategory.toLowerCase();
-  if (lower.includes("injectable") || lower.includes("filler") || lower.includes("neurotoxin")) return "Injectable";
-  if (lower.includes("laser") || lower.includes("energy")) return "Laser";
-  if (lower.includes("esthetic") || lower.includes("skin treatment") || lower.includes("peel") || lower.includes("microneedling")) return "Esthetics";
-  return "Other";
-}
 
 export async function beginService(appointmentId: string): Promise<{
   success: boolean;
@@ -436,7 +427,7 @@ export async function beginService(appointmentId: string): Promise<{
     where: { id: appointmentId, clinicId: user.clinicId, deletedAt: null },
     include: {
       service: { select: { category: true } },
-      chart: { select: { id: true, treatmentCards: { select: { id: true } } } },
+      chart: { select: { id: true } },
       encounter: { select: { id: true, chart: { select: { id: true } } } },
     },
   });
@@ -451,8 +442,6 @@ export async function beginService(appointmentId: string): Promise<{
   if (apt.status !== "CheckedIn") {
     return { success: false, error: "Patient must be checked in first" };
   }
-
-  const templateType = deriveTreatmentCardType(apt.service?.category);
 
   const result = await prisma.$transaction(async (tx) => {
     // 1. Transition appointment to InProgress
@@ -477,43 +466,18 @@ export async function beginService(appointmentId: string): Promise<{
     }
 
     // 3. Create Chart with encounterId + dual-write legacy fields
-    let chart = apt.chart ?? encounter.chart;
-    if (!chart) {
-      const newChart = await tx.chart.create({
-        data: {
-          clinicId: user.clinicId,
-          encounterId: encounter.id,
-          // Dual-write legacy fields
-          patientId: apt.patientId,
-          appointmentId: appointmentId,
-          createdById: user.id,
-          status: "Draft",
-        },
-        include: { treatmentCards: { select: { id: true } } },
-      });
-      chart = newChart;
-    }
+    const chart = apt.chart ?? encounter.chart ?? await tx.chart.create({
+      data: {
+        clinicId: user.clinicId,
+        encounterId: encounter.id,
+        patientId: apt.patientId,
+        appointmentId: appointmentId,
+        createdById: user.id,
+        status: "Draft",
+      },
+    });
 
-    // 4. Create initial TreatmentCard if none exists
-    const treatmentCards = 'treatmentCards' in chart ? (chart as { treatmentCards: { id: string }[] }).treatmentCards : [];
-    let treatmentCardId: string | null = null;
-    if (treatmentCards.length === 0) {
-      const card = await tx.treatmentCard.create({
-        data: {
-          chartId: chart.id,
-          templateType,
-          title: templateType,
-          narrativeText: "",
-          structuredData: "{}",
-          sortOrder: 0,
-        },
-      });
-      treatmentCardId = card.id;
-    } else {
-      treatmentCardId = treatmentCards[0].id;
-    }
-
-    // 5. Audit log
+    // 4. Audit log
     await tx.auditLog.create({
       data: {
         clinicId: user.clinicId,
@@ -525,7 +489,6 @@ export async function beginService(appointmentId: string): Promise<{
           appointmentId,
           encounterId: encounter.id,
           chartId: chart.id,
-          treatmentCardId,
         }),
       },
     });

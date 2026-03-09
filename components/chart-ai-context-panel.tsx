@@ -91,14 +91,6 @@ export function ChartAiContextPanel({
                     year: "numeric",
                   })}
                 </p>
-                {previousTreatment.cards.map((card, i) => (
-                  <p key={i} className="text-xs text-gray-700">
-                    <span className="font-medium">{card.title}</span>
-                    {card.details !== "No details" && (
-                      <span className="text-gray-500"> — {card.details}</span>
-                    )}
-                  </p>
-                ))}
               </div>
             ) : (
               <p className="text-xs text-gray-400 italic">

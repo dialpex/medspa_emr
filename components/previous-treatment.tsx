@@ -28,16 +28,6 @@ export function PreviousTreatment({ data }: PreviousTreatmentProps) {
         <ClockIcon className="size-4" />
         Previous Treatment — {formattedDate}
       </div>
-      <div className="space-y-1">
-        {data.cards.map((card, i) => (
-          <p key={i} className="text-sm text-gray-600">
-            <span className="font-medium">{card.title}</span>
-            {card.details !== "No details" && (
-              <span className="text-gray-500"> — {card.details}</span>
-            )}
-          </p>
-        ))}
-      </div>
     </div>
   );
 }

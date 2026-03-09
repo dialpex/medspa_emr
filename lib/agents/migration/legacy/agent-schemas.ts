@@ -215,20 +215,10 @@ export const FORM_CLASSIFICATION_SCHEMA = {
                 anyOf: [
                   {
                     type: "object",
-                    required: ["chiefComplaint", "templateType", "treatmentCardTitle", "narrativeText", "structuredData"],
+                    required: ["chiefComplaint"],
                     additionalProperties: false,
                     properties: {
                       chiefComplaint: { type: "string" },
-                      templateType: {
-                        type: "string",
-                        enum: ["Injectable", "Laser", "Esthetics", "Other"],
-                      },
-                      treatmentCardTitle: { type: "string" },
-                      narrativeText: { type: "string" },
-                      structuredData: {
-                        type: "object",
-                        additionalProperties: true,
-                      },
                     },
                   },
                   { type: "null" },
@@ -297,10 +287,6 @@ export interface FormClassificationResponse {
     reasoning: string;
     chartData: {
       chiefComplaint: string;
-      templateType: "Injectable" | "Laser" | "Esthetics" | "Other";
-      treatmentCardTitle: string;
-      narrativeText: string;
-      structuredData: Record<string, unknown>;
     } | null;
   }>;
 }

@@ -69,12 +69,6 @@ function classifyByHeuristic(
         reasoning: `Template name "${f.templateName}" matches clinical chart pattern`,
         chartData: {
           chiefComplaint: f.templateName,
-          templateType: "Other" as const,
-          treatmentCardTitle: f.templateName,
-          narrativeText: f.fields
-            ?.map((field) => `${field.label}: ${field.value || field.selectedOptions?.join(", ") || "N/A"}`)
-            .join("\n") || "",
-          structuredData: {},
         },
       };
     }
@@ -157,9 +151,7 @@ describe("Form classification heuristics", () => {
     const results = classifyByHeuristic(forms);
     expect(results[0].classification).toBe("clinical_chart");
     expect(results[0].chartData).not.toBeNull();
-    expect(results[0].chartData!.templateType).toBe("Other");
-    expect(results[0].chartData!.narrativeText).toContain("Treatment Type");
-    expect(results[0].chartData!.narrativeText).toContain("Botox");
+    expect(results[0].chartData!.chiefComplaint).toBeTruthy();
   });
 
   it("classifies internal admin forms as skip", () => {
@@ -258,10 +250,10 @@ describe("Mock provider — form classification integration", () => {
 
     // Clinical chart should have chartData
     expect(charts[0].chartData).not.toBeNull();
-    expect(charts[0].chartData!.narrativeText).toContain("Treatment Type");
+    expect(charts[0].chartData!.chiefComplaint).toBeTruthy();
   });
 
-  it("clinical chart chartData includes field content from mock", async () => {
+  it("clinical chart chartData includes chiefComplaint from mock", async () => {
     const fields = await provider.fetchFormContent!(credentials, "mock-form-5");
     const form: SourceForm & { fields?: FormFieldContent[] } = {
       sourceId: "mock-form-5",
@@ -273,9 +265,7 @@ describe("Mock provider — form classification integration", () => {
 
     const [result] = classifyByHeuristic([form]);
     expect(result.classification).toBe("clinical_chart");
-    expect(result.chartData!.narrativeText).toContain("Botox");
-    expect(result.chartData!.narrativeText).toContain("Forehead");
-    expect(result.chartData!.narrativeText).toContain("20");
+    expect(result.chartData!.chiefComplaint).toBe("Dermalier Patient Treatment Chart");
   });
 });
 
@@ -308,6 +298,6 @@ describe("Forms without content gracefully handled", () => {
 
     const results = classifyByHeuristic(forms);
     expect(results[0].classification).toBe("clinical_chart");
-    expect(results[0].chartData!.narrativeText).toBe("");
+    expect(results[0].chartData!.chiefComplaint).toBe("Treatment Assessment Chart");
   });
 });

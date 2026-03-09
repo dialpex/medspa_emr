@@ -426,19 +426,6 @@ ${JSON.stringify(
         name.includes("clinical") ||
         name.includes("assessment")
       ) {
-        const dataFields = f.fields?.filter((fld) =>
-          fld.type !== "heading" && fld.type !== "signature" && fld.type !== "image"
-        ) || [];
-
-        const narrativeLines: string[] = [];
-        for (const fld of dataFields) {
-          if (!fld.value && (!fld.selectedOptions || fld.selectedOptions.length === 0)) continue;
-          const val = fld.selectedOptions?.length
-            ? fld.selectedOptions.join(", ")
-            : fld.value || "";
-          if (val) narrativeLines.push(`${fld.label}: ${val}`);
-        }
-
         return {
           formSourceId: f.sourceId,
           classification: "clinical_chart" as const,
@@ -446,10 +433,6 @@ ${JSON.stringify(
           reasoning: `Template name "${f.templateName}" matches clinical chart pattern`,
           chartData: {
             chiefComplaint: f.templateName,
-            templateType: "Other" as const,
-            treatmentCardTitle: f.templateName,
-            narrativeText: narrativeLines.join("\n"),
-            structuredData: {},
           },
         };
       }

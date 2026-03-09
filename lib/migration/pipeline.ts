@@ -1181,7 +1181,7 @@ async function importForms(
           }
 
           if (formClassification === "clinical_chart" && cls?.chartData) {
-            // Import as Chart + TreatmentCard
+            // Import as Chart
             const chartData = cls.chartData;
 
             // Resolve appointment if available
@@ -1197,7 +1197,7 @@ async function importForms(
 
             // Build structured template values from form fields
             let templateId: string | undefined;
-            let additionalNotes: string | null = chartData.narrativeText || null;
+            let additionalNotes: string | null = null;
 
             if (tmplInfo && form.fields) {
               templateId = tmplInfo.chartTemplateId;
@@ -1329,22 +1329,14 @@ async function importForms(
             }
 
             if (existingChart) {
-              // Add treatment card to existing chart
-              await prisma.treatmentCard.create({
-                data: {
-                  chartId: existingChart.id,
-                  templateType: chartData.templateType as "Injectable" | "Laser" | "Esthetics" | "Other",
-                  title: chartData.treatmentCardTitle,
-                  narrativeText: chartData.narrativeText,
-                  structuredData: JSON.stringify(chartData.structuredData),
-                },
-              });
-
-              // Update existing chart with template link if we have one
-              if (templateId) {
+              // Update existing chart with template link and notes if we have them
+              if (templateId || additionalNotes) {
                 await prisma.chart.update({
                   where: { id: existingChart.id },
-                  data: { templateId, additionalNotes },
+                  data: {
+                    ...(templateId ? { templateId } : {}),
+                    ...(additionalNotes ? { additionalNotes } : {}),
+                  },
                 });
               }
 
@@ -1353,7 +1345,7 @@ async function importForms(
               await logMigration(
                 job.id, "Form", form.sourceId, existingChart.id,
                 "imported",
-                `Clinical form "${form.templateName}" added as treatment card to existing chart${templateId ? " (with template)" : ""}`,
+                `Clinical form "${form.templateName}" merged into existing chart${templateId ? " (with template)" : ""}`,
                 undefined, form.rawData
               );
             } else {
@@ -1375,27 +1367,17 @@ async function importForms(
                 },
               });
 
-              await prisma.treatmentCard.create({
-                data: {
-                  chartId: newChart.id,
-                  templateType: chartData.templateType as "Injectable" | "Laser" | "Esthetics" | "Other",
-                  title: chartData.treatmentCardTitle,
-                  narrativeText: chartData.narrativeText,
-                  structuredData: JSON.stringify(chartData.structuredData),
-                },
-              });
-
               await createEntityMap(job.id, "Form", form.sourceId, newChart.id);
               progress.Consent.imported++;
               await logMigration(
                 job.id, "Form", form.sourceId, newChart.id,
                 "imported",
-                `Clinical form "${form.templateName}" imported as chart with treatment card (${chartData.templateType})${templateId ? " — linked to auto-generated template" : ""}`,
+                `Clinical form "${form.templateName}" imported as chart${templateId ? " — linked to auto-generated template" : ""}`,
                 undefined, form.rawData
               );
               await appendAgentLog(
                 job.id,
-                `Created chart from clinical form "${form.templateName}" (${chartData.templateType})${templateId ? " with template" : ""}`
+                `Created chart from clinical form "${form.templateName}"${templateId ? " with template" : ""}`
               );
             }
             continue;

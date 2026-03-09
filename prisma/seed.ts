@@ -24,9 +24,8 @@ async function main() {
   await prisma.membershipPlan.deleteMany();
   await prisma.patientConsent.deleteMany();
   await prisma.consentTemplate.deleteMany();
-  await prisma.aiDraftEvent.deleteMany();
   await prisma.photo.deleteMany();
-  await prisma.treatmentCard.deleteMany();
+
   await prisma.chart.deleteMany();
   await prisma.addendum.deleteMany();
   await prisma.encounter.deleteMany();
@@ -1212,25 +1211,6 @@ By signing below, I confirm my consent to proceed with treatment.`,
       recordHash: "sha256:mon1_cosigned_hash_demo",
     },
   });
-  await prisma.treatmentCard.create({
-    data: {
-      chartId: chartMon1.id,
-      templateType: "Injectable",
-      title: "Injectable",
-      narrativeText: "Botox 20 units to forehead. 5 injection points evenly distributed. No adverse reactions.",
-      structuredData: JSON.stringify({
-        productName: "Botox",
-        areas: ["Forehead"],
-        totalUnits: 20,
-        lotEntries: [{ lot: "C3456A", expiration: "2026-06-15", units: 20 }],
-        outcome: "Patient tolerated well",
-        followUpPlan: "Return in 3-4 months",
-        aftercare: "Avoid lying down for 4 hours. No strenuous exercise for 24 hours.",
-      }),
-      sortOrder: 0,
-    },
-  });
-
   // Encounter Mon-2: Lisa C / Juvederm Lips / provider2 → Finalized, MDSigned (direct)
   const encounterMon2 = await prisma.encounter.create({
     data: {
@@ -1263,25 +1243,6 @@ By signing below, I confirm my consent to proceed with treatment.`,
       recordHash: "sha256:mon2_direct_hash_demo",
     },
   });
-  await prisma.treatmentCard.create({
-    data: {
-      chartId: chartMon2.id,
-      templateType: "Injectable",
-      title: "Injectable",
-      narrativeText: "Juvederm Ultra XC 1 syringe to lips. Serial puncture and linear threading. Natural enhancement achieved.",
-      structuredData: JSON.stringify({
-        productName: "Juvederm Ultra XC",
-        areas: ["Upper lip", "Lower lip", "Vermillion border"],
-        totalUnits: 0,
-        lotEntries: [{ lot: "J7890B", expiration: "2026-08-20", syringes: 1 }],
-        outcome: "Natural enhancement, good symmetry",
-        followUpPlan: "Return in 2 weeks for follow-up",
-        aftercare: "Ice as needed. Avoid hot beverages for 24 hours.",
-      }),
-      sortOrder: 0,
-    },
-  });
-
   // Encounter Mon-3: Amanda T / Sculptra / provider2 → Finalized, MDSigned (direct)
   const encounterMon3 = await prisma.encounter.create({
     data: {
@@ -1314,25 +1275,6 @@ By signing below, I confirm my consent to proceed with treatment.`,
       recordHash: "sha256:mon3_direct_hash_demo",
     },
   });
-  await prisma.treatmentCard.create({
-    data: {
-      chartId: chartMon3.id,
-      templateType: "Injectable",
-      title: "Injectable",
-      narrativeText: "Sculptra 2 vials. Deep dermal/subcutaneous fanning technique to cheeks, temples, jawline.",
-      structuredData: JSON.stringify({
-        productName: "Sculptra",
-        areas: ["Cheeks", "Temples", "Jawline"],
-        totalUnits: 0,
-        lotEntries: [{ lot: "S2345C", expiration: "2026-12-01", vials: 2 }],
-        outcome: "Good volume distribution",
-        followUpPlan: "Session 3 in 6 weeks",
-        aftercare: "Massage 5 min, 5x daily for 5 days",
-      }),
-      sortOrder: 0,
-    },
-  });
-
   // ── TUESDAY: Mix of pending review and finalized ──
 
   // Encounter Tue-1: Michael J / Botox Forehead / NP → PendingReview (MD Review queue)
@@ -1365,25 +1307,6 @@ By signing below, I confirm my consent to proceed with treatment.`,
       providerSignedById: provider1.id,
     },
   });
-  await prisma.treatmentCard.create({
-    data: {
-      chartId: chartTue1.id,
-      templateType: "Injectable",
-      title: "Injectable",
-      narrativeText: "Botox 20 units to forehead. First time patient, tolerated well.",
-      structuredData: JSON.stringify({
-        productName: "Botox",
-        areas: ["Forehead"],
-        totalUnits: 20,
-        lotEntries: [{ lot: "C3456A", expiration: "2026-06-15", units: 20 }],
-        outcome: "Tolerated well, no adverse reactions",
-        followUpPlan: "Return in 2 weeks for follow-up, then 3-4 months",
-        aftercare: "Avoid lying down for 4 hours. No exercise for 24 hours.",
-      }),
-      sortOrder: 0,
-    },
-  });
-
   // Encounter Tue-2: David M / Microneedling / provider2 → Finalized, MDSigned (direct)
   const encounterTue2 = await prisma.encounter.create({
     data: {
@@ -1416,23 +1339,6 @@ By signing below, I confirm my consent to proceed with treatment.`,
       recordHash: "sha256:tue2_direct_hash_demo",
     },
   });
-  await prisma.treatmentCard.create({
-    data: {
-      chartId: chartTue2.id,
-      templateType: "Esthetics",
-      title: "Esthetics",
-      narrativeText: "Full face microneedling at 1.5mm depth. HA serum applied. Good skin response.",
-      structuredData: JSON.stringify({
-        areasTreated: "Full face",
-        productsUsed: "Hyaluronic acid serum",
-        skinResponse: "Mild erythema, expected to resolve 24-48 hours",
-        outcome: "Good treatment response",
-        aftercare: "Avoid sun 48 hours. Gentle cleanser only.",
-      }),
-      sortOrder: 0,
-    },
-  });
-
   // Encounter Tue-3: Amanda T / Juvederm Voluma Cheeks / NP → PendingReview (MD Review queue)
   const encounterTue3 = await prisma.encounter.create({
     data: {
@@ -1463,25 +1369,6 @@ By signing below, I confirm my consent to proceed with treatment.`,
       providerSignedById: provider1.id,
     },
   });
-  await prisma.treatmentCard.create({
-    data: {
-      chartId: chartTue3.id,
-      templateType: "Injectable",
-      title: "Injectable",
-      narrativeText: "Juvederm Voluma XC 2 syringes to cheeks. Deep fanning technique. Excellent projection.",
-      structuredData: JSON.stringify({
-        productName: "Juvederm Voluma XC",
-        areas: ["Right cheek", "Left cheek"],
-        totalUnits: 0,
-        lotEntries: [{ lot: "V4567D", expiration: "2026-10-15", syringes: 2 }],
-        outcome: "Excellent cheek projection, symmetry verified",
-        followUpPlan: "Return in 2 weeks for assessment",
-        aftercare: "Ice 10 min every hour for 4 hours. No strenuous activity 24 hours.",
-      }),
-      sortOrder: 0,
-    },
-  });
-
   // ── TODAY (Wednesday): Robert D completed, Sarah K & Kevin B in-progress ──
 
   // Encounter Wed-1: Robert D / Chemical Peel / provider1 → Finalized, MDSigned (done early)
@@ -1515,23 +1402,6 @@ By signing below, I confirm my consent to proceed with treatment.`,
       recordHash: "sha256:wed1_direct_hash_demo",
     },
   });
-  await prisma.treatmentCard.create({
-    data: {
-      chartId: chartWed1.id,
-      templateType: "Esthetics",
-      title: "Esthetics",
-      narrativeText: "Light glycolic peel 30%, 3-minute contact time. Good tolerance.",
-      structuredData: JSON.stringify({
-        areasTreated: "Full face",
-        productsUsed: "Glycolic acid 30%",
-        skinResponse: "Mild erythema, good tolerance",
-        outcome: "Successful peel",
-        aftercare: "SPF 50 mandatory. No exfoliants for 7 days.",
-      }),
-      sortOrder: 0,
-    },
-  });
-
   // Encounter Wed-2: Sarah K / Botox Crow's Feet / NP → Draft (InProgress)
   const encounterWed2 = await prisma.encounter.create({
     data: {
@@ -1554,25 +1424,6 @@ By signing below, I confirm my consent to proceed with treatment.`,
       chiefComplaint: "Crow's feet treatment",
     },
   });
-  await prisma.treatmentCard.create({
-    data: {
-      chartId: chartWed2.id,
-      templateType: "Injectable",
-      title: "Injectable",
-      narrativeText: "",
-      structuredData: JSON.stringify({
-        productName: "",
-        areas: [],
-        totalUnits: 0,
-        lotEntries: [],
-        outcome: "",
-        followUpPlan: "",
-        aftercare: "",
-      }),
-      sortOrder: 0,
-    },
-  });
-
   // Encounter Wed-3: Kevin B / IPL Photofacial / provider2 → Draft (InProgress)
   const encounterWed3 = await prisma.encounter.create({
     data: {
@@ -1594,23 +1445,6 @@ By signing below, I confirm my consent to proceed with treatment.`,
       chiefComplaint: "IPL for sun damage and redness",
     },
   });
-  await prisma.treatmentCard.create({
-    data: {
-      chartId: chartWed3.id,
-      templateType: "Laser",
-      title: "Laser",
-      narrativeText: "",
-      structuredData: JSON.stringify({
-        deviceName: "",
-        areasTreated: [],
-        parameters: { energy: "", passes: 0 },
-        outcome: "",
-        aftercare: "",
-      }),
-      sortOrder: 0,
-    },
-  });
-
   // Chart: Standalone Draft — Michael J / provider1 (partial injectable card for AI draft testing)
   const chartStandalone = await prisma.chart.create({
     data: {
@@ -1622,25 +1456,6 @@ By signing below, I confirm my consent to proceed with treatment.`,
       additionalNotes: "Patient interested in starting preventative treatments. Discussed options.",
     },
   });
-  await prisma.treatmentCard.create({
-    data: {
-      chartId: chartStandalone.id,
-      templateType: "Injectable",
-      title: "Injectable",
-      narrativeText: "",
-      structuredData: JSON.stringify({
-        productName: "Botox",
-        areas: [],
-        totalUnits: 0,
-        lotEntries: [],
-        outcome: "",
-        followUpPlan: "",
-        aftercare: "",
-      }),
-      sortOrder: 0,
-    },
-  });
-
   console.log("Created encounters + charts (3 MDSigned Mon, 1 MDSigned Tue, 2 NeedsSignOff Tue, 1 MDSigned Wed, 2 Draft Wed, 1 standalone Draft)");
 
   // ===========================================

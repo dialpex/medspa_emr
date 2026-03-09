@@ -22,17 +22,7 @@ function generateRecordHash(chart: {
   dosageUnits: string | null;
   aftercareNotes: string | null;
   additionalNotes: string | null;
-  treatmentCards?: Array<{
-    narrativeText: string;
-    structuredData: string;
-    sortOrder: number;
-  }>;
 }): string {
-  const cards = (chart.treatmentCards ?? [])
-    .slice()
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((c) => ({ narrative: c.narrativeText, structured: c.structuredData }));
-
   const content = JSON.stringify({
     id: chart.id,
     chiefComplaint: chart.chiefComplaint,
@@ -41,7 +31,6 @@ function generateRecordHash(chart: {
     dosageUnits: chart.dosageUnits,
     aftercareNotes: chart.aftercareNotes,
     additionalNotes: chart.additionalNotes,
-    treatmentCards: cards,
   });
   return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
@@ -59,7 +48,6 @@ async function testProviderSign(
     where: { id: chartId },
     include: {
       encounter: { select: { id: true, status: true } },
-      treatmentCards: { orderBy: { sortOrder: "asc" } },
     },
   });
 
@@ -80,7 +68,7 @@ async function testProviderSign(
   });
 
   const signedAt = new Date();
-  const recordHash = generateRecordHash({ ...chart, treatmentCards: chart.treatmentCards });
+  const recordHash = generateRecordHash(chart);
 
   if (fullUser?.requiresMDReview) {
     await prisma.$transaction(async (tx) => {
@@ -186,42 +174,6 @@ async function testUpdateChart(
   return { success: true };
 }
 
-// Inline updateTreatmentCard test variant
-async function testUpdateTreatmentCard(
-  cardId: string,
-  data: { narrativeText?: string },
-  user: TestUser
-): Promise<{ success: boolean; error?: string }> {
-  if (!hasPermission(user.role, "charts", "edit")) {
-    return { success: false, error: `Permission denied: ${user.role} cannot edit charts` };
-  }
-
-  const card = await prisma.treatmentCard.findUnique({
-    where: { id: cardId },
-    include: {
-      chart: {
-        select: { id: true, clinicId: true, status: true, encounter: { select: { status: true } } },
-      },
-    },
-  });
-  if (!card) return { success: false, error: "Treatment card not found" };
-  if (user.clinicId !== card.chart.clinicId) {
-    return { success: false, error: "Access denied" };
-  }
-
-  const isDraft = card.chart.encounter
-    ? card.chart.encounter.status === "Draft"
-    : card.chart.status === "Draft";
-  if (!isDraft) {
-    return { success: false, error: "Cannot edit treatment cards on a non-draft chart" };
-  }
-
-  const updateData: { narrativeText?: string } = {};
-  if (data.narrativeText !== undefined) updateData.narrativeText = data.narrativeText;
-  await prisma.treatmentCard.update({ where: { id: cardId }, data: updateData });
-  return { success: true };
-}
-
 // Inline coSign test variant
 async function testCoSign(
   chartId: string,
@@ -235,7 +187,6 @@ async function testCoSign(
     where: { id: chartId },
     include: {
       encounter: { select: { id: true, status: true } },
-      treatmentCards: { orderBy: { sortOrder: "asc" } },
     },
   });
   if (!chart) return { success: false, error: "Chart not found" };
@@ -255,7 +206,7 @@ async function testCoSign(
   }
 
   const signedAt = new Date();
-  const recordHash = generateRecordHash({ ...chart, treatmentCards: chart.treatmentCards });
+  const recordHash = generateRecordHash(chart);
 
   await prisma.$transaction(async (tx) => {
     await tx.chart.update({
@@ -307,7 +258,6 @@ describe("MD Review + Co-sign", () => {
   const createdAppointmentIds: string[] = [];
   const createdEncounterIds: string[] = [];
   const createdChartIds: string[] = [];
-  const createdTreatmentCardIds: string[] = [];
   const createdClinicIds: string[] = [];
   const createdUserIds: string[] = [];
 
@@ -342,7 +292,6 @@ describe("MD Review + Co-sign", () => {
   afterAll(async () => {
     // Clean up in FK-safe order
     await prisma.auditLog.deleteMany({ where: { entityId: { in: createdChartIds } } });
-    await prisma.treatmentCard.deleteMany({ where: { id: { in: createdTreatmentCardIds } } });
     await prisma.chart.deleteMany({ where: { id: { in: createdChartIds } } });
     await prisma.encounter.deleteMany({ where: { id: { in: createdEncounterIds } } });
     await prisma.appointment.deleteMany({ where: { id: { in: createdAppointmentIds } } });
@@ -449,32 +398,6 @@ describe("MD Review + Co-sign", () => {
     const result = await testUpdateChart(
       chart.id,
       { chiefComplaint: "Should be blocked" },
-      npProvider
-    );
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("non-draft");
-  });
-
-  it("After NP provider sign (PendingReview), treatment card updates are rejected", async () => {
-    const { chart } = await createDraftChartWithEncounter(npProvider.id);
-
-    const card = await prisma.treatmentCard.create({
-      data: {
-        chartId: chart.id,
-        templateType: "Injectable",
-        title: "Test Card",
-        narrativeText: "original",
-        structuredData: "{}",
-        sortOrder: 0,
-      },
-    });
-    createdTreatmentCardIds.push(card.id);
-
-    await testProviderSign(chart.id, npProvider);
-
-    const result = await testUpdateTreatmentCard(
-      card.id,
-      { narrativeText: "Should be blocked" },
       npProvider
     );
     expect(result.success).toBe(false);

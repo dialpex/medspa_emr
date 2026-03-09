@@ -8,7 +8,6 @@ import {
   type AuthenticatedUser,
 } from "@/lib/rbac";
 import { createHash } from "crypto";
-import { validateTreatmentCard } from "@/lib/templates/validation";
 import { revalidatePath } from "next/cache";
 
 export interface ChartUpdateInput {
@@ -39,17 +38,7 @@ function generateRecordHash(chart: {
 
   aftercareNotes: string | null;
   additionalNotes: string | null;
-  treatmentCards?: Array<{
-    narrativeText: string;
-    structuredData: string;
-    sortOrder: number;
-  }>;
 }): string {
-  const cards = (chart.treatmentCards ?? [])
-    .slice()
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((c) => ({ narrative: c.narrativeText, structured: c.structuredData }));
-
   const content = JSON.stringify({
     id: chart.id,
     chiefComplaint: chart.chiefComplaint,
@@ -59,7 +48,6 @@ function generateRecordHash(chart: {
 
     aftercareNotes: chart.aftercareNotes,
     additionalNotes: chart.additionalNotes,
-    treatmentCards: cards,
   });
   return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
@@ -177,15 +165,6 @@ export async function getChartWithPhotos(chartId: string) {
       photos: {
         where: { deletedAt: null },
         orderBy: { createdAt: "asc" },
-      },
-      treatmentCards: {
-        orderBy: { sortOrder: "asc" },
-        include: {
-          photos: {
-            where: { deletedAt: null },
-            orderBy: { createdAt: "asc" },
-          },
-        },
       },
       appointment: {
         select: { startTime: true, service: { select: { name: true } } },
@@ -320,90 +299,6 @@ export async function updateChart(
         entityType: "Chart",
         entityId: chartId,
         details: JSON.stringify({ fields: Object.keys(data) }),
-      },
-    });
-
-    return { success: true };
-  } catch (error) {
-    if (error instanceof AuthorizationError) {
-      return { success: false, error: error.message };
-    }
-    throw error;
-  }
-}
-
-/**
- * Update a treatment card's narrative text
- */
-export async function updateTreatmentCard(
-  cardId: string,
-  data: { narrativeText?: string; structuredData?: string }
-): Promise<ActionResult> {
-  try {
-    const user = await requirePermission("charts", "edit");
-
-    const card = await prisma.treatmentCard.findUnique({
-      where: { id: cardId },
-      include: {
-        chart: {
-          select: {
-            id: true,
-            clinicId: true,
-            status: true,
-            encounter: { select: { status: true } },
-          },
-        },
-      },
-    });
-
-    if (!card) {
-      return { success: false, error: "Treatment card not found" };
-    }
-
-    enforceTenantIsolation(user, card.chart.clinicId);
-
-    // Check encounter status when available, fall back to chart status
-    const isDraft = card.chart.encounter
-      ? card.chart.encounter.status === "Draft"
-      : card.chart.status === "Draft";
-    if (!isDraft) {
-      const isFinalized = card.chart.encounter
-        ? card.chart.encounter.status === "Finalized"
-        : card.chart.status === "MDSigned";
-      return {
-        success: false,
-        error: isFinalized
-          ? "Encounter finalized. Changes require addendum."
-          : "Cannot edit treatment cards on a non-draft chart",
-      };
-    }
-
-    // Validate structuredData is parseable JSON when provided
-    if (data.structuredData !== undefined) {
-      try {
-        JSON.parse(data.structuredData);
-      } catch {
-        return { success: false, error: "Invalid JSON in structuredData" };
-      }
-    }
-
-    const updateData: { narrativeText?: string; structuredData?: string } = {};
-    if (data.narrativeText !== undefined) updateData.narrativeText = data.narrativeText;
-    if (data.structuredData !== undefined) updateData.structuredData = data.structuredData;
-
-    await prisma.treatmentCard.update({
-      where: { id: cardId },
-      data: updateData,
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "ChartUpdate",
-        entityType: "TreatmentCard",
-        entityId: cardId,
-        details: JSON.stringify({ chartId: card.chart.id, fields: Object.keys(data) }),
       },
     });
 
@@ -749,7 +644,6 @@ async function _providerSign(
     where: { id: chartId },
     include: {
       encounter: { select: { id: true, status: true } },
-      treatmentCards: { orderBy: { sortOrder: "asc" } },
     },
   });
 
@@ -775,27 +669,6 @@ async function _providerSign(
     };
   }
 
-  // Validate all treatment cards
-  const blockingErrors: Array<{ cardId: string; cardTitle: string; missingFields: string[] }> = [];
-  for (const card of chart.treatmentCards) {
-    const result = validateTreatmentCard(card.templateType, card.structuredData);
-    if (result.isSignBlocking) {
-      blockingErrors.push({
-        cardId: card.id,
-        cardTitle: card.title,
-        missingFields: result.missingHighRiskFields,
-      });
-    }
-  }
-
-  if (blockingErrors.length > 0) {
-    return {
-      success: false,
-      error: "High-risk fields are incomplete on one or more treatment cards",
-      data: { blockingErrors },
-    };
-  }
-
   // Load full user record to check supervision requirement
   const fullUser = await prisma.user.findUnique({
     where: { id: user.id },
@@ -803,7 +676,7 @@ async function _providerSign(
   });
 
   const signedAt = new Date();
-  const recordHash = generateRecordHash({ ...chart, treatmentCards: chart.treatmentCards });
+  const recordHash = generateRecordHash(chart);
 
   if (fullUser?.requiresMDReview) {
     // Supervised provider: submit for MD review
@@ -887,61 +760,6 @@ async function _providerSign(
 }
 
 /**
- * Test variant of updateTreatmentCard — bypasses session-based auth.
- */
-export async function updateTreatmentCardWithUser(
-  cardId: string,
-  data: { narrativeText?: string; structuredData?: string },
-  user: AuthenticatedUser
-): Promise<ActionResult> {
-  const { hasPermission, enforceTenantIsolation: enforce } = await import("@/lib/rbac");
-  if (!hasPermission(user.role, "charts", "edit")) {
-    return { success: false, error: `Permission denied: ${user.role} cannot edit charts` };
-  }
-
-  const card = await prisma.treatmentCard.findUnique({
-    where: { id: cardId },
-    include: {
-      chart: {
-        select: { id: true, clinicId: true, status: true, encounter: { select: { status: true } } },
-      },
-    },
-  });
-
-  if (!card) return { success: false, error: "Treatment card not found" };
-
-  enforce(user, card.chart.clinicId);
-
-  const isDraft = card.chart.encounter
-    ? card.chart.encounter.status === "Draft"
-    : card.chart.status === "Draft";
-  if (!isDraft) {
-    const isFinalized = card.chart.encounter
-      ? card.chart.encounter.status === "Finalized"
-      : card.chart.status === "MDSigned";
-    return {
-      success: false,
-      error: isFinalized
-        ? "Encounter finalized. Changes require addendum."
-        : "Cannot edit treatment cards on a non-draft chart",
-    };
-  }
-
-  if (data.structuredData !== undefined) {
-    try { JSON.parse(data.structuredData); } catch {
-      return { success: false, error: "Invalid JSON in structuredData" };
-    }
-  }
-
-  const updateData: { narrativeText?: string; structuredData?: string } = {};
-  if (data.narrativeText !== undefined) updateData.narrativeText = data.narrativeText;
-  if (data.structuredData !== undefined) updateData.structuredData = data.structuredData;
-
-  await prisma.treatmentCard.update({ where: { id: cardId }, data: updateData });
-  return { success: true };
-}
-
-/**
  * MD Co-sign — transitions PendingReview/NeedsSignOff → Finalized/MDSigned
  * Only allowed for users with chart sign permission (MedicalDirector, Owner, Admin)
  */
@@ -979,7 +797,6 @@ async function _coSign(
     where: { id: chartId },
     include: {
       encounter: { select: { id: true, status: true } },
-      treatmentCards: { orderBy: { sortOrder: "asc" } },
     },
   });
 
@@ -1003,7 +820,7 @@ async function _coSign(
   }
 
   const signedAt = new Date();
-  const recordHash = generateRecordHash({ ...chart, treatmentCards: chart.treatmentCards });
+  const recordHash = generateRecordHash(chart);
 
   await prisma.$transaction(async (tx) => {
     await tx.chart.update({
@@ -1053,11 +870,6 @@ async function _coSign(
 export interface PreviousTreatmentSummary {
   chartId: string;
   date: Date;
-  cards: Array<{
-    title: string;
-    templateType: string;
-    details: string;
-  }>;
 }
 
 export async function getPreviousTreatment(
@@ -1077,16 +889,6 @@ export async function getPreviousTreatment(
       ],
     },
     orderBy: { updatedAt: "desc" },
-    include: {
-      treatmentCards: {
-        orderBy: { sortOrder: "asc" },
-        select: {
-          title: true,
-          templateType: true,
-          structuredData: true,
-        },
-      },
-    },
   });
 
   if (!chart) return null;
@@ -1094,41 +896,5 @@ export async function getPreviousTreatment(
   return {
     chartId: chart.id,
     date: chart.updatedAt,
-    cards: chart.treatmentCards.map((card) => ({
-      title: card.title,
-      templateType: card.templateType,
-      details: summarizeStructuredData(card.templateType, card.structuredData),
-    })),
   };
-}
-
-function summarizeStructuredData(templateType: string, structuredData: string): string {
-  try {
-    const data = JSON.parse(structuredData);
-    switch (templateType) {
-      case "Injectable": {
-        const parts: string[] = [];
-        if (data.product) parts.push(data.product);
-        if (data.areas && data.totalUnits) parts.push(`${data.areas} ${data.totalUnits}u`);
-        else if (data.areas) parts.push(data.areas);
-        return parts.join(" — ") || "No details";
-      }
-      case "Laser": {
-        const parts: string[] = [];
-        if (data.device) parts.push(data.device);
-        if (data.areas) parts.push(data.areas);
-        return parts.join(" — ") || "No details";
-      }
-      case "Esthetics": {
-        const parts: string[] = [];
-        if (data.treatmentType) parts.push(data.treatmentType);
-        if (data.areas) parts.push(data.areas);
-        return parts.join(" — ") || "No details";
-      }
-      default:
-        return "No details";
-    }
-  } catch {
-    return "No details";
-  }
 }

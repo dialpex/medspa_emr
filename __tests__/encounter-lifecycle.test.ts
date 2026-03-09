@@ -13,17 +13,6 @@ interface TestUser {
   clinicId: string;
 }
 
-function deriveTreatmentCardType(
-  serviceCategory: string | null | undefined
-): "Injectable" | "Laser" | "Esthetics" | "Other" {
-  if (!serviceCategory) return "Other";
-  const lower = serviceCategory.toLowerCase();
-  if (lower.includes("injectable") || lower.includes("filler")) return "Injectable";
-  if (lower.includes("laser")) return "Laser";
-  if (lower.includes("esthetic") || lower.includes("peel")) return "Esthetics";
-  return "Other";
-}
-
 // Inline beginService
 async function testBeginService(
   appointmentId: string,
@@ -40,7 +29,7 @@ async function testBeginService(
     where: { id: appointmentId, clinicId: user.clinicId, deletedAt: null },
     include: {
       service: { select: { category: true } },
-      chart: { select: { id: true, treatmentCards: { select: { id: true } } } },
+      chart: { select: { id: true } },
       encounter: { select: { id: true, chart: { select: { id: true } } } },
     },
   });
@@ -54,8 +43,6 @@ async function testBeginService(
   if (apt.status !== "CheckedIn") {
     return { success: false, error: "Patient must be checked in first" };
   }
-
-  const templateType = deriveTreatmentCardType(apt.service?.category);
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.appointment.update({
@@ -81,17 +68,6 @@ async function testBeginService(
         appointmentId,
         createdById: user.id,
         status: "Draft",
-      },
-    });
-
-    await tx.treatmentCard.create({
-      data: {
-        chartId: chart.id,
-        templateType,
-        title: templateType,
-        narrativeText: "",
-        structuredData: "{}",
-        sortOrder: 0,
       },
     });
 
@@ -225,7 +201,6 @@ describe("Encounter Lifecycle", () => {
   afterAll(async () => {
     for (const cId of createdClinicIds) {
       await prisma.auditLog.deleteMany({ where: { clinicId: cId } });
-      await prisma.treatmentCard.deleteMany({ where: { chart: { clinicId: cId } } });
       await prisma.chart.deleteMany({ where: { clinicId: cId } });
       await prisma.encounter.deleteMany({ where: { clinicId: cId } });
       await prisma.appointment.deleteMany({ where: { clinicId: cId } });

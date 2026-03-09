@@ -12,29 +12,6 @@ interface TestUser {
   clinicId: string;
 }
 
-// Map service category -> TreatmentCardType (mirrors deriveTreatmentCardType in today.ts)
-function deriveTreatmentCardType(
-  serviceCategory: string | null | undefined
-): "Injectable" | "Laser" | "Esthetics" | "Other" {
-  if (!serviceCategory) return "Other";
-  const lower = serviceCategory.toLowerCase();
-  if (
-    lower.includes("injectable") ||
-    lower.includes("filler") ||
-    lower.includes("neurotoxin")
-  )
-    return "Injectable";
-  if (lower.includes("laser") || lower.includes("energy")) return "Laser";
-  if (
-    lower.includes("esthetic") ||
-    lower.includes("skin treatment") ||
-    lower.includes("peel") ||
-    lower.includes("microneedling")
-  )
-    return "Esthetics";
-  return "Other";
-}
-
 // Inline test version of beginService to avoid Next.js session dependencies
 async function testBeginService(
   appointmentId: string,
@@ -56,7 +33,7 @@ async function testBeginService(
     include: {
       service: { select: { category: true } },
       chart: {
-        select: { id: true, treatmentCards: { select: { id: true } } },
+        select: { id: true },
       },
       encounter: { select: { id: true, chart: { select: { id: true } } } },
     },
@@ -72,8 +49,6 @@ async function testBeginService(
   if (apt.status !== "CheckedIn") {
     return { success: false, error: "Patient must be checked in first" };
   }
-
-  const templateType = deriveTreatmentCardType(apt.service?.category);
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.appointment.update({
@@ -108,27 +83,8 @@ async function testBeginService(
           createdById: user.id,
           status: "Draft",
         },
-        include: { treatmentCards: { select: { id: true } } },
       });
       chart = newChart;
-    }
-
-    const treatmentCards = 'treatmentCards' in chart ? (chart as { treatmentCards: { id: string }[] }).treatmentCards : [];
-    let treatmentCardId: string | null = null;
-    if (treatmentCards.length === 0) {
-      const card = await tx.treatmentCard.create({
-        data: {
-          chartId: chart.id,
-          templateType,
-          title: templateType,
-          narrativeText: "",
-          structuredData: "{}",
-          sortOrder: 0,
-        },
-      });
-      treatmentCardId = card.id;
-    } else {
-      treatmentCardId = treatmentCards[0].id;
     }
 
     await tx.auditLog.create({
@@ -142,7 +98,6 @@ async function testBeginService(
           appointmentId,
           encounterId: encounter.id,
           chartId: chart.id,
-          treatmentCardId,
         }),
       },
     });
@@ -172,7 +127,6 @@ describe("Begin Service", () => {
       await prisma.auditLog.deleteMany({ where: { clinicId: cId } });
       await prisma.photo.deleteMany({ where: { clinicId: cId } });
       await prisma.addendum.deleteMany({ where: { clinicId: cId } });
-      await prisma.treatmentCard.deleteMany({ where: { chart: { clinicId: cId } } });
       await prisma.chart.deleteMany({ where: { clinicId: cId } });
       await prisma.encounter.deleteMany({ where: { clinicId: cId } });
       await prisma.appointment.deleteMany({ where: { clinicId: cId } });
@@ -300,7 +254,7 @@ describe("Begin Service", () => {
     consultationServiceId = consultSvc.id;
   });
 
-  it("should create encounter, chart and treatment card on begin service", async () => {
+  it("should create encounter and chart on begin service", async () => {
     const apt = await prisma.appointment.create({
       data: {
         clinicId: clinic.id,
@@ -332,13 +286,10 @@ describe("Begin Service", () => {
     // Verify chart exists with encounterId
     const chart = await prisma.chart.findUnique({
       where: { id: result.data!.chartId },
-      include: { treatmentCards: true },
     });
     expect(chart).not.toBeNull();
     expect(chart!.status).toBe("Draft");
     expect(chart!.encounterId).toBe(encounter!.id);
-    expect(chart!.treatmentCards).toHaveLength(1);
-    expect(chart!.treatmentCards[0].templateType).toBe("Injectable");
 
     // Verify appointment transitioned
     const updated = await prisma.appointment.findUnique({
@@ -370,7 +321,7 @@ describe("Begin Service", () => {
     expect(result2.data?.chartId).toBe(result1.data?.chartId);
     expect(result2.data?.encounterId).toBe(result1.data?.encounterId);
 
-    // Verify only one encounter, one chart, one treatment card
+    // Verify only one encounter, one chart
     const encounters = await prisma.encounter.findMany({
       where: { appointmentId: apt.id },
     });
@@ -378,10 +329,8 @@ describe("Begin Service", () => {
 
     const charts = await prisma.chart.findMany({
       where: { appointmentId: apt.id },
-      include: { treatmentCards: true },
     });
     expect(charts).toHaveLength(1);
-    expect(charts[0].treatmentCards).toHaveLength(1);
   });
 
   it("should allow FrontDesk to begin service but deny Billing", async () => {
@@ -458,49 +407,4 @@ describe("Begin Service", () => {
     expect(result.error).toBe("Patient must be checked in first");
   });
 
-  it("should derive template type from service category", async () => {
-    // Injectable service → Injectable card type
-    const apt1 = await prisma.appointment.create({
-      data: {
-        clinicId: clinic.id,
-        patientId,
-        providerId: providerUser.id,
-        serviceId: injectableServiceId, // category: "Injectables"
-        startTime: new Date(),
-        endTime: new Date(Date.now() + 30 * 60000),
-        status: "CheckedIn",
-        checkedInAt: new Date(),
-      },
-    });
-
-    const result1 = await testBeginService(apt1.id, providerUser);
-    expect(result1.success).toBe(true);
-    const chart1 = await prisma.chart.findUnique({
-      where: { id: result1.data!.chartId },
-      include: { treatmentCards: true },
-    });
-    expect(chart1!.treatmentCards[0].templateType).toBe("Injectable");
-
-    // Consultation service → Other card type
-    const apt2 = await prisma.appointment.create({
-      data: {
-        clinicId: clinic.id,
-        patientId,
-        providerId: providerUser.id,
-        serviceId: consultationServiceId, // category: "Consultation"
-        startTime: new Date(),
-        endTime: new Date(Date.now() + 30 * 60000),
-        status: "CheckedIn",
-        checkedInAt: new Date(),
-      },
-    });
-
-    const result2 = await testBeginService(apt2.id, providerUser);
-    expect(result2.success).toBe(true);
-    const chart2 = await prisma.chart.findUnique({
-      where: { id: result2.data!.chartId },
-      include: { treatmentCards: true },
-    });
-    expect(chart2!.treatmentCards[0].templateType).toBe("Other");
-  });
 });

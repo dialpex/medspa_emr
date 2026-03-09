@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldCheckIcon, Loader2Icon, AlertCircleIcon, CheckCircleIcon } from "lucide-react";
+import { ShieldCheckIcon, Loader2Icon, CheckCircleIcon } from "lucide-react";
 import { signChart, providerSignChart, coSignChart } from "@/lib/actions/charts";
-import { validateTreatmentCard } from "@/lib/templates/validation";
 
 export function ChartSignButton({ chartId }: { chartId: string }) {
   const router = useRouter();
@@ -55,45 +54,14 @@ export function ChartSignButton({ chartId }: { chartId: string }) {
   );
 }
 
-interface TreatmentCardInfo {
-  id: string;
-  templateType: string;
-  title: string;
-  structuredData: string;
-}
-
-export function ProviderSignButton({
-  chartId,
-  treatmentCards,
-}: {
-  chartId: string;
-  treatmentCards: TreatmentCardInfo[];
-}) {
+export function ProviderSignButton({ chartId }: { chartId: string }) {
   const router = useRouter();
   const [signing, setSigning] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [blockingCards, setBlockingCards] = useState<
-    Array<{ cardTitle: string; missingFields: string[] }>
-  >([]);
 
   const handleSign = async () => {
     setError(null);
-    setBlockingCards([]);
-
-    // Client-side validation first
-    const blocking: Array<{ cardTitle: string; missingFields: string[] }> = [];
-    for (const card of treatmentCards) {
-      const result = validateTreatmentCard(card.templateType, card.structuredData);
-      if (result.isSignBlocking) {
-        blocking.push({ cardTitle: card.title, missingFields: result.missingHighRiskFields });
-      }
-    }
-
-    if (blocking.length > 0) {
-      setBlockingCards(blocking);
-      return;
-    }
 
     if (!confirming) {
       setConfirming(true);
@@ -107,11 +75,6 @@ export function ProviderSignButton({
       router.refresh();
     } else {
       setError(result.error ?? "Failed to sign chart");
-      // Check for server-side blocking errors
-      const data = result.data as { blockingErrors?: Array<{ cardTitle: string; missingFields: string[] }> } | undefined;
-      if (data?.blockingErrors) {
-        setBlockingCards(data.blockingErrors);
-      }
     }
     setSigning(false);
     setConfirming(false);
@@ -146,25 +109,8 @@ export function ProviderSignButton({
         )}
       </div>
 
-      {error && !blockingCards.length && (
+      {error && (
         <p className="text-sm text-red-600">{error}</p>
-      )}
-
-      {blockingCards.length > 0 && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg space-y-1">
-          <p className="text-sm font-medium text-red-700 flex items-center gap-1.5">
-            <AlertCircleIcon className="size-4" />
-            Cannot sign — high-risk fields incomplete:
-          </p>
-          <ul className="text-sm text-red-600 ml-6 list-disc space-y-0.5">
-            {blockingCards.map((card) => (
-              <li key={card.cardTitle}>
-                <span className="font-medium">{card.cardTitle}:</span>{" "}
-                {card.missingFields.join(", ")}
-              </li>
-            ))}
-          </ul>
-        </div>
       )}
     </div>
   );

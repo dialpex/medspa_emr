@@ -9,7 +9,6 @@ import {
 export async function createPhotoRecord(data: {
   patientId: string;
   chartId?: string;
-  treatmentCardId?: string;
   filename: string;
   storagePath: string;
   mimeType: string;
@@ -35,27 +34,11 @@ export async function createPhotoRecord(data: {
         }
       }
     }
-    if (data.treatmentCardId) {
-      const card = await prisma.treatmentCard.findUnique({
-        where: { id: data.treatmentCardId },
-        select: { chart: { select: { encounter: { select: { status: true } }, status: true } } },
-      });
-      if (card) {
-        const isFinalized = card.chart.encounter
-          ? card.chart.encounter.status === "Finalized"
-          : card.chart.status === "MDSigned";
-        if (isFinalized) {
-          return { success: false as const, error: "Encounter finalized. Changes require addendum." };
-        }
-      }
-    }
-
     const photo = await prisma.photo.create({
       data: {
         clinicId: user.clinicId,
         patientId: data.patientId,
         chartId: data.chartId,
-        treatmentCardId: data.treatmentCardId,
         takenById: user.id,
         filename: data.filename,
         storagePath: data.storagePath,
@@ -94,13 +77,12 @@ export async function updatePhotoAnnotations(id: string, annotations: string) {
       where: { id, clinicId: user.clinicId, deletedAt: null },
       include: {
         chart: { select: { encounter: { select: { status: true } }, status: true } },
-        treatmentCard: { select: { chart: { select: { encounter: { select: { status: true } }, status: true } } } },
       },
     });
     if (!photo) return { success: false as const, error: "Photo not found" };
 
     // Immutability: reject annotation updates on finalized encounters
-    const chartRef = photo.chart ?? photo.treatmentCard?.chart;
+    const chartRef = photo.chart;
     if (chartRef) {
       const isFinalized = chartRef.encounter
         ? chartRef.encounter.status === "Finalized"
@@ -143,13 +125,12 @@ export async function deletePhoto(id: string) {
       where: { id, clinicId: user.clinicId, deletedAt: null },
       include: {
         chart: { select: { encounter: { select: { status: true } }, status: true } },
-        treatmentCard: { select: { chart: { select: { encounter: { select: { status: true } }, status: true } } } },
       },
     });
     if (!photo) return { success: false as const, error: "Photo not found" };
 
     // Immutability: reject deletion on finalized encounters
-    const chartRef = photo.chart ?? photo.treatmentCard?.chart;
+    const chartRef = photo.chart;
     if (chartRef) {
       const isFinalized = chartRef.encounter
         ? chartRef.encounter.status === "Finalized"
@@ -213,17 +194,3 @@ export async function getPhotosForChart(chartId: string) {
   return photos;
 }
 
-export async function getPhotosForTreatmentCard(cardId: string) {
-  const user = await requirePermission("photos", "view");
-
-  const card = await prisma.treatmentCard.findUnique({
-    where: { id: cardId },
-    select: { chart: { select: { clinicId: true } } },
-  });
-  if (!card || card.chart.clinicId !== user.clinicId) return [];
-
-  return prisma.photo.findMany({
-    where: { treatmentCardId: cardId, deletedAt: null },
-    orderBy: { createdAt: "asc" },
-  });
-}

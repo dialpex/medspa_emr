@@ -47,15 +47,8 @@ Classification signals:
 - Form template names containing "chart", "treatment", "procedure", "clinical", "assessment", "evaluation" → clinical_chart
 - Internal forms, admin-only forms → skip
 
-For forms classified as **clinical_chart**, extract structured data into chartData:
+For forms classified as **clinical_chart**, extract chart data:
 - chiefComplaint: Brief summary of the treatment (e.g., "Botox - Forehead and Glabella")
-- templateType: One of "Injectable", "Laser", "Esthetics", "Other" based on the treatment type
-- treatmentCardTitle: Specific treatment card name (e.g., "Botox 20 units - Forehead")
-- narrativeText: Full treatment narrative from form content
-- structuredData: Structured treatment data matching Neuvvia schemas:
-  - For Injectable: { areas: [{ name, units, product, lotNumber }], totalUnits, complications }
-  - For Laser: { device, settings: { energy, pulseWidth, spotSize }, areas: [{ name, passes }], complications }
-  - For Esthetics: { treatment, duration, products: [{ name, amount }], areas: [{ name }], complications }
 
 For non-clinical_chart classifications, set chartData to null.
 

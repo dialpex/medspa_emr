@@ -85,12 +85,8 @@ export const ENHANCED_CLASSIFICATION_SYSTEM_PROMPT = `You are a MedSpa data migr
 {vendorContext}
 
 ## For clinical_chart Classifications
-Extract structured chart data:
-- chiefComplaint: Brief treatment summary
-- templateType: "Injectable" | "Laser" | "Esthetics" | "Other"
-- treatmentCardTitle: Specific treatment card name
-- narrativeText: Full treatment narrative from form field content
-- structuredData: {} (structured data extraction happens later)
+Extract chart data:
+- chiefComplaint: Brief treatment summary (e.g., "Botox - Forehead and Glabella")
 
 For non-clinical classifications, set chartData to null.
 

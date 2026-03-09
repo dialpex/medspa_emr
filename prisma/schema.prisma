@@ -424,13 +424,6 @@ model Addendum {
   @@index([clinicId])
 }
 
-enum TreatmentCardType {
-  Injectable
-  Laser
-  Esthetics
-  Other
-}
-
 model ChartTemplate {
   id           String   @id @default(cuid())
   clinicId     String
@@ -494,54 +487,11 @@ model Chart {
   createdBy   User?          @relation("ChartCreator", fields: [createdById], references: [id])
   signedBy    User?          @relation("ChartSigner", fields: [signedById], references: [id])
   photos      Photo[]
-  treatmentCards TreatmentCard[]
 
   @@index([clinicId])
   @@index([patientId])
   @@index([status])
   @@index([createdById])
-}
-
-model TreatmentCard {
-  id             String            @id @default(cuid())
-  chartId        String
-  templateType   TreatmentCardType @default(Other)
-  title          String
-  narrativeText  String            @default("")
-  structuredData String            @default("{}") // JSON string
-  sortOrder      Int               @default(0)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-
-  chart          Chart          @relation(fields: [chartId], references: [id])
-  photos         Photo[]
-  aiDraftEvents  AiDraftEvent[]
-
-  @@index([chartId])
-}
-
-model AiDraftEvent {
-  id                 String    @id @default(cuid())
-  clinicId           String
-  treatmentCardId    String
-  kind               String    @default("TYPED")
-  inputSummaryText   String    @default("")
-  audioUrl           String?
-  transcriptText     String?
-  modelInfo          String    @default("{}")
-  structuredPatch    String    @default("{}")
-  narrativeDraftText String    @default("")
-  missingHighRisk    String    @default("[]")
-  conflicts          String    @default("[]")
-  warnings           String    @default("[]")
-  appliedAt          DateTime?
-  createdById        String
-  createdAt          DateTime  @default(now())
-
-  treatmentCard TreatmentCard @relation(fields: [treatmentCardId], references: [id])
-
-  @@index([treatmentCardId])
-  @@index([clinicId])
 }
 
 // ===========================================
@@ -553,7 +503,6 @@ model Photo {
   clinicId        String
   patientId       String
   chartId         String?
-  treatmentCardId String?
   takenById       String
   filename        String
   storagePath     String   // Path in storage system
@@ -570,13 +519,11 @@ model Photo {
   clinic        Clinic         @relation(fields: [clinicId], references: [id])
   patient       Patient        @relation(fields: [patientId], references: [id])
   chart         Chart?         @relation(fields: [chartId], references: [id])
-  treatmentCard TreatmentCard? @relation(fields: [treatmentCardId], references: [id])
   takenBy       User           @relation(fields: [takenById], references: [id])
 
   @@index([clinicId])
   @@index([patientId])
   @@index([chartId])
-  @@index([treatmentCardId])
 }
 
 // ===========================================

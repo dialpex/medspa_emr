@@ -31,61 +31,12 @@ function hasClinicalFields(fields?: FormFieldContent[]): boolean {
   );
 }
 
-/** Labels that indicate demographics/connected fields — skip from narrative */
-const DEMOGRAPHIC_LABEL_PATTERNS = [
-  /\bfirst\s*name\b/i,
-  /\blast\s*name\b/i,
-  /\bdate\s*of\s*birth\b/i,
-  /\bdob\b/i,
-  /^age$/i,
-  /\bemail\b/i,
-  /\bphone\b/i,
-  /\bgender\b/i,
-  /\bsex\b/i,
-  /\baddress\b/i,
-  /^city$/i,
-  /^state$/i,
-  /\bzip\s*(code)?\b/i,
-  /\bpostal\b/i,
-];
-
-function isDemographicField(field: FormFieldContent): boolean {
-  // Connected fields are always demographics
-  if (field.type === "connected_text" || field.type === "connected_date") return true;
-  if (field.connectedFieldName) return true;
-  // Label-based detection
-  return DEMOGRAPHIC_LABEL_PATTERNS.some((p) => p.test(field.label));
-}
-
 /**
- * Build chart data from form fields for clinical_chart classification.
- * Skips demographics and connected fields — only includes actual clinical content.
+ * Build chart data for clinical_chart classification.
  */
 function buildChartData(form: FormWithFields): Classification["chartData"] {
-  const dataFields =
-    form.fields?.filter(
-      (f) =>
-        f.type !== "heading" &&
-        f.type !== "signature" &&
-        f.type !== "image" &&
-        !isDemographicField(f)
-    ) || [];
-
-  const narrativeLines: string[] = [];
-  for (const fld of dataFields) {
-    if (!fld.value && (!fld.selectedOptions || fld.selectedOptions.length === 0)) continue;
-    const val = fld.selectedOptions?.length
-      ? fld.selectedOptions.join(", ")
-      : fld.value || "";
-    if (val) narrativeLines.push(`${fld.label}: ${val}`);
-  }
-
   return {
     chiefComplaint: form.templateName,
-    templateType: "Other" as const,
-    treatmentCardTitle: form.templateName,
-    narrativeText: narrativeLines.join("\n"),
-    structuredData: {},
   };
 }
 

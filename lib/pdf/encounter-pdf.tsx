@@ -4,22 +4,12 @@
 import React from "react";
 import { Document, Page, View, Text, Image } from "@react-pdf/renderer";
 import { styles } from "./pdf-styles";
-import { StructuredTable } from "./structured-tables";
 
 interface PhotoBuffer {
   id: string;
   buffer: Buffer;
   caption: string | null;
   category: string | null;
-}
-
-interface TreatmentCardData {
-  id: string;
-  title: string;
-  templateType: string;
-  narrativeText: string;
-  structuredData: string;
-  photos: PhotoBuffer[];
 }
 
 interface AddendumData {
@@ -40,7 +30,6 @@ interface EncounterPdfData {
   finalizedAt: string | null;
   chiefComplaint: string | null;
   additionalNotes: string | null;
-  treatmentCards: TreatmentCardData[];
   chartPhotos: PhotoBuffer[];
   providerSignedBy: string | null;
   providerSignedAt: string | null;
@@ -109,73 +98,7 @@ export function EncounterDocument({ data }: { data: EncounterPdfData }) {
           </View>
         )}
 
-        {/* Section 2: Treatment Cards */}
-        {data.treatmentCards.length > 0 && (
-          <View>
-            <Text style={styles.sectionTitle}>Treatment Cards</Text>
-            {data.treatmentCards.map((card) => (
-              <View key={card.id} style={{ marginBottom: 12 }} wrap={false}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      fontFamily: "Helvetica-Bold",
-                    }}
-                  >
-                    {card.title}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.badge,
-                      {
-                        backgroundColor: "#ede9fe",
-                        color: "#6d28d9",
-                      },
-                    ]}
-                  >
-                    {card.templateType}
-                  </Text>
-                </View>
-
-                {card.narrativeText && (
-                  <Text style={styles.narrative}>{card.narrativeText}</Text>
-                )}
-
-                <StructuredTable
-                  templateType={card.templateType}
-                  structuredData={card.structuredData}
-                />
-
-                {card.photos.length > 0 && (
-                  <View style={{ marginTop: 6 }}>
-                    {card.photos.map((photo) => (
-                      <View key={photo.id} style={styles.photoContainer}>
-                        <Image
-                          src={{ data: photo.buffer, format: "png" }}
-                          style={styles.photo}
-                        />
-                        {photo.caption && (
-                          <Text style={styles.photoCaption}>
-                            {photo.caption}
-                          </Text>
-                        )}
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Section 3: Chart-level photos */}
+        {/* Section 2: Clinical Photos */}
         {data.chartPhotos.length > 0 && (
           <View>
             <Text style={styles.sectionTitle}>Clinical Photos</Text>

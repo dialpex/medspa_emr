@@ -16,7 +16,6 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     const patientId = formData.get("patientId") as string | null;
     const chartId = formData.get("chartId") as string | null;
-    const treatmentCardId = formData.get("treatmentCardId") as string | null;
     const category = formData.get("category") as string | null;
     const caption = formData.get("caption") as string | null;
 
@@ -69,23 +68,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Verify treatment card exists and belongs to a chart in the user's clinic
-    if (treatmentCardId) {
-      const card = await prisma.treatmentCard.findUnique({
-        where: { id: treatmentCardId },
-        select: { chart: { select: { clinicId: true, status: true, encounter: { select: { status: true } } } } },
-      });
-      if (!card || card.chart.clinicId !== user.clinicId) {
-        return NextResponse.json({ error: "Treatment card not found" }, { status: 404 });
-      }
-      const isFinalized = card.chart.encounter
-        ? card.chart.encounter.status === "Finalized"
-        : card.chart.status === "MDSigned";
-      if (isFinalized) {
-        return NextResponse.json({ error: "Encounter finalized. Changes require addendum." }, { status: 400 });
-      }
-    }
-
     const fileId = generateId();
     const ext = file.type === "image/png" ? ".png" : ".jpg";
     const filename = `${fileId}${ext}`;
@@ -102,7 +84,6 @@ export async function POST(request: NextRequest) {
         clinicId: user.clinicId,
         patientId,
         chartId,
-        treatmentCardId,
         takenById: user.id,
         filename: file.name,
         storagePath,
@@ -120,7 +101,7 @@ export async function POST(request: NextRequest) {
         action: "PhotoUpload",
         entityType: "Photo",
         entityId: photo.id,
-        details: JSON.stringify({ patientId, chartId, treatmentCardId }),
+        details: JSON.stringify({ patientId, chartId }),
       },
     });
 

@@ -57,15 +57,6 @@ export async function GET(
               where: { deletedAt: null },
               orderBy: { createdAt: "asc" },
             },
-            treatmentCards: {
-              orderBy: { sortOrder: "asc" },
-              include: {
-                photos: {
-                  where: { deletedAt: null },
-                  orderBy: { createdAt: "asc" },
-                },
-              },
-            },
             signedBy: { select: { name: true } },
             providerSignedBy: { select: { name: true } },
           },
@@ -111,34 +102,12 @@ export async function GET(
     // 7. Composite all photos
     const chartPhotos = await Promise.all(
       chart.photos
-        .filter((p) => !p.treatmentCardId)
         .map(async (p) => ({
           id: p.id,
           buffer: await compositePhotoWithAnnotations(p.storagePath, p.annotations),
           caption: p.caption,
           category: p.category,
         }))
-    );
-
-    const treatmentCards = await Promise.all(
-      chart.treatmentCards.map(async (card) => ({
-        id: card.id,
-        title: card.title,
-        templateType: card.templateType,
-        narrativeText: card.narrativeText,
-        structuredData: card.structuredData,
-        photos: await Promise.all(
-          card.photos.map(async (p) => ({
-            id: p.id,
-            buffer: await compositePhotoWithAnnotations(
-              p.storagePath,
-              p.annotations
-            ),
-            caption: p.caption,
-            category: p.category,
-          }))
-        ),
-      }))
     );
 
     const generatedAt = new Date().toISOString();
@@ -177,7 +146,6 @@ export async function GET(
       finalizedAt: formatDate(encounter.finalizedAt),
       chiefComplaint: chart.chiefComplaint,
       additionalNotes: chart.additionalNotes,
-      treatmentCards,
       chartPhotos,
       providerSignedBy: chart.providerSignedBy?.name ?? null,
       providerSignedAt: formatDate(chart.providerSignedAt),

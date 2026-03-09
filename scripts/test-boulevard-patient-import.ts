@@ -839,28 +839,10 @@ async function main() {
         name.includes("chart") || name.includes("treatment") || name.includes("procedure") ||
         name.includes("clinical") || name.includes("assessment")
       ) {
-        // Build rich narrative from form fields (format-agnostic)
-        const dataFields = f.fields?.filter((fld) =>
-          fld.type !== "heading" && fld.type !== "signature" && fld.type !== "image"
-        ) || [];
-
-        const narrativeLines: string[] = [];
-        for (const fld of dataFields) {
-          if (!fld.value && (!fld.selectedOptions || fld.selectedOptions.length === 0)) continue;
-          const val = fld.selectedOptions?.length
-            ? fld.selectedOptions.join(", ")
-            : fld.value || "";
-          if (val) narrativeLines.push(`${fld.label}: ${val}`);
-        }
-
         return {
           classification: "clinical_chart" as const,
           chartData: {
             chiefComplaint: f.templateName,
-            templateType: "Other" as const,
-            treatmentCardTitle: f.templateName,
-            narrativeText: narrativeLines.join("\n"),
-            structuredData: {},
           },
         };
       }
@@ -883,33 +865,22 @@ async function main() {
         }
 
         if (classification === "clinical_chart" && chartData) {
-          // Create Chart + TreatmentCard
+          // Create Chart
           const chartDate = form.submittedAt ? new Date(form.submittedAt) : new Date();
-          const newChart = await prisma.chart.create({
+          await prisma.chart.create({
             data: {
               clinicId: clinic.id,
               patientId: patient.id,
               status: "MDSigned",
               chiefComplaint: chartData.chiefComplaint,
-              additionalNotes: chartData.narrativeText || null,
               createdById: firstUser?.id || null,
               signedAt: chartDate,
               createdAt: chartDate,
             },
           });
 
-          await prisma.treatmentCard.create({
-            data: {
-              chartId: newChart.id,
-              templateType: chartData.templateType,
-              title: chartData.treatmentCardTitle,
-              narrativeText: chartData.narrativeText,
-              structuredData: JSON.stringify(chartData.structuredData),
-            },
-          });
-
           chartCount++;
-          console.log(`    → Created Chart + TreatmentCard (${chartData.templateType})`);
+          console.log(`    → Created Chart`);
           continue;
         }
 
@@ -1044,7 +1015,6 @@ async function main() {
     photos: await prisma.photo.count({ where: { patientId: patient.id } }),
     consents: await prisma.patientConsent.count({ where: { patientId: patient.id } }),
     charts: await prisma.chart.count({ where: { patientId: patient.id } }),
-    treatmentCards: await prisma.treatmentCard.count({ where: { chart: { patientId: patient.id } } }),
     documents: await prisma.patientDocument.count({ where: { patientId: patient.id } }),
   };
 
@@ -1053,7 +1023,7 @@ async function main() {
   console.log(`  Medical Notes: ${memo?.text ? "Booking memo only" : "None"}`);
   console.log(`  Photo records: ${finalCounts.photos} (storage/photos/)`);
   console.log(`  Consent records: ${finalCounts.consents} (ConsentTemplate + PatientConsent)`);
-  console.log(`  Chart records: ${finalCounts.charts} (Chart + ${finalCounts.treatmentCards} TreatmentCards)`);
+  console.log(`  Chart records: ${finalCounts.charts}`);
   console.log(`  Document records: ${finalCounts.documents} (storage/documents/)`);
 
   await prisma.$disconnect();

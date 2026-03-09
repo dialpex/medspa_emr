@@ -95,8 +95,8 @@ describe("HIGH_CONFIDENCE_PATTERNS", () => {
 });
 
 describe("CLINICAL_FIELD_INDICATORS", () => {
-  it("detects 'units' as clinical indicator", () => {
-    const matches = CLINICAL_FIELD_INDICATORS.some((p) => p.test("Total Units"));
+  it("detects 'units injected' as clinical indicator", () => {
+    const matches = CLINICAL_FIELD_INDICATORS.some((p) => p.test("Units Injected"));
     expect(matches).toBe(true);
   });
 
@@ -105,8 +105,8 @@ describe("CLINICAL_FIELD_INDICATORS", () => {
     expect(matches).toBe(true);
   });
 
-  it("detects 'device' as clinical indicator", () => {
-    const matches = CLINICAL_FIELD_INDICATORS.some((p) => p.test("Device Used"));
+  it("detects 'device serial' as clinical indicator", () => {
+    const matches = CLINICAL_FIELD_INDICATORS.some((p) => p.test("Device Serial Number"));
     expect(matches).toBe(true);
   });
 
@@ -115,8 +115,8 @@ describe("CLINICAL_FIELD_INDICATORS", () => {
     expect(matches).toBe(true);
   });
 
-  it("detects 'complications' as clinical indicator", () => {
-    const matches = CLINICAL_FIELD_INDICATORS.some((p) => p.test("Post-Treatment Complications"));
+  it("detects 'dilution' as clinical indicator", () => {
+    const matches = CLINICAL_FIELD_INDICATORS.some((p) => p.test("Dilution Ratio"));
     expect(matches).toBe(true);
   });
 
