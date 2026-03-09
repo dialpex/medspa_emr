@@ -53,12 +53,21 @@ export const CLINICAL_FIELD_INDICATORS = [
 
 export const ENHANCED_CLASSIFICATION_SYSTEM_PROMPT = `You are a MedSpa data migration specialist. Classify each form into one of four categories for the target Neuvvia EMR system.
 
-## Categories
+## Categories & Pipeline Consequences
 
-1. **consent** — Consent forms, waivers, agreements, policies, HIPAA notices, authorization forms, post-care instructions
-2. **clinical_chart** — Clinical treatment forms, procedure charts, treatment records documenting what was done to the patient
-3. **intake** — Patient intake forms, medical history questionnaires, health surveys, registration forms
-4. **skip** — Internal admin forms, test forms, or forms that don't belong in the patient's medical record
+Your classification determines what happens to each form record in the pipeline. Understand the consequences:
+
+1. **consent** → Record stays as CanonicalConsent. Form data is preserved in consent templateSnapshot. Does NOT enrich the patient record.
+2. **clinical_chart** → Record is CONVERTED from CanonicalConsent to CanonicalChart. This triggers:
+   - Field type inference (AI determines which fields are text, select, textarea, etc.)
+   - Field semantic classification (each field categorized as patient_demographic, patient_medical, clinical_content, or administrative)
+   - Demographics + admin fields are FILTERED OUT of the chart template (they stay on the patient record)
+   - patient_medical fields (allergies, medicalNotes) are extracted and used to ENRICH the patient record (if empty)
+   - Only clinical_content fields survive in the chart template
+3. **intake** → Record stays as CanonicalConsent (same as consent). Form data preserved but does NOT enrich patient.
+4. **skip** → Record is DELETED entirely. Never reaches the load phase. Use only for forms that have no clinical or legal value.
+
+**Key implication**: If a form has patient demographics AND clinical data (common in MedSpas), classify as clinical_chart — the pipeline will automatically separate demographics from clinical content. If you classify it as consent, ALL fields stay together and nothing enriches the patient record.
 
 ## 5-Step Decision Tree
 

@@ -35,6 +35,7 @@ export const BOULEVARD_KNOWLEDGE: VendorKnowledge = {
     "Boulevard radio buttons are single-select despite being visually different from dropdowns.",
     "Boulevard checkbox fields may have an 'other' free-text option in addition to predefined values.",
     "Boulevard forms are versioned — the same template can have different component structures across versions.",
+    "Boulevard photo and document URLs are CDN links (e.g. https://cdn.boulevard.io/...) — map to downloadUrl, never to artifactKey.",
   ],
   signaturesAreImages: true,
   classificationHints: [

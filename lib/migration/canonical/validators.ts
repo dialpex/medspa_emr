@@ -183,8 +183,8 @@ export function validatePhoto(record: CanonicalPhoto): ValidationResult {
   if (!isNonEmpty(record.filename)) {
     errors.push({ code: V_CODES.MISSING_REQUIRED, entityType: t, canonicalId: record.canonicalId, field: "filename", message: "Photo must have a filename", severity: "error" });
   }
-  if (!isNonEmpty(record.artifactKey)) {
-    errors.push({ code: V_CODES.MISSING_REQUIRED, entityType: t, canonicalId: record.canonicalId, field: "artifactKey", message: "Photo must reference an artifact", severity: "error" });
+  if (!isNonEmpty(record.artifactKey) && !isNonEmpty(record.downloadUrl)) {
+    errors.push({ code: V_CODES.MISSING_REQUIRED, entityType: t, canonicalId: record.canonicalId, field: "artifactKey", message: "Photo must reference an artifact or have a downloadUrl", severity: "error" });
   }
 
   return { valid: errors.length === 0, errors, warnings };
@@ -201,8 +201,8 @@ export function validateDocument(record: CanonicalDocument): ValidationResult {
   if (!isNonEmpty(record.filename)) {
     errors.push({ code: V_CODES.MISSING_REQUIRED, entityType: t, canonicalId: record.canonicalId, field: "filename", message: "Document must have a filename", severity: "error" });
   }
-  if (!isNonEmpty(record.artifactKey)) {
-    errors.push({ code: V_CODES.MISSING_REQUIRED, entityType: t, canonicalId: record.canonicalId, field: "artifactKey", message: "Document must reference an artifact", severity: "error" });
+  if (!isNonEmpty(record.artifactKey) && !isNonEmpty(record.downloadUrl)) {
+    errors.push({ code: V_CODES.MISSING_REQUIRED, entityType: t, canonicalId: record.canonicalId, field: "artifactKey", message: "Document must reference an artifact or have a downloadUrl", severity: "error" });
   }
 
   return { valid: errors.length === 0, errors, warnings };

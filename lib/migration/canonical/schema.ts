@@ -116,7 +116,7 @@ export interface CanonicalPhoto {
   category?: string;
   caption?: string;
   takenAt?: string;
-  artifactKey: string; // reference to ArtifactStore binary
+  artifactKey?: string; // reference to ArtifactStore binary
   downloadUrl?: string; // vendor URL for deferred download during promote
 }
 
@@ -127,7 +127,7 @@ export interface CanonicalDocument {
   filename: string;
   mimeType?: string;
   category?: string;
-  artifactKey: string;
+  artifactKey?: string;
   downloadUrl?: string; // vendor URL for deferred download during promote
 }
 

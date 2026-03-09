@@ -20,7 +20,22 @@ IMPORTANT RULES:
 6. Any mapping with confidence < 0.8 MUST have requiresApproval: true.
 7. MAP ALL AVAILABLE FIELDS — do not skip optional fields. Every source field that has a reasonable canonical target should be mapped, especially patient demographics (email, phone, dateOfBirth, gender, address, allergies, medicalNotes, tags).
 
-CANONICAL ENTITY TYPES: patient, appointment, chart, encounter, consent, photo, document, invoice
+CANONICAL ENTITY TYPES: patient, appointment, chart, encounter, consent, photo, document, invoice, service
+
+CROSS-REFERENCE FIELDS (canonicalPatientId, canonicalAppointmentId):
+- These fields link child entities (appointments, charts, photos, consents, etc.) to their parent patient/appointment.
+- Map the source vendor's patient/appointment ID field to these (e.g., "clientId" → "canonicalPatientId", "appointmentId" → "canonicalAppointmentId").
+- During transform, source IDs are deterministically converted to canonical IDs via hash(tenantId:sourceVendor:sourceId). This means the same source ID always produces the same canonical ID, enabling cross-entity reference resolution.
+- CRITICAL: The sourceVendor key in MappingSpec is the single source of truth for canonical ID generation. ALL cross-references must use the same vendor key. Never mix vendor identifiers.
+- If you map the wrong source field to canonicalPatientId, the ENTIRE reference chain breaks silently — appointments link to wrong patients, charts to wrong patients, etc.
+
+BINARY ASSET FIELDS (photos, documents):
+- Photos and documents from vendor APIs typically have a URL pointing to a CDN or storage location.
+- ALWAYS map vendor URL fields (url, imageUrl, photoUrl, fileUrl, downloadUrl, etc.) to "downloadUrl" — NOT to "artifactKey".
+- "artifactKey" is an internal reference to our artifact store and is auto-generated during ingest. Never map a source field to "artifactKey".
+- "downloadUrl" is used during the promote phase to download the binary from the vendor and store it locally.
+- For photos: map url → downloadUrl, label/name → filename, mimeType/contentType → mimeType, taken_at → takenAt
+- For documents: map url/fileUrl → downloadUrl, fileName/name → filename, mimeType/contentType → mimeType
 
 CANONICAL PATIENT FIELDS (map ALL that have source data):
 - canonicalId (auto-generated, do not map)
@@ -41,7 +56,13 @@ CANONICAL PATIENT FIELDS (map ALL that have source data):
 - medicalNotes ← medicalNotes/notes/bookingMemo
 - tags ← tags
 
-ADDRESS FIELDS: The canonical model uses a nested address object. When source data has flat address fields (address, city, state, zip, etc.), map them using dotted target field names: "address.line1", "address.city", "address.state", "address.zip", "address.country". The transform engine will assemble these into a nested object.
+ADDRESS FIELDS: The canonical model uses a nested address object. When source data has flat address fields (address, city, state, zip, etc.), map them using dotted target field names: "address.line1", "address.city", "address.state", "address.zip", "address.country". The transform engine will assemble these into a nested object. If the same subfield is mapped twice, the last one wins.
+
+PATIENT ENRICHMENT (how demographics flow from forms):
+- Only forms classified as clinical_chart enrich the patient record (allergies, medicalNotes from form fields fill empty patient fields).
+- Consent and intake forms preserve form data but do NOT enrich the patient record.
+- If a patient's allergies or medical history exist ONLY in consent/intake forms (not in the patient entity), they will NOT auto-fill unless mapped directly on the patient entity.
+- Best practice: always map patient demographics (allergies, medicalNotes, etc.) directly on the patient entity mapping. Do not rely solely on form-level data for patient enrichment.
 
 OUTPUT FORMAT: Return a JSON object matching the MappingSpec schema:
 {
@@ -115,7 +136,8 @@ V005 (ORPHANED_REFERENCE): A record references a patient/appointment that doesn'
 
 V006 (MISSING_PATIENT_LINK): Entity missing canonicalPatientId.
   → Ensure the source field containing the patient ID/reference is mapped to canonicalPatientId.
-  → The sourceField is often "clientId", "patientId", "customerId", or similar.
+  → The sourceField is often "clientId", "patientId", "customerId", "patientSourceId", or similar.
+  → During transform, source IDs are deterministically hashed into canonical IDs — so the value you map MUST be the same ID type used in the patient entity's sourceRecordId mapping. Mismatched ID types break ALL cross-references silently.
 
 V007 (MISSING_PROVIDER): Entity missing providerName.
   → Map the provider/staff/practitioner field to providerName.
@@ -129,6 +151,11 @@ V009 (INVALID_AMOUNT): Invoice total is not a valid non-negative number.
 V010 (MISSING_LINE_ITEMS): Invoice has no line items. This is a warning. Ignore.
 
 V011 (DUPLICATE_CANONICAL_ID): Duplicate canonical ID. Usually a data issue. Cannot fix via mapping.
+
+BINARY ASSET FIELDS:
+- For photo and document entities, vendor URLs (url, imageUrl, fileUrl) MUST map to "downloadUrl", NOT "artifactKey".
+- "artifactKey" is an internal artifact store reference — never map a source field to it.
+- If photos/documents are failing with V001 on artifactKey, check if a URL field was incorrectly mapped to artifactKey and remap it to downloadUrl.
 
 RULES:
 1. Return ONLY the corrected MappingSpec as JSON.

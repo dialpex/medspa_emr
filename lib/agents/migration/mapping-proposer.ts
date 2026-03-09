@@ -167,7 +167,7 @@ export class MappingProposer {
       file_name: "filename", name: "filename",
       mime_type: "mimeType", content_type: "mimeType", mimetype: "mimeType",
       taken_at: "takenAt", takenat: "takenAt",
-      url: "artifactKey",
+      url: "downloadUrl",
       lineitems: "lineItems", line_items: "lineItems",
       address: "address.line1", street: "address.line1", address1: "address.line1",
       street_address: "address.line1", line1: "address.line1", address_line1: "address.line1",
