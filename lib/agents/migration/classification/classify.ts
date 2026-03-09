@@ -1,7 +1,7 @@
 // Enhanced form classification with two-phase pre-filter + AI.
 
 import type { SourceForm, FormFieldContent } from "@/lib/migration/providers/types";
-import type { FormClassificationResponse } from "@/lib/agents/migration/legacy/agent-schemas";
+import type { FormClassificationResponse } from "@/lib/agents/migration/types";
 import type { VendorKnowledge } from "../vendor-knowledge";
 import { getLLMProvider } from "@/lib/agents/_shared/llm";
 import { completionWithRetry } from "@/lib/agents/_shared/llm/self-healing";

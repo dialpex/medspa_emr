@@ -10,9 +10,9 @@ import { getMigrationProvider } from "@/lib/migration/providers";
 import type { MigrationCredentials } from "@/lib/migration/providers/types";
 import {
   discoverSourceData as agentDiscover,
-  proposeMappings as agentProposeMappings,
+  proposeServiceMappings as agentProposeMappings,
   generateVerificationReport as agentVerify,
-} from "@/lib/agents/migration/legacy/agent";
+} from "@/lib/agents/migration/discovery";
 import { executeMigration as runPipeline } from "@/lib/migration/pipeline";
 
 type ActionResult<T = null> =

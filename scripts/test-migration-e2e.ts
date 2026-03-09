@@ -24,7 +24,7 @@ import { randomBytes } from "crypto";
 import { BoulevardProvider } from "../lib/migration/providers/boulevard";
 import type { MigrationCredentials } from "../lib/migration/providers/types";
 import { encrypt } from "../lib/migration/crypto";
-import { discoverSourceData, proposeMappings } from "../lib/agents/migration/legacy/agent";
+import { discoverSourceData, proposeServiceMappings } from "../lib/agents/migration/discovery";
 import { executeMigration } from "../lib/migration/pipeline";
 import { prisma } from "../lib/prisma";
 
@@ -213,7 +213,7 @@ async function main() {
   console.log(`Existing Neuvvia services: ${neuvviaServices.length}`);
 
   console.log("Running AI mapping agent...");
-  const mappingResult = await proposeMappings(job, provider, neuvviaServices);
+  const mappingResult = await proposeServiceMappings(job, provider, neuvviaServices);
 
   console.log(`\nMapping results: ${mappingResult.mappings.length} services`);
   console.log(`  Auto-resolved: ${mappingResult.autoResolved}`);

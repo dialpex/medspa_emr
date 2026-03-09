@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getMappingProposal } from "@/lib/actions/migration";
 import type { MigrationJobData } from "./migration-wizard";
-import type { DiscoveryResponse } from "@/lib/agents/migration/legacy/agent-schemas";
+import type { DiscoveryResponse } from "@/lib/agents/migration/types";
 
 export function DiscoverStep({ job }: { job: MigrationJobData }) {
   const router = useRouter();
