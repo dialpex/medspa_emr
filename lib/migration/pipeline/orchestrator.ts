@@ -521,16 +521,6 @@ export class MigrationOrchestrator {
 
     const report = await executeReconcile({ runId: run.id, sourceProfile: profile, mappingSpec });
 
-    const progress = JSON.parse(run.progress || "{}");
-    await this.updateRun(run.id, {
-      status: "Completed",
-      completedAt: new Date(),
-      progress: JSON.stringify({
-        ...progress,
-        report,
-      }),
-    });
-
     // Distill knowledge from this run — the agent learns from every migration
     if (report.status !== "failed") {
       try {
@@ -587,6 +577,57 @@ export class MigrationOrchestrator {
         console.log(`[orchestrator] Knowledge distillation failed (non-critical): ${msg}`);
       }
     }
+
+    // Attach intelligence metrics to report
+    try {
+      const metrics = await this.knowledgeStore.getMetrics();
+      const vendorFacts = metrics.byVendor[run.sourceVendor] || 0;
+
+      // Count knowledge hits from audit events (classification + field analysis log lines)
+      // We approximate this from the knowledge-resolved counts logged during transform
+      const knowledgeHits = await this.countKnowledgeHits(run.id);
+
+      // Count corrections detected in this run
+      let correctionsDetected = 0;
+      if (run.mappingSpecVersion > 1) {
+        const draftSpec = await this.getDraftSpec(run.id);
+        if (draftSpec) {
+          correctionsDetected = diffMappingSpecs(
+            draftSpec as Parameters<typeof diffMappingSpecs>[0],
+            mappingSpec as Parameters<typeof diffMappingSpecs>[1]
+          ).length;
+        }
+      }
+
+      report.intelligence = {
+        totalFacts: metrics.totalFacts,
+        vendorFacts,
+        crossVendorFacts: metrics.crossVendorFacts,
+        avgConfidence: Math.round(metrics.avgConfidence * 100) / 100,
+        byType: metrics.byType,
+        correctionsDetected,
+        autoHealedErrors: metrics.autoHealedCount,
+        knowledgeHits,
+      };
+
+      console.log(
+        `[orchestrator] Intelligence: ${metrics.totalFacts} facts (${vendorFacts} vendor), ` +
+        `${knowledgeHits} knowledge hits, ${correctionsDetected} corrections`
+      );
+    } catch {
+      // Non-critical — report works without intelligence metrics
+    }
+
+    // Save report to progress
+    const progress = JSON.parse(run.progress || "{}");
+    await this.updateRun(run.id, {
+      status: "Completed",
+      completedAt: new Date(),
+      progress: JSON.stringify({
+        ...progress,
+        report,
+      }),
+    });
 
     // Persist mapping memory for cross-run learning (legacy — will be superseded by knowledge store)
     if (mappingSpec && report.status !== "failed") {
@@ -651,6 +692,42 @@ export class MigrationOrchestrator {
 
   private async updateRun(runId: string, data: Record<string, unknown>): Promise<void> {
     await prisma.migrationRun.update({ where: { id: runId }, data: data as never });
+  }
+
+  /**
+   * Count knowledge hits for this run by checking audit events
+   * for knowledge-related actions (classification, field analysis, draft mapping).
+   */
+  private async countKnowledgeHits(runId: string): Promise<number> {
+    try {
+      const knowledgeEvents = await prisma.migrationAuditEvent.findMany({
+        where: {
+          runId,
+          action: {
+            in: [
+              "KNOWLEDGE_CLASSIFICATION_HIT",
+              "KNOWLEDGE_FIELD_HIT",
+              "KNOWLEDGE_MAPPING_HIT",
+            ],
+          },
+        },
+      });
+
+      // Sum up hits from metadata
+      let total = 0;
+      for (const event of knowledgeEvents) {
+        if (event.metadata) {
+          const meta = JSON.parse(event.metadata);
+          total += meta.count || 1;
+        } else {
+          total++;
+        }
+      }
+
+      return total;
+    } catch {
+      return 0;
+    }
   }
 
   private async getDraftSpec(runId: string): Promise<unknown> {

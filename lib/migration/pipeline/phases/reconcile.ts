@@ -19,6 +19,25 @@ export interface ReconciliationEntry {
   matchRate: number; // staged / source as percentage
 }
 
+export interface IntelligenceReport {
+  /** Total facts in the knowledge store */
+  totalFacts: number;
+  /** Facts specific to this vendor */
+  vendorFacts: number;
+  /** Facts that transfer across vendors */
+  crossVendorFacts: number;
+  /** Average confidence of all facts */
+  avgConfidence: number;
+  /** Facts by knowledge type */
+  byType: Record<string, number>;
+  /** Corrections detected in this run (draft → approved diff) */
+  correctionsDetected: number;
+  /** Errors auto-healed via knowledge */
+  autoHealedErrors: number;
+  /** How many decisions were resolved from knowledge (no AI cost) */
+  knowledgeHits: number;
+}
+
 export interface MigrationReport {
   runId: string;
   completedAt: string;
@@ -30,6 +49,8 @@ export interface MigrationReport {
   overallCompleteness: number; // percentage
   unresolvedExceptions: number;
   status: "complete" | "partial" | "failed";
+  /** Agent intelligence metrics — how smart the agent was during this run */
+  intelligence?: IntelligenceReport;
 }
 
 export async function executeReconcile(
