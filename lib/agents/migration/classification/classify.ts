@@ -1,8 +1,17 @@
-// Enhanced form classification with two-phase pre-filter + AI.
+// Enhanced form classification with three-phase resolution:
+// 1. Knowledge lookup — instant, zero AI cost
+// 2. Pre-filter — heuristic patterns, zero AI cost
+// 3. AI classification — only for genuinely unknown forms
 
 import type { SourceForm, FormFieldContent } from "@/lib/migration/providers/types";
 import type { FormClassificationResponse } from "@/lib/agents/migration/types";
 import type { VendorKnowledge } from "../vendor-knowledge";
+import type { KnowledgeStore } from "../knowledge/store";
+import {
+  getClassificationKnowledge,
+  lookupFormArchetype,
+  type ClassificationKnowledge,
+} from "../knowledge/retrieval";
 import { getLLMProvider } from "@/lib/agents/_shared/llm";
 import { completionWithRetry } from "@/lib/agents/_shared/llm/self-healing";
 import {
@@ -209,27 +218,65 @@ function buildFormMetadata(form: FormWithFields) {
 }
 
 /**
- * Classify forms using a two-phase approach:
- * 1. Pre-filter: resolve unambiguous forms without AI (free)
- * 2. AI classification: send remaining ambiguous forms to LLM
+ * Classify forms using a three-phase approach:
+ * 1. Knowledge lookup: resolve forms the agent already knows (zero cost, learned from prior runs)
+ * 2. Pre-filter: resolve unambiguous forms via heuristic patterns (zero cost)
+ * 3. AI classification: only for genuinely unknown/ambiguous forms
  *
  * Falls back to full heuristic classification when no LLM is available.
- * Same return type as legacy classifyAndMapForms for drop-in replacement.
  */
 export async function classifyForms(
   forms: FormWithFields[],
-  vendorKnowledge?: VendorKnowledge | null
+  vendorKnowledge?: VendorKnowledge | null,
+  knowledgeStore?: KnowledgeStore | null
 ): Promise<FormClassificationResponse> {
   if (forms.length === 0) {
     return { classifications: [] };
   }
 
-  // Phase 1: Pre-filter
-  const [preFiltered, remaining] = preFilter(forms);
+  // Phase 0: Knowledge lookup — resolve forms the agent already knows
+  let knowledgeResolved: Classification[] = [];
+  let formsForPreFilter = forms;
 
-  // If everything was resolved in pre-filter, return early
+  if (knowledgeStore) {
+    const vendor = vendorKnowledge?.vendorName || "unknown";
+    const knowledge = await getClassificationKnowledge(knowledgeStore, vendor);
+    const resolved: Classification[] = [];
+    const unknown: FormWithFields[] = [];
+
+    for (const form of forms) {
+      const archetype = lookupFormArchetype(knowledge, form.templateName);
+      if (archetype) {
+        resolved.push({
+          formSourceId: form.sourceId,
+          classification: archetype.classification,
+          confidence: 0.9,
+          reasoning: `Known archetype from prior migrations: "${archetype.namePattern}" → ${archetype.classification}`,
+          chartData: archetype.classification === "clinical_chart" ? buildChartData(form) : null,
+        });
+      } else {
+        unknown.push(form);
+      }
+    }
+
+    if (resolved.length > 0) {
+      console.log(`[classification] Knowledge resolved ${resolved.length}/${forms.length} forms, ${unknown.length} remaining`);
+    }
+
+    knowledgeResolved = resolved;
+    formsForPreFilter = unknown;
+  }
+
+  if (formsForPreFilter.length === 0) {
+    return { classifications: knowledgeResolved };
+  }
+
+  // Phase 1: Pre-filter
+  const [preFiltered, remaining] = preFilter(formsForPreFilter);
+
+  // If everything was resolved, return early
   if (remaining.length === 0) {
-    return { classifications: preFiltered };
+    return { classifications: [...knowledgeResolved, ...preFiltered] };
   }
 
   const provider = getLLMProvider();
@@ -237,10 +284,10 @@ export async function classifyForms(
   // If no real LLM available (mock provider or unavailable), use heuristic fallback for remaining
   if (provider.name === "mock" || !provider.isAvailable()) {
     const heuristicResults = remaining.map(heuristicClassify);
-    return { classifications: [...preFiltered, ...heuristicResults] };
+    return { classifications: [...knowledgeResolved, ...preFiltered, ...heuristicResults] };
   }
 
-  // Phase 2: AI classification for ambiguous forms (batched for large sets)
+  // Phase 2: AI classification for genuinely unknown forms (batched)
   const vendorContext = buildClassificationVendorContext(vendorKnowledge?.classificationHints);
   const system = ENHANCED_CLASSIFICATION_SYSTEM_PROMPT.replace("{vendorContext}", vendorContext);
 
@@ -320,5 +367,5 @@ export async function classifyForms(
     }
   }
 
-  return { classifications: [...preFiltered, ...allAiResults] };
+  return { classifications: [...knowledgeResolved, ...preFiltered, ...allAiResults] };
 }

@@ -284,6 +284,7 @@ export class MigrationOrchestrator {
       artifacts,
       store: this.store,
       tenantId: run.clinicId,
+      knowledgeStore: this.knowledgeStore,
     });
 
     const version = run.mappingSpecVersion + 1;
@@ -332,6 +333,7 @@ export class MigrationOrchestrator {
         tenantId: run.clinicId,
         artifacts,
         mappingSpec,
+        knowledgeStore: this.knowledgeStore,
       },
       this.store
     );
@@ -421,6 +423,7 @@ export class MigrationOrchestrator {
           tenantId: run.clinicId,
           artifacts,
           mappingSpec: correctedSpec,
+          knowledgeStore: this.knowledgeStore,
         },
         this.store
       );

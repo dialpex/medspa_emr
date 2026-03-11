@@ -241,13 +241,22 @@ export function buildDiscoveryUserPrompt(
 /**
  * Build system prompt for mapping draft, optionally injecting cross-run memory.
  */
-export function buildMappingSystemPrompt(memoryContext?: string): string {
-  if (!memoryContext) return MAPPING_SYSTEM_PROMPT;
+export function buildMappingSystemPrompt(memoryContext?: string, knowledgeContext?: string): string {
+  let prompt = MAPPING_SYSTEM_PROMPT;
 
-  return `${MAPPING_SYSTEM_PROMPT}
+  if (knowledgeContext) {
+    prompt += `\n\nAGENT KNOWLEDGE (accumulated from prior successful migrations):
+${knowledgeContext}
 
-PREVIOUS SUCCESSFUL MAPPINGS (from prior runs for this vendor):
+These are confirmed field mappings learned from previous runs. Confirmed mappings should be used as-is unless the source schema has clearly changed. Probable mappings are hints — verify them against the source profile. Known pitfalls MUST be avoided.`;
+  }
+
+  if (memoryContext) {
+    prompt += `\n\nPREVIOUS SUCCESSFUL MAPPINGS (raw history from prior runs):
 ${memoryContext}
 
-Use these as a strong starting point. They represent field mappings and transforms that passed validation in previous migrations. Adapt as needed if the source schema has changed.`;
+Use these as additional context if the knowledge section above doesn't cover all fields.`;
+  }
+
+  return prompt;
 }

@@ -14,6 +14,8 @@ import {
   buildMappingSystemPrompt,
 } from "@/lib/agents/migration/prompts";
 import { readMemoryForAgent } from "@/lib/agents/migration/mapping-memory";
+import type { KnowledgeStore } from "@/lib/agents/migration/knowledge/store";
+import { getMappingKnowledge } from "@/lib/agents/migration/knowledge/retrieval";
 import type { MappingFeedback } from "./validate";
 import type { ArtifactStore, ArtifactRef } from "../../storage/types";
 import type { CanonicalEntityType, CanonicalRecord } from "../../canonical/schema";
@@ -29,6 +31,8 @@ export interface DraftMappingInput {
   artifacts?: ArtifactRef[];
   store?: ArtifactStore;
   tenantId?: string;
+  // Knowledge store for intelligence-informed mapping
+  knowledgeStore?: KnowledgeStore;
 }
 
 export interface DraftMappingResult {
@@ -64,6 +68,23 @@ export async function executeDraftMapping(
     memoryContext = await readMemoryForAgent(input.vendor);
   }
 
+  // Load knowledge context — accumulated intelligence from prior runs
+  let knowledgeContext: string | undefined;
+  if (input.knowledgeStore && input.vendor) {
+    try {
+      const knowledge = await getMappingKnowledge(input.knowledgeStore, input.vendor);
+      if (knowledge.promptContext) {
+        knowledgeContext = knowledge.promptContext;
+        console.log(
+          `[draft-mapping] Knowledge: ${knowledge.knownMappings.length} confirmed, ` +
+          `${knowledge.hintMappings.length} hints, ${Math.round(knowledge.coverage * 100)}% coverage`
+        );
+      }
+    } catch {
+      // Knowledge store not available — proceed without
+    }
+  }
+
   let mappingSpec: MappingSpec;
 
   const anthropic = new AnthropicProvider();
@@ -72,7 +93,7 @@ export async function executeDraftMapping(
     console.log(`[draft-mapping] Using Anthropic SDK (runId=${input.runId})`);
     const startTime = Date.now();
 
-    const systemPrompt = buildMappingSystemPrompt(memoryContext);
+    const systemPrompt = buildMappingSystemPrompt(memoryContext, knowledgeContext);
     const userMessage = `Analyze this source data profile and propose field mappings to the canonical schema.\n\n${JSON.stringify(safeContext, null, 2)}`;
 
     const result = await anthropic.complete(systemPrompt, userMessage, { maxTokens: 8192 });

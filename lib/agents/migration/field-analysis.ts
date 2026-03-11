@@ -7,6 +7,12 @@ import type { FieldType } from "@/lib/types/charts";
 import type { FormFieldContent } from "@/lib/migration/providers/types";
 import type { VendorKnowledge } from "./vendor-knowledge";
 import type { FieldSemanticEntry } from "./field-classification";
+import type { KnowledgeStore } from "./knowledge/store";
+import {
+  getFieldSemanticKnowledge,
+  lookupFieldSemantic,
+  type FieldSemanticKnowledge,
+} from "./knowledge/retrieval";
 import { getLLMProvider } from "@/lib/agents/_shared/llm";
 import { completionWithRetry } from "@/lib/agents/_shared/llm/self-healing";
 import { heuristicFieldType } from "./field-inference";
@@ -260,7 +266,8 @@ function heuristicAnalyzeField(fieldId: string, field: FormFieldContent): Combin
 export async function analyzeFields(
   templateName: string,
   fields: Map<string, FormFieldContent>,
-  vendorKnowledge?: VendorKnowledge | null
+  vendorKnowledge?: VendorKnowledge | null,
+  knowledgeStore?: KnowledgeStore | null
 ): Promise<{
   types: Map<string, FieldType>;
   semantics: Map<string, FieldSemanticEntry>;
@@ -275,11 +282,44 @@ export async function analyzeFields(
     return (a.sortOrder ?? Infinity) - (b.sortOrder ?? Infinity);
   });
 
+  // Phase 0: Knowledge lookup — resolve fields the agent already knows
+  let fieldKnowledge: FieldSemanticKnowledge | null = null;
+  const knowledgeResolvedIds = new Set<string>();
+
+  if (knowledgeStore) {
+    const vendor = vendorKnowledge?.vendorName || "unknown";
+    const fieldLabels = sortedEntries.map(([, f]) => ({
+      label: f.label,
+      sourceType: f.type,
+    }));
+    fieldKnowledge = await getFieldSemanticKnowledge(knowledgeStore, vendor, fieldLabels);
+
+    for (const [fieldId, field] of sortedEntries) {
+      const known = lookupFieldSemantic(fieldKnowledge, field.label, field.type);
+      if (known) {
+        types.set(fieldId, (known.fieldType as FieldType) || heuristicFieldType(field));
+        semantics.set(fieldId, {
+          fieldId,
+          category: known.category as FieldSemanticEntry["category"],
+          patientField: known.patientField as FieldSemanticEntry["patientField"],
+          templateKey: known.templateKey,
+          reasoning: `Known from prior migrations: "${known.labelPattern}" → ${known.category}`,
+        });
+        knowledgeResolvedIds.add(fieldId);
+      }
+    }
+
+    if (knowledgeResolvedIds.size > 0) {
+      console.log(`[field-analysis] Template "${templateName}": ${knowledgeResolvedIds.size}/${sortedEntries.length} fields resolved from knowledge`);
+    }
+  }
+
   const provider = getLLMProvider();
 
-  // If no real LLM available, use pure heuristic fallback
+  // If no real LLM available, use pure heuristic fallback for remaining
   if (provider.name === "mock" || !provider.isAvailable()) {
     for (const [fieldId, field] of sortedEntries) {
+      if (knowledgeResolvedIds.has(fieldId)) continue;
       const analysis = heuristicAnalyzeField(fieldId, field);
       types.set(fieldId, analysis.fieldType);
       semantics.set(fieldId, analysis.semantic);
@@ -287,13 +327,15 @@ export async function analyzeFields(
     return { types, semantics };
   }
 
-  // Pre-skip deterministic fields — heuristic handles these with ~100% confidence
+  // Phase 1: Pre-skip deterministic fields + knowledge-resolved fields
   const deterministicFields: [string, FormFieldContent][] = [];
   const aiCandidates: [string, FormFieldContent][] = [];
 
   for (const entry of sortedEntries) {
-    const [, field] = entry;
-    if (DETERMINISTIC_SOURCE_TYPES.has(field.type.toLowerCase())) {
+    const [fieldId, field] = entry;
+    if (knowledgeResolvedIds.has(fieldId)) {
+      continue; // already resolved from knowledge
+    } else if (DETERMINISTIC_SOURCE_TYPES.has(field.type.toLowerCase())) {
       deterministicFields.push(entry);
     } else {
       aiCandidates.push(entry);
@@ -307,8 +349,9 @@ export async function analyzeFields(
     semantics.set(fieldId, analysis.semantic);
   }
 
-  if (deterministicFields.length > 0) {
-    console.log(`[field-analysis] Template "${templateName}": ${deterministicFields.length} fields resolved by heuristic, ${aiCandidates.length} sent to AI`);
+  const resolvedCount = knowledgeResolvedIds.size + deterministicFields.length;
+  if (resolvedCount > 0) {
+    console.log(`[field-analysis] Template "${templateName}": ${resolvedCount} fields resolved (${knowledgeResolvedIds.size} knowledge, ${deterministicFields.length} heuristic), ${aiCandidates.length} sent to AI`);
   }
 
   if (aiCandidates.length === 0) return { types, semantics };

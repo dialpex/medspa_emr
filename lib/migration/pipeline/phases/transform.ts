@@ -17,6 +17,7 @@ import { createAdapter } from "../../adapters";
 import { classifyForms } from "@/lib/agents/migration/classification";
 import { analyzeFields } from "@/lib/agents/migration/field-analysis";
 import { getVendorKnowledge } from "@/lib/agents/migration/vendor-knowledge";
+import type { KnowledgeStore } from "@/lib/agents/migration/knowledge/store";
 
 export interface TransformInput {
   runId: string;
@@ -24,6 +25,7 @@ export interface TransformInput {
   tenantId: string;
   artifacts: ArtifactRef[];
   mappingSpec: MappingSpec;
+  knowledgeStore?: KnowledgeStore;
 }
 
 export interface TransformResult {
@@ -69,7 +71,7 @@ export async function executeTransform(
   }
 
   // Post-transform: AI classification for form/consent records
-  await enrichFormsWithClassification(results, counts, input.vendor, store, input);
+  await enrichFormsWithClassification(results, counts, input.vendor, store, input, input.knowledgeStore);
 
   return { records: results, counts };
 }
@@ -90,7 +92,8 @@ async function enrichFormsWithClassification(
   counts: Record<string, number>,
   vendor: string,
   store: ArtifactStore,
-  input: TransformInput
+  input: TransformInput,
+  knowledgeStore?: KnowledgeStore
 ): Promise<void> {
   // Collect consent/form records that might need reclassification
   const formRecords = results.filter(
@@ -157,7 +160,7 @@ async function enrichFormsWithClassification(
   }
 
   // Run AI classification on unique templates only
-  const classification = await classifyForms(formsForClassification, vendorKnowledge);
+  const classification = await classifyForms(formsForClassification, vendorKnowledge, knowledgeStore);
 
   // Build classMap: map every form sourceId to its template's classification
   const templateClassMap = new Map(
@@ -221,7 +224,7 @@ async function enrichFormsWithClassification(
     if (!tmpl) continue;
 
     try {
-      const { types, semantics } = await analyzeFields(tmpl.name, tmpl.fields, vendorKnowledge);
+      const { types, semantics } = await analyzeFields(tmpl.name, tmpl.fields, vendorKnowledge, knowledgeStore);
       inferredTypesByTemplate.set(templateId, types as Map<string, string>);
       classificationsByTemplate.set(templateId, semantics);
     } catch {
