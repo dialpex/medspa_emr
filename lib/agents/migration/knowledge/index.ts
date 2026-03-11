@@ -4,6 +4,8 @@
 
 export { KnowledgeStore } from "./store";
 export { distill } from "./distiller";
+export { diffMappingSpecs, correctionsToOutcome } from "./diff";
+export type { MappingCorrection } from "./diff";
 export {
   getMappingKnowledge,
   getClassificationKnowledge,

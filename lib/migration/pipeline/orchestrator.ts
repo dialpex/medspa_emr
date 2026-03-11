@@ -30,6 +30,7 @@ import {
   getIntelligenceSummary,
   type RunOutcome,
 } from "@/lib/agents/migration/knowledge";
+import { diffMappingSpecs, correctionsToOutcome } from "@/lib/agents/migration/knowledge/diff";
 
 export type MigrationPhase =
   | "ingest"
@@ -541,11 +542,36 @@ export class MigrationOrchestrator {
             : 0;
         }
 
+        // Detect corrections: diff draft (v1) vs final approved spec
+        let userCorrections: RunOutcome["userCorrections"];
+        if (run.mappingSpecVersion > 1) {
+          try {
+            const draftSpecRecord = await prisma.migrationMappingSpec.findFirst({
+              where: { runId: run.id, version: 1 },
+            });
+            if (draftSpecRecord && mappingSpec) {
+              const draftSpec = JSON.parse(draftSpecRecord.spec);
+              const corrections = diffMappingSpecs(draftSpec, mappingSpec);
+              if (corrections.length > 0) {
+                userCorrections = correctionsToOutcome(corrections);
+                console.log(
+                  `[orchestrator] Detected ${corrections.length} mapping corrections (v1 → v${run.mappingSpecVersion})`
+                );
+              }
+            }
+          } catch {
+            // Non-critical — continue without corrections
+          }
+        }
+
         const outcome: RunOutcome = {
           runId: run.id,
           vendor: run.sourceVendor,
           clinicId: run.clinicId,
           approvedMappingSpec: mappingSpec,
+          draftMappingSpec: run.mappingSpecVersion > 1
+            ? await this.getDraftSpec(run.id)
+            : undefined,
           reconciliation: {
             entityMatchRates,
             totalSource: report.totalSourceRecords,
@@ -553,6 +579,7 @@ export class MigrationOrchestrator {
             totalFailed: report.totalFailedRecords,
           },
           errors: [],
+          userCorrections,
         };
         await distill(this.knowledgeStore, outcome);
       } catch (error) {
@@ -624,6 +651,17 @@ export class MigrationOrchestrator {
 
   private async updateRun(runId: string, data: Record<string, unknown>): Promise<void> {
     await prisma.migrationRun.update({ where: { id: runId }, data: data as never });
+  }
+
+  private async getDraftSpec(runId: string): Promise<unknown> {
+    try {
+      const record = await prisma.migrationMappingSpec.findFirst({
+        where: { runId, version: 1 },
+      });
+      return record ? JSON.parse(record.spec) : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private async getArtifactRefs(runId: string): Promise<ArtifactRef[]> {
