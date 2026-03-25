@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getPayments } from "@/lib/actions/payments";
 import { PageCard } from "@/components/ui/page-card";
+import { RevenueView } from "./revenue-view";
 
 const ALLOWED_ROLES = ["Owner", "Admin", "Billing", "MedicalDirector"];
 
@@ -11,12 +13,12 @@ export default async function ReportsPage() {
     redirect("/calendar");
   }
 
+  const payments = await getPayments();
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <PageCard title="Reports">
-        <div className="py-12 text-center text-gray-400">
-          Reports coming soon...
-        </div>
+      <PageCard title="Analytics" label="Revenue">
+        <RevenueView payments={payments} />
       </PageCard>
     </div>
   );
