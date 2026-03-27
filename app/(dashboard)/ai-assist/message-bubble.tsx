@@ -149,13 +149,11 @@ export function MessageBubble({
   message,
   onSend,
   onExecutePlan,
-  onCancelPlan,
   isLast,
 }: {
   message: Message;
   onSend: (text: string) => void;
-  onExecutePlan?: (steps: PlanStep[], direct?: boolean) => void;
-  onCancelPlan?: () => void;
+  onExecutePlan?: (steps: PlanStep[]) => void;
   isLast?: boolean;
 }) {
   // User message
@@ -212,12 +210,12 @@ export function MessageBubble({
             onConfirm={() => {
               const plan = (response as AIResponse & { type: "plan" }).plan;
               if (onExecutePlan && plan.steps.length > 0) {
-                onExecutePlan(plan.steps, plan.concrete ?? false);
+                onExecutePlan(plan.steps);
               } else {
                 onSend("Confirm");
               }
             }}
-            onCancel={() => onCancelPlan ? onCancelPlan() : onSend("Cancel")}
+            onCancel={() => onSend("Cancel")}
           />
         )}
         {response.type === "result" && (
