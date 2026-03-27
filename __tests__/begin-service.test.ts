@@ -63,7 +63,7 @@ async function testBeginService(
         data: {
           appointmentId,
           clinicId: user.clinicId,
-          patientId: apt.patientId,
+          patientId: apt.patientId!,
           providerId: apt.providerId,
           status: "Draft",
         },
@@ -72,13 +72,13 @@ async function testBeginService(
     }
 
     // Create Chart with encounterId + dual-write legacy fields
-    let chart = apt.chart ?? encounter.chart;
+    let chart = apt.chart ?? encounter!.chart;
     if (!chart) {
       const newChart = await tx.chart.create({
         data: {
           clinicId: user.clinicId,
-          encounterId: encounter.id,
-          patientId: apt.patientId,
+          encounterId: encounter!.id,
+          patientId: apt.patientId!,
           appointmentId: appointmentId,
           createdById: user.id,
           status: "Draft",
@@ -96,13 +96,13 @@ async function testBeginService(
         entityId: appointmentId,
         details: JSON.stringify({
           appointmentId,
-          encounterId: encounter.id,
+          encounterId: encounter!.id,
           chartId: chart.id,
         }),
       },
     });
 
-    return { chartId: chart.id, encounterId: encounter.id };
+    return { chartId: chart.id, encounterId: encounter!.id };
   });
 
   return { success: true, data: result };

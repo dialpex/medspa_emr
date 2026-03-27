@@ -131,9 +131,11 @@ export function TodayDetailPanel({
       .then(([data, timestamps]) => {
         if (data) {
           setDetail({ ...data, ...timestamps });
-          getPatientTransactionHistory(data.patientId)
-            .then(setTransactions)
-            .catch(() => setTransactions([]));
+          if (data.patientId) {
+            getPatientTransactionHistory(data.patientId)
+              .then(setTransactions)
+              .catch(() => setTransactions([]));
+          }
         } else {
           setDetail(null);
         }

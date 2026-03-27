@@ -54,7 +54,7 @@ async function testBeginService(
       data: {
         appointmentId,
         clinicId: user.clinicId,
-        patientId: apt.patientId,
+        patientId: apt.patientId!,
         providerId: apt.providerId,
         status: "Draft",
       },

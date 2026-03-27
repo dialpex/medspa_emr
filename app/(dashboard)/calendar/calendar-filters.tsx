@@ -16,7 +16,7 @@ export type CalendarFiltersProps = {
   providers: Provider[];
   rooms: Room[];
   currentDate: string; // ISO string from server
-  view: "day" | "week";
+  view: "day" | "week" | "month";
 };
 
 export function CalendarFilters({
@@ -55,6 +55,8 @@ export function CalendarFilters({
     const newDate = new Date(dateObj);
     if (view === "day") {
       newDate.setDate(newDate.getDate() - 1);
+    } else if (view === "month") {
+      newDate.setMonth(newDate.getMonth() - 1);
     } else {
       newDate.setDate(newDate.getDate() - 7);
     }
@@ -65,6 +67,8 @@ export function CalendarFilters({
     const newDate = new Date(dateObj);
     if (view === "day") {
       newDate.setDate(newDate.getDate() + 1);
+    } else if (view === "month") {
+      newDate.setMonth(newDate.getMonth() + 1);
     } else {
       newDate.setDate(newDate.getDate() + 7);
     }
@@ -85,6 +89,11 @@ export function CalendarFilters({
         weekday: "long",
         month: "long",
         day: "numeric",
+        year: "numeric",
+      });
+    } else if (view === "month") {
+      return dateObj.toLocaleDateString("en-US", {
+        month: "long",
         year: "numeric",
       });
     } else {
@@ -114,7 +123,7 @@ export function CalendarFilters({
         <button
           onClick={navigatePrev}
           className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-          aria-label={view === "day" ? "Previous day" : "Previous week"}
+          aria-label={view === "day" ? "Previous day" : view === "month" ? "Previous month" : "Previous week"}
         >
           <ChevronLeftIcon className="h-4 w-4" />
         </button>
@@ -129,7 +138,7 @@ export function CalendarFilters({
         <button
           onClick={navigateNext}
           className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-          aria-label={view === "day" ? "Next day" : "Next week"}
+          aria-label={view === "day" ? "Next day" : view === "month" ? "Next month" : "Next week"}
         >
           <ChevronRightIcon className="h-4 w-4" />
         </button>
@@ -166,6 +175,16 @@ export function CalendarFilters({
             }`}
           >
             Week
+          </button>
+          <button
+            onClick={() => updateParams({ view: "month" })}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              view === "month"
+                ? "bg-gray-900 text-white"
+                : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            Month
           </button>
         </div>
 

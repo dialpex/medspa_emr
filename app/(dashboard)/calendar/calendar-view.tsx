@@ -9,7 +9,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useCalendarApp, ScheduleXCalendar } from "@schedule-x/react";
-import { createViewDay, createViewWeek } from "@schedule-x/calendar";
+import { createViewDay, createViewWeek, createViewMonthGrid } from "@schedule-x/calendar";
 import { createEventsServicePlugin } from "@schedule-x/events-service";
 import { createDragAndDropPlugin } from "@schedule-x/drag-and-drop";
 import { createResizePlugin } from "@schedule-x/resize";
@@ -23,6 +23,7 @@ import {
   type ResourceOption,
   type Service,
 } from "@/lib/actions/appointments";
+import { BlockTimeForm } from "./block-time-form";
 import { AppointmentForm } from "./appointment-form";
 import { AppointmentPanel } from "./appointment-panel";
 import { STATUS_COLORS } from "./appointment-card";
@@ -57,12 +58,18 @@ function TimeGridEvent({ calendarEvent }: { calendarEvent: Record<string, unknow
     serviceName: string | null;
     status: AppointmentStatus;
     startTimeDisplay?: string;
+    isRecurring?: boolean;
+    isBlock?: boolean;
+    blockTitle?: string | null;
   } | undefined;
 
+  const isBlock = customData?.isBlock;
   const status = customData?.status || "Scheduled";
-  const colors = STATUS_EVENT_COLORS[status];
-  const patientName = customData?.patientName || (calendarEvent.title as string) || "";
-  const serviceName = customData?.serviceName || "";
+  const colors = isBlock
+    ? { bg: "#f3f4f6", border: "#9ca3af", text: "#4b5563" }
+    : STATUS_EVENT_COLORS[status];
+  const patientName = isBlock ? (customData?.blockTitle || "Block") : (customData?.patientName || (calendarEvent.title as string) || "");
+  const serviceName = isBlock ? "" : (customData?.serviceName || "");
 
   // Use pre-computed display time from _customData, fall back to extraction
   const start = calendarEvent.start as unknown as Temporal.ZonedDateTime;
@@ -102,6 +109,7 @@ function TimeGridEvent({ calendarEvent }: { calendarEvent: Record<string, unknow
         // Compact: single line — time  Name  Service
         <div style={{ display: "flex", gap: "6px", alignItems: "baseline", whiteSpace: "nowrap", overflow: "hidden" }}>
           <span style={{ opacity: 0.8, flexShrink: 0 }}>{timeStr}</span>
+          {customData?.isRecurring && <span style={{ opacity: 0.6, flexShrink: 0, fontSize: "10px" }} title="Recurring">↻</span>}
           <span style={{ fontWeight: 600 }}>{patientName}</span>
           {serviceName && (
             <span style={{ opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis" }}>{serviceName}</span>
@@ -112,6 +120,7 @@ function TimeGridEvent({ calendarEvent }: { calendarEvent: Record<string, unknow
         <>
           <div style={{ display: "flex", gap: "6px", alignItems: "baseline", fontSize: "11px", overflow: "hidden", whiteSpace: "nowrap" }}>
             <span style={{ opacity: 0.8, flexShrink: 0 }}>{timeStr}</span>
+            {customData?.isRecurring && <span style={{ opacity: 0.6, flexShrink: 0 }} title="Recurring">↻</span>}
             {serviceName && (
               <span style={{ opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis" }}>{serviceName}</span>
             )}
@@ -130,7 +139,7 @@ export type CalendarViewProps = {
   resources: ResourceOption[];
   services: Service[];
   currentDate: string; // ISO string from server
-  view: "day" | "week";
+  view: "day" | "week" | "month";
   permissions: {
     canCreate: boolean;
     canEdit: boolean;
@@ -192,6 +201,9 @@ function appointmentToEvent(apt: CalendarAppointment) {
       status: apt.status,
       notes: apt.notes,
       startTimeDisplay: formatEventTime(apt.startTime),
+      isRecurring: !!apt.recurrenceGroupId,
+      isBlock: apt.isBlock,
+      blockTitle: apt.blockTitle,
     },
   };
 }
@@ -240,6 +252,22 @@ export function CalendarView({
     initialEndTime?: Date;
   }>({ isOpen: false });
 
+  // Block time form state
+  const [blockFormState, setBlockFormState] = useState<{
+    isOpen: boolean;
+    initialStartTime?: Date;
+    initialEndTime?: Date;
+  }>({ isOpen: false });
+
+  // Slot menu state (choose between appointment or block)
+  const [slotMenu, setSlotMenu] = useState<{
+    isOpen: boolean;
+    x: number;
+    y: number;
+    startTime?: Date;
+    endTime?: Date;
+  }>({ isOpen: false, x: 0, y: 0 });
+
   // Panel state (view/edit existing appointment)
   const [panelAppointmentId, setPanelAppointmentId] = useState<string | null>(null);
 
@@ -269,6 +297,10 @@ export function CalendarView({
     permissions={permissions}
     formState={formState}
     setFormState={setFormState}
+    blockFormState={blockFormState}
+    setBlockFormState={setBlockFormState}
+    slotMenu={slotMenu}
+    setSlotMenu={setSlotMenu}
     panelAppointmentId={panelAppointmentId}
     setPanelAppointmentId={setPanelAppointmentId}
   />;
@@ -286,11 +318,19 @@ function CalendarInner({
   permissions,
   formState,
   setFormState,
+  blockFormState,
+  setBlockFormState,
+  slotMenu,
+  setSlotMenu,
   panelAppointmentId,
   setPanelAppointmentId,
 }: CalendarViewProps & {
   formState: { isOpen: boolean; initialStartTime?: Date; initialEndTime?: Date };
   setFormState: React.Dispatch<React.SetStateAction<{ isOpen: boolean; initialStartTime?: Date; initialEndTime?: Date }>>;
+  blockFormState: { isOpen: boolean; initialStartTime?: Date; initialEndTime?: Date };
+  setBlockFormState: React.Dispatch<React.SetStateAction<{ isOpen: boolean; initialStartTime?: Date; initialEndTime?: Date }>>;
+  slotMenu: { isOpen: boolean; x: number; y: number; startTime?: Date; endTime?: Date };
+  setSlotMenu: React.Dispatch<React.SetStateAction<{ isOpen: boolean; x: number; y: number; startTime?: Date; endTime?: Date }>>;
   panelAppointmentId: string | null;
   setPanelAppointmentId: React.Dispatch<React.SetStateAction<string | null>>;
 }) {
@@ -316,8 +356,8 @@ function CalendarInner({
   // Create calendar instance
   const calendar = useCalendarApp({
     selectedDate: toPlainDate(currentDate),
-    defaultView: view === "day" ? "day" : "week",
-    views: [createViewDay(), createViewWeek()],
+    defaultView: view === "day" ? "day" : view === "month" ? "month-grid" : "week",
+    views: [createViewDay(), createViewWeek(), createViewMonthGrid()],
     events: events,
     plugins: [
       eventsService,
@@ -329,29 +369,28 @@ function CalendarInner({
         setPanelAppointmentId(calendarEvent.id as string);
       },
 
-      // Click on empty slot - open create form
+      // Click on empty slot - show menu to choose appointment or block
       onClickDateTime: (dateTime) => {
         if (!permissions.canCreate) return;
 
         try {
-          // dateTime is a "fake-UTC" ZonedDateTime — interpret as local time
           const zdt = dateTime as unknown as Temporal.ZonedDateTime;
           const startTime = utcZonedDateTimeToLocalDate(zdt);
-          const endTime = new Date(startTime.getTime() + 30 * 60000); // +30 min default
+          const endTime = new Date(startTime.getTime() + 30 * 60000);
 
-          setFormState({
-            isOpen: true,
-            initialStartTime: startTime,
-            initialEndTime: endTime,
-          });
+          // Position menu near the click — use center of viewport as fallback
+          const x = window.innerWidth / 2;
+          const y = window.innerHeight / 3;
+          setSlotMenu({ isOpen: true, x, y, startTime, endTime });
         } catch (err) {
           console.error("[Calendar] onClickDateTime error:", err, dateTime);
-          // Fallback: open form with current time
           const now = new Date();
-          setFormState({
+          setSlotMenu({
             isOpen: true,
-            initialStartTime: now,
-            initialEndTime: new Date(now.getTime() + 30 * 60000),
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 3,
+            startTime: now,
+            endTime: new Date(now.getTime() + 30 * 60000),
           });
         }
       },
@@ -425,6 +464,15 @@ function CalendarInner({
         .sx-react-calendar-wrapper .sx__calendar-header {
           display: none;
         }
+        /* Month grid styling */
+        .sx-react-calendar-wrapper .sx__month-grid-day {
+          min-height: 100px;
+        }
+        .sx-react-calendar-wrapper .sx__month-grid-event {
+          font-size: 12px;
+          border-radius: 4px;
+          cursor: pointer;
+        }
       `}</style>
 
       {/* Calendar */}
@@ -444,6 +492,46 @@ function CalendarInner({
         permissions={permissions}
       />
 
+      {/* Slot Menu — choose Appointment or Block Time */}
+      {slotMenu.isOpen && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={() => setSlotMenu({ isOpen: false, x: 0, y: 0 })} />
+          <div
+            className="fixed z-50 bg-white rounded-lg border border-gray-200 shadow-lg py-1 w-52"
+            style={{ left: slotMenu.x - 104, top: slotMenu.y }}
+          >
+            <button
+              className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 flex items-center gap-3 font-medium text-gray-900"
+              onClick={() => {
+                setSlotMenu({ isOpen: false, x: 0, y: 0 });
+                setFormState({
+                  isOpen: true,
+                  initialStartTime: slotMenu.startTime,
+                  initialEndTime: slotMenu.endTime,
+                });
+              }}
+            >
+              <span className="w-2 h-2 rounded-full bg-blue-500" />
+              New Appointment
+            </button>
+            <button
+              className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 flex items-center gap-3 font-medium text-gray-900"
+              onClick={() => {
+                setSlotMenu({ isOpen: false, x: 0, y: 0 });
+                setBlockFormState({
+                  isOpen: true,
+                  initialStartTime: slotMenu.startTime,
+                  initialEndTime: slotMenu.endTime,
+                });
+              }}
+            >
+              <span className="w-2 h-2 rounded-full bg-gray-400" />
+              Block Time
+            </button>
+          </div>
+        </>
+      )}
+
       {/* Appointment Form Modal (create new only) */}
       <AppointmentForm
         isOpen={formState.isOpen}
@@ -455,6 +543,15 @@ function CalendarInner({
         permissions={permissions}
         initialStartTime={formState.initialStartTime}
         initialEndTime={formState.initialEndTime}
+      />
+
+      {/* Block Time Form Modal */}
+      <BlockTimeForm
+        isOpen={blockFormState.isOpen}
+        onClose={() => setBlockFormState({ isOpen: false })}
+        providers={providers}
+        initialStartTime={blockFormState.initialStartTime}
+        initialEndTime={blockFormState.initialEndTime}
       />
 
       {/* Legend */}

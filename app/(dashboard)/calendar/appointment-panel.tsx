@@ -132,7 +132,7 @@ export function AppointmentPanel({
     getAppointmentWithPatient(appointmentId)
       .then((data) => {
         setDetail(data);
-        if (data) {
+        if (data && data.patientId) {
           getPatientTransactionHistory(data.patientId)
             .then(setTransactions)
             .catch(() => setTransactions([]));
@@ -176,6 +176,9 @@ export function AppointmentPanel({
         endTime: detail.endTime,
         status: detail.status,
         notes: detail.notes,
+        recurrenceGroupId: detail.recurrenceGroupId,
+        isBlock: detail.isBlock,
+        blockTitle: detail.blockTitle,
       }
     : undefined;
 
@@ -205,17 +208,23 @@ export function AppointmentPanel({
                 {loading ? (
                   <div className="h-6 w-40 bg-gray-200 rounded animate-pulse" />
                 ) : detail ? (
-                  <>
-                    <Link
-                      href={`/patients/${detail.patientId}`}
-                      className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors"
-                    >
-                      {detail.patientFirstName} {detail.patientLastName}
-                    </Link>
-                    <div className="mt-1">
-                      <StatusBadge status={detail.status} />
+                  detail.isBlock ? (
+                    <div className="text-lg font-semibold text-gray-900">
+                      {detail.blockTitle || "Block"}
                     </div>
-                  </>
+                  ) : (
+                    <>
+                      <Link
+                        href={`/patients/${detail.patientId}`}
+                        className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors"
+                      >
+                        {detail.patientFirstName} {detail.patientLastName}
+                      </Link>
+                      <div className="mt-1">
+                        <StatusBadge status={detail.status} />
+                      </div>
+                    </>
+                  )
                 ) : (
                   <span className="text-gray-500">Not found</span>
                 )}
@@ -236,8 +245,8 @@ export function AppointmentPanel({
                 </div>
               ) : detail ? (
                 <div className="divide-y">
-                  {/* Patient Info */}
-                  <div className="p-4 space-y-3">
+                  {/* Patient Info — hidden for blocks */}
+                  {!detail.isBlock && <div className="p-4 space-y-3">
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Patient Info
                     </h3>
@@ -286,7 +295,7 @@ export function AppointmentPanel({
                         </div>
                       </div>
                     )}
-                  </div>
+                  </div>}
 
                   {/* Appointment Details */}
                   <div className="p-4 space-y-3">
@@ -336,8 +345,8 @@ export function AppointmentPanel({
                     </div>
                   </div>
 
-                  {/* Purchase History */}
-                  <div className="p-4 space-y-3">
+                  {/* Purchase History — hidden for blocks */}
+                  {!detail.isBlock && <div className="p-4 space-y-3">
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Purchase History
                     </h3>
@@ -378,7 +387,7 @@ export function AppointmentPanel({
                         ))}
                       </div>
                     )}
-                  </div>
+                  </div>}
                 </div>
               ) : null}
             </div>
@@ -386,80 +395,106 @@ export function AppointmentPanel({
             {/* Actions Footer */}
             {detail && (
               <div className="border-t p-4 space-y-2">
-                {/* Status transition */}
-                {nextStatus && permissions.canEdit && (
-                  <button
-                    onClick={() => handleStatusChange(nextStatus.status)}
-                    disabled={isPending}
-                    className="w-full py-2 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
-                    {nextStatus.label}
-                  </button>
+                {detail.isBlock ? (
+                  /* Block time: only Edit and Delete */
+                  <div className="flex gap-2">
+                    {permissions.canEdit && (
+                      <button
+                        onClick={() => setEditFormOpen(true)}
+                        className="flex-1 py-2 px-4 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center justify-center gap-2"
+                      >
+                        <EditIcon className="h-4 w-4" />
+                        Edit
+                      </button>
+                    )}
+                    {permissions.canDelete && (
+                      <button
+                        onClick={() => handleStatusChange("Cancelled")}
+                        disabled={isPending}
+                        className="py-2 px-4 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  /* Regular appointment: full actions */
+                  <>
+                    {/* Status transition */}
+                    {nextStatus && permissions.canEdit && (
+                      <button
+                        onClick={() => handleStatusChange(nextStatus.status)}
+                        disabled={isPending}
+                        className="w-full py-2 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
+                        {nextStatus.label}
+                      </button>
+                    )}
+
+                    {/* Start Chart button */}
+                    {permissions.canEdit &&
+                      (detail.status === "InProgress" || detail.status === "Completed") && (
+                        <button
+                          onClick={async () => {
+                            const existing = await getCharts({ patientId: detail.patientId ?? undefined });
+                            const existingChart = existing.find(
+                              (c) => c.appointmentId === detail.id
+                            );
+                            if (existingChart) {
+                              router.push(
+                                existingChart.status === "Draft"
+                                  ? `/charts/${existingChart.id}/edit`
+                                  : `/charts/${existingChart.id}`
+                              );
+                              return;
+                            }
+                            const result = await createChart({
+                              patientId: detail.patientId!,
+                              appointmentId: detail.id,
+                            });
+                            if (result.success && result.data) {
+                              router.push(`/charts/${result.data.id}/edit`);
+                            }
+                          }}
+                          className="w-full py-2 px-4 text-sm font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 flex items-center justify-center gap-2 border border-purple-200"
+                        >
+                          <FileTextIcon className="h-4 w-4" />
+                          Start Chart
+                        </button>
+                      )}
+
+                    <div className="flex gap-2">
+                      {permissions.canEdit && (
+                        <button
+                          onClick={() => setEditFormOpen(true)}
+                          className="flex-1 py-2 px-4 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center justify-center gap-2"
+                        >
+                          <EditIcon className="h-4 w-4" />
+                          Edit
+                        </button>
+                      )}
+                      {permissions.canEdit && detail.status !== "Cancelled" && (
+                        <button
+                          onClick={() => handleStatusChange("Cancelled")}
+                          disabled={isPending}
+                          className="py-2 px-4 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      {permissions.canEdit && detail.status !== "NoShow" && (
+                        <button
+                          onClick={() => handleStatusChange("NoShow")}
+                          disabled={isPending}
+                          className="py-2 px-4 text-sm font-medium text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-100 disabled:opacity-50"
+                        >
+                          No Show
+                        </button>
+                      )}
+                    </div>
+                  </>
                 )}
-
-                {/* Start Chart button */}
-                {permissions.canEdit &&
-                  (detail.status === "InProgress" || detail.status === "Completed") && (
-                    <button
-                      onClick={async () => {
-                        // Check if a chart already exists for this appointment
-                        const existing = await getCharts({ patientId: detail.patientId });
-                        const existingChart = existing.find(
-                          (c) => c.appointmentId === detail.id
-                        );
-                        if (existingChart) {
-                          router.push(
-                            existingChart.status === "Draft"
-                              ? `/charts/${existingChart.id}/edit`
-                              : `/charts/${existingChart.id}`
-                          );
-                          return;
-                        }
-                        const result = await createChart({
-                          patientId: detail.patientId,
-                          appointmentId: detail.id,
-                        });
-                        if (result.success && result.data) {
-                          router.push(`/charts/${result.data.id}/edit`);
-                        }
-                      }}
-                      className="w-full py-2 px-4 text-sm font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 flex items-center justify-center gap-2 border border-purple-200"
-                    >
-                      <FileTextIcon className="h-4 w-4" />
-                      Start Chart
-                    </button>
-                  )}
-
-                <div className="flex gap-2">
-                  {permissions.canEdit && (
-                    <button
-                      onClick={() => setEditFormOpen(true)}
-                      className="flex-1 py-2 px-4 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center justify-center gap-2"
-                    >
-                      <EditIcon className="h-4 w-4" />
-                      Edit
-                    </button>
-                  )}
-                  {permissions.canEdit && detail.status !== "Cancelled" && (
-                    <button
-                      onClick={() => handleStatusChange("Cancelled")}
-                      disabled={isPending}
-                      className="py-2 px-4 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                  {permissions.canEdit && detail.status !== "NoShow" && (
-                    <button
-                      onClick={() => handleStatusChange("NoShow")}
-                      disabled={isPending}
-                      className="py-2 px-4 text-sm font-medium text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-100 disabled:opacity-50"
-                    >
-                      No Show
-                    </button>
-                  )}
-                </div>
               </div>
             )}
           </div>

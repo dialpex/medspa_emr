@@ -16,7 +16,7 @@ export type { JourneyPhase } from "@/lib/today-utils";
 
 export type TodayAppointment = {
   id: string;
-  patientId: string;
+  patientId: string | null;
   patientName: string;
   patientEmail: string | null;
   patientPhone: string | null;
@@ -139,9 +139,9 @@ export async function getTodayAppointments(filters?: {
   let results: TodayAppointment[] = appointments.map((apt) => ({
     id: apt.id,
     patientId: apt.patientId,
-    patientName: `${apt.patient.firstName} ${apt.patient.lastName}`,
-    patientEmail: apt.patient.email,
-    patientPhone: apt.patient.phone,
+    patientName: apt.patient ? `${apt.patient.firstName} ${apt.patient.lastName}` : (apt.blockTitle || "Block"),
+    patientEmail: apt.patient?.email ?? null,
+    patientPhone: apt.patient?.phone ?? null,
     providerId: apt.providerId,
     providerName: apt.provider.name,
     serviceId: apt.serviceId,
@@ -457,7 +457,7 @@ export async function beginService(appointmentId: string): Promise<{
         data: {
           appointmentId,
           clinicId: user.clinicId,
-          patientId: apt.patientId,
+          patientId: apt.patientId!,
           providerId: apt.providerId,
           status: "Draft",
         },
@@ -466,11 +466,11 @@ export async function beginService(appointmentId: string): Promise<{
     }
 
     // 3. Create Chart with encounterId + dual-write legacy fields
-    const chart = apt.chart ?? encounter.chart ?? await tx.chart.create({
+    const chart = apt.chart ?? encounter!.chart ?? await tx.chart.create({
       data: {
         clinicId: user.clinicId,
-        encounterId: encounter.id,
-        patientId: apt.patientId,
+        encounterId: encounter!.id,
+        patientId: apt.patientId!,
         appointmentId: appointmentId,
         createdById: user.id,
         status: "Draft",
@@ -487,13 +487,13 @@ export async function beginService(appointmentId: string): Promise<{
         entityId: appointmentId,
         details: JSON.stringify({
           appointmentId,
-          encounterId: encounter.id,
+          encounterId: encounter!.id,
           chartId: chart.id,
         }),
       },
     });
 
-    return { chartId: chart.id, encounterId: encounter.id };
+    return { chartId: chart.id, encounterId: encounter!.id };
   });
 
   revalidatePath("/today");

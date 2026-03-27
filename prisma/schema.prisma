@@ -235,7 +235,7 @@ enum AppointmentStatus {
 model Appointment {
   id          String            @id @default(cuid())
   clinicId    String
-  patientId   String
+  patientId   String?
   providerId  String
   serviceId   String?
   roomId      String?
@@ -244,6 +244,8 @@ model Appointment {
   endTime     DateTime
   status      AppointmentStatus @default(Scheduled)
   notes       String?
+  isBlock     Boolean           @default(false)
+  blockTitle  String?           // e.g. "Lunch", "Staff Meeting", "Admin Time"
   checkedInAt   DateTime?
   startedAt     DateTime?
   completedAt   DateTime?
@@ -252,9 +254,14 @@ model Appointment {
   updatedAt   DateTime          @updatedAt
   deletedAt   DateTime?         // Soft delete
 
+  // Recurrence
+  recurrenceGroupId String?       // Links all appointments in a recurring series
+  recurrenceRule    String?       // JSON: { frequency, interval, endType, endDate?, endCount? }
+  recurrenceIndex   Int?          // Position in the series (0, 1, 2, ...)
+
   // Relations
   clinic   Clinic   @relation(fields: [clinicId], references: [id])
-  patient  Patient  @relation(fields: [patientId], references: [id])
+  patient  Patient?  @relation(fields: [patientId], references: [id])
   provider User     @relation("AppointmentProvider", fields: [providerId], references: [id])
   service  Service? @relation(fields: [serviceId], references: [id])
   room     Room?     @relation(fields: [roomId], references: [id])
@@ -267,6 +274,7 @@ model Appointment {
   @@index([patientId])
   @@index([providerId])
   @@index([startTime])
+  @@index([recurrenceGroupId])
 }
 
 // ===========================================

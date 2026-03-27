@@ -2,13 +2,16 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { XIcon, SearchIcon, TrashIcon, Loader2Icon, PlusIcon } from "lucide-react";
+import { XIcon, SearchIcon, TrashIcon, Loader2Icon, PlusIcon, Repeat } from "lucide-react";
+import { ScrollTimePicker } from "@/components/scroll-time-picker";
 import type { AppointmentStatus } from "@prisma/client";
 import {
   createAppointment,
   updateAppointment,
   updateAppointmentStatus,
   deleteAppointment,
+  deleteRecurringAppointment,
+  updateRecurringAppointment,
   searchPatients,
   quickCreatePatient,
   type CalendarAppointment,
@@ -17,6 +20,8 @@ import {
   type ResourceOption,
   type Service,
   type PatientSearchResult,
+  type RecurrenceRule,
+  type RecurrenceScope,
 } from "@/lib/actions/appointments";
 import { StatusSelector } from "./appointment-card";
 
@@ -70,6 +75,13 @@ export function AppointmentForm({
   const [status, setStatus] = useState<AppointmentStatus>("Scheduled");
   const [error, setError] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showRecurrenceScope, setShowRecurrenceScope] = useState<"edit" | "delete" | null>(null);
+  const [recurrenceScope, setRecurrenceScope] = useState<RecurrenceScope>("this");
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatFrequency, setRepeatFrequency] = useState<RecurrenceRule["frequency"]>("weekly");
+  const [repeatEndType, setRepeatEndType] = useState<RecurrenceRule["endType"]>("count");
+  const [repeatEndCount, setRepeatEndCount] = useState(4);
+  const [repeatEndDate, setRepeatEndDate] = useState("");
   const [showNewPatient, setShowNewPatient] = useState(false);
   const [newFirst, setNewFirst] = useState("");
   const [newLast, setNewLast] = useState("");
@@ -82,6 +94,13 @@ export function AppointmentForm({
 
     setError("");
     setShowDeleteConfirm(false);
+    setShowRecurrenceScope(null);
+    setRecurrenceScope("this");
+    setRepeatEnabled(false);
+    setRepeatFrequency("weekly");
+    setRepeatEndType("count");
+    setRepeatEndCount(4);
+    setRepeatEndDate("");
     setPatientSearch("");
     setSearchResults([]);
     setShowNewPatient(false);
@@ -92,13 +111,17 @@ export function AppointmentForm({
 
     if (appointment) {
       // Editing mode - populate from appointment
-      setSelectedPatient({
-        id: appointment.patientId,
-        firstName: appointment.patientName.split(" ")[0],
-        lastName: appointment.patientName.split(" ").slice(1).join(" "),
-        email: null,
-        phone: null,
-      });
+      if (appointment.patientId) {
+        setSelectedPatient({
+          id: appointment.patientId,
+          firstName: appointment.patientName.split(" ")[0],
+          lastName: appointment.patientName.split(" ").slice(1).join(" "),
+          email: null,
+          phone: null,
+        });
+      } else {
+        setSelectedPatient(null);
+      }
       setProviderId(appointment.providerId);
       setServiceId(appointment.serviceId || "");
       setRoomId(appointment.roomId || "");
@@ -240,6 +263,15 @@ export function AppointmentForm({
           }
         } else {
           // Create new appointment
+          const recurrence = repeatEnabled
+            ? {
+                frequency: repeatFrequency,
+                endType: repeatEndType,
+                ...(repeatEndType === "count" && { endCount: repeatEndCount }),
+                ...(repeatEndType === "date" && { endDate: repeatEndDate }),
+              } as RecurrenceRule
+            : undefined;
+
           const result = await createAppointment({
             patientId,
             providerId,
@@ -249,6 +281,7 @@ export function AppointmentForm({
             startTime: start.toISOString(),
             endTime: end.toISOString(),
             notes: notes || undefined,
+            recurrence,
           });
 
           if (!result.success) {
@@ -267,12 +300,17 @@ export function AppointmentForm({
   };
 
   // Handle delete
-  const handleDelete = () => {
+  const handleDelete = (scope?: RecurrenceScope) => {
     if (!appointment) return;
 
     startTransition(async () => {
       try {
-        const result = await deleteAppointment(appointment.id);
+        let result;
+        if (appointment.recurrenceGroupId && scope && scope !== "this") {
+          result = await deleteRecurringAppointment(appointment.id, scope);
+        } else {
+          result = await deleteAppointment(appointment.id);
+        }
         if (!result.success) {
           setError(result.error || "Failed to delete appointment");
           return;
@@ -402,8 +440,8 @@ export function AppointmentForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={labelClass}>Start Time *</label>
-          <TimeSelect
-            value={startTime.split("T")[1] || ""}
+          <ScrollTimePicker
+            value={startTime.split("T")[1] || "09:00"}
             onChange={(time) => {
               const date = startTime.split("T")[0] || "";
               setStartTime(`${date}T${time}`);
@@ -413,8 +451,8 @@ export function AppointmentForm({
         </div>
         <div>
           <label className={labelClass}>End Time *</label>
-          <TimeSelect
-            value={endTime.split("T")[1] || ""}
+          <ScrollTimePicker
+            value={endTime.split("T")[1] || "09:30"}
             onChange={(time) => {
               const date = endTime.split("T")[0] || "";
               setEndTime(`${date}T${time}`);
@@ -423,6 +461,92 @@ export function AppointmentForm({
           />
         </div>
       </div>
+
+      {/* Repeat (create mode only) */}
+      {!isEditing && (
+        <div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={repeatEnabled}
+              onChange={(e) => setRepeatEnabled(e.target.checked)}
+              className="rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+            />
+            <Repeat className="h-4 w-4 text-gray-500" />
+            <span className="text-sm font-medium text-gray-700">Repeat</span>
+          </label>
+          {repeatEnabled && (
+            <div className="mt-3 space-y-3 pl-6 border-l-2 border-gray-100">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Frequency</label>
+                <select
+                  value={repeatFrequency}
+                  onChange={(e) => setRepeatFrequency(e.target.value as RecurrenceRule["frequency"])}
+                  className={inputClass}
+                >
+                  <option value="daily">Every day</option>
+                  <option value="weekdays">Every weekday (Mon–Fri)</option>
+                  <option value="weekly">Every week</option>
+                  <option value="biweekly">Every 2 weeks</option>
+                  <option value="monthly">Every month</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Ends</label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="repeatEnd"
+                      checked={repeatEndType === "count"}
+                      onChange={() => setRepeatEndType("count")}
+                      className="text-gray-900 focus:ring-gray-900"
+                    />
+                    <span className="text-sm text-gray-700">After</span>
+                    <input
+                      type="number"
+                      min={2}
+                      max={52}
+                      value={repeatEndCount}
+                      onChange={(e) => setRepeatEndCount(Math.min(52, Math.max(2, parseInt(e.target.value) || 2)))}
+                      className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                      disabled={repeatEndType !== "count"}
+                    />
+                    <span className="text-sm text-gray-700">appointments</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="repeatEnd"
+                      checked={repeatEndType === "date"}
+                      onChange={() => setRepeatEndType("date")}
+                      className="text-gray-900 focus:ring-gray-900"
+                    />
+                    <span className="text-sm text-gray-700">On date</span>
+                    <input
+                      type="date"
+                      value={repeatEndDate}
+                      onChange={(e) => setRepeatEndDate(e.target.value)}
+                      className="px-2 py-1 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                      disabled={repeatEndType !== "date"}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="repeatEnd"
+                      checked={repeatEndType === "never"}
+                      onChange={() => setRepeatEndType("never")}
+                      className="text-gray-900 focus:ring-gray-900"
+                    />
+                    <span className="text-sm text-gray-700">Never (max 52)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Status (only for editing) */}
       {isEditing && permissions.canEdit && (
@@ -624,25 +748,23 @@ export function AppointmentForm({
     <div className="flex items-center justify-between pt-4 border-t">
       {isEditing && permissions.canDelete ? (
         showDeleteConfirm ? (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-red-600">Delete?</span>
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={isPending}
-              className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
-            >
-              Yes
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowDeleteConfirm(false)}
-              disabled={isPending}
-              className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800"
-            >
-              No
-            </button>
-          </div>
+          appointment?.recurrenceGroupId ? (
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-red-600">Delete recurring appointment:</span>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => handleDelete("this")} disabled={isPending} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">This only</button>
+                <button type="button" onClick={() => handleDelete("thisAndFuture")} disabled={isPending} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">This & future</button>
+                <button type="button" onClick={() => handleDelete("all")} disabled={isPending} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">All in series</button>
+                <button type="button" onClick={() => setShowDeleteConfirm(false)} disabled={isPending} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-800">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-red-600">Delete?</span>
+              <button type="button" onClick={() => handleDelete()} disabled={isPending} className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">Yes</button>
+              <button type="button" onClick={() => setShowDeleteConfirm(false)} disabled={isPending} className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800">No</button>
+            </div>
+          )
         ) : (
           <button
             type="button"

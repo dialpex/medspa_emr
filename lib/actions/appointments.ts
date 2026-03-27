@@ -11,7 +11,7 @@ import type { AppointmentStatus, Role } from "@prisma/client";
 
 export type CalendarAppointment = {
   id: string;
-  patientId: string;
+  patientId: string | null;
   patientName: string;
   providerId: string;
   providerName: string;
@@ -25,7 +25,19 @@ export type CalendarAppointment = {
   endTime: Date;
   status: AppointmentStatus;
   notes: string | null;
+  recurrenceGroupId: string | null;
+  isBlock: boolean;
+  blockTitle: string | null;
 };
+
+export type RecurrenceRule = {
+  frequency: "daily" | "weekdays" | "weekly" | "biweekly" | "monthly";
+  endType: "date" | "count" | "never";
+  endDate?: string; // ISO date
+  endCount?: number;
+};
+
+export type RecurrenceScope = "this" | "thisAndFuture" | "all";
 
 export type Provider = {
   id: string;
@@ -101,7 +113,7 @@ export async function getAppointments(
   return appointments.map((apt) => ({
     id: apt.id,
     patientId: apt.patientId,
-    patientName: `${apt.patient.firstName} ${apt.patient.lastName}`,
+    patientName: apt.patient ? `${apt.patient.firstName} ${apt.patient.lastName}` : (apt.blockTitle || "Block"),
     providerId: apt.providerId,
     providerName: apt.provider.name,
     serviceId: apt.serviceId,
@@ -114,6 +126,9 @@ export async function getAppointments(
     endTime: apt.endTime,
     status: apt.status,
     notes: apt.notes,
+    recurrenceGroupId: apt.recurrenceGroupId,
+    isBlock: apt.isBlock,
+    blockTitle: apt.blockTitle,
   }));
 }
 
@@ -143,7 +158,7 @@ export async function getAppointment(id: string): Promise<CalendarAppointment | 
   return {
     id: apt.id,
     patientId: apt.patientId,
-    patientName: `${apt.patient.firstName} ${apt.patient.lastName}`,
+    patientName: apt.patient ? `${apt.patient.firstName} ${apt.patient.lastName}` : (apt.blockTitle || "Block"),
     providerId: apt.providerId,
     providerName: apt.provider.name,
     serviceId: apt.serviceId,
@@ -156,6 +171,9 @@ export async function getAppointment(id: string): Promise<CalendarAppointment | 
     endTime: apt.endTime,
     status: apt.status,
     notes: apt.notes,
+    recurrenceGroupId: apt.recurrenceGroupId,
+    isBlock: apt.isBlock,
+    blockTitle: apt.blockTitle,
   };
 }
 
@@ -300,7 +318,7 @@ export type AppointmentDetail = {
   serviceName: string | null;
   servicePrice: number | null;
   roomName: string | null;
-  patientId: string;
+  patientId: string | null;
   patientFirstName: string;
   patientLastName: string;
   patientEmail: string | null;
@@ -316,6 +334,9 @@ export type AppointmentDetail = {
   hasEncounter: boolean;
   encounterId: string | null;
   encounterStatus: string | null;
+  recurrenceGroupId: string | null;
+  isBlock: boolean;
+  blockTitle: string | null;
 };
 
 /**
@@ -374,22 +395,25 @@ export async function getAppointmentWithPatient(
     serviceName: apt.service?.name ?? null,
     servicePrice: apt.service?.price ? Number(apt.service.price) : null,
     roomName: apt.room?.name ?? null,
-    patientId: apt.patient.id,
-    patientFirstName: apt.patient.firstName,
-    patientLastName: apt.patient.lastName,
-    patientEmail: apt.patient.email,
-    patientPhone: apt.patient.phone,
-    patientDateOfBirth: apt.patient.dateOfBirth,
-    patientGender: apt.patient.gender,
-    patientAllergies: apt.patient.allergies,
-    patientCreatedAt: apt.patient.createdAt,
-    patientVisitCount: apt.patient._count.appointments,
+    patientId: apt.patient?.id ?? null,
+    patientFirstName: apt.patient?.firstName ?? "",
+    patientLastName: apt.patient?.lastName ?? "",
+    patientEmail: apt.patient?.email ?? null,
+    patientPhone: apt.patient?.phone ?? null,
+    patientDateOfBirth: apt.patient?.dateOfBirth ?? null,
+    patientGender: apt.patient?.gender ?? null,
+    patientAllergies: apt.patient?.allergies ?? null,
+    patientCreatedAt: apt.patient?.createdAt ?? apt.createdAt,
+    patientVisitCount: apt.patient?._count.appointments ?? 0,
     hasChart: !!apt.chart,
     chartId: apt.chart?.id ?? null,
     chartStatus: apt.chart?.status ?? null,
     hasEncounter: !!apt.encounter,
     encounterId: apt.encounter?.id ?? null,
     encounterStatus: apt.encounter?.status ?? null,
+    recurrenceGroupId: apt.recurrenceGroupId,
+    isBlock: apt.isBlock,
+    blockTitle: apt.blockTitle,
   };
 }
 
@@ -406,10 +430,83 @@ export type CreateAppointmentInput = {
   startTime: string; // ISO string
   endTime: string; // ISO string
   notes?: string;
+  recurrence?: RecurrenceRule;
 };
 
+const MAX_OCCURRENCES = 52;
+
 /**
- * Create a new appointment
+ * Generate occurrence dates for a recurrence rule.
+ * Uses date arithmetic (not ms addition) to handle DST and month-end correctly.
+ */
+function generateOccurrenceDates(
+  startDate: Date,
+  rule: RecurrenceRule
+): Date[] {
+  const dates: Date[] = [startDate];
+  const year = startDate.getFullYear();
+  const month = startDate.getMonth();
+  const day = startDate.getDate();
+  const dayOfWeek = startDate.getDay();
+
+  let maxCount = MAX_OCCURRENCES;
+  if (rule.endType === "count" && rule.endCount) {
+    maxCount = Math.min(rule.endCount, MAX_OCCURRENCES);
+  }
+
+  const endDate = rule.endType === "date" && rule.endDate
+    ? new Date(rule.endDate + "T23:59:59")
+    : null;
+
+  let current = new Date(startDate);
+
+  while (dates.length < maxCount) {
+    let next: Date;
+
+    if (rule.frequency === "daily") {
+      next = new Date(current);
+      next.setDate(next.getDate() + 1);
+    } else if (rule.frequency === "weekdays") {
+      next = new Date(current);
+      do {
+        next.setDate(next.getDate() + 1);
+      } while (next.getDay() === 0 || next.getDay() === 6); // skip weekends
+    } else if (rule.frequency === "weekly") {
+      next = new Date(current);
+      next.setDate(next.getDate() + 7);
+    } else if (rule.frequency === "biweekly") {
+      next = new Date(current);
+      next.setDate(next.getDate() + 14);
+    } else if (rule.frequency === "monthly") {
+      const monthsAhead = dates.length;
+      next = new Date(year, month + monthsAhead, day);
+      // Clamp to last day of month if original day doesn't exist
+      if (next.getDate() !== day) {
+        next = new Date(year, month + monthsAhead + 1, 0);
+      }
+    } else {
+      break;
+    }
+
+    if (endDate && next > endDate) break;
+
+    // Preserve the original time-of-day
+    next.setHours(
+      startDate.getHours(),
+      startDate.getMinutes(),
+      startDate.getSeconds(),
+      startDate.getMilliseconds()
+    );
+
+    dates.push(next);
+    current = next;
+  }
+
+  return dates;
+}
+
+/**
+ * Create a new appointment (or recurring series)
  */
 export async function createAppointment(
   input: CreateAppointmentInput
@@ -484,18 +581,63 @@ export async function createAppointment(
     }
   }
 
-  const appointment = await prisma.appointment.create({
-    data: {
+  const startTime = new Date(input.startTime);
+  const endTime = new Date(input.endTime);
+  const durationMs = endTime.getTime() - startTime.getTime();
+
+  // Generate recurrence group if recurring
+  const recurrenceGroupId = input.recurrence
+    ? `rg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+    : null;
+  const recurrenceRule = input.recurrence
+    ? JSON.stringify(input.recurrence)
+    : null;
+
+  if (input.recurrence) {
+    // Create all occurrences in the series
+    const occurrenceDates = generateOccurrenceDates(startTime, input.recurrence);
+    const createData = occurrenceDates.map((occStart, index) => ({
       clinicId: user.clinicId,
       patientId: input.patientId,
       providerId: input.providerId,
       serviceId: input.serviceId || null,
       roomId: input.roomId || null,
       resourceId: input.resourceId || null,
-      startTime: new Date(input.startTime),
-      endTime: new Date(input.endTime),
+      startTime: occStart,
+      endTime: new Date(occStart.getTime() + durationMs),
       notes: input.notes || null,
-      status: "Scheduled",
+      status: "Scheduled" as const,
+      recurrenceGroupId,
+      recurrenceRule,
+      recurrenceIndex: index,
+    }));
+
+    await prisma.appointment.createMany({ data: createData });
+  } else {
+    await prisma.appointment.create({
+      data: {
+        clinicId: user.clinicId,
+        patientId: input.patientId,
+        providerId: input.providerId,
+        serviceId: input.serviceId || null,
+        roomId: input.roomId || null,
+        resourceId: input.resourceId || null,
+        startTime,
+        endTime,
+        notes: input.notes || null,
+        status: "Scheduled",
+      },
+    });
+  }
+
+  // Fetch the first appointment to return
+  const appointment = await prisma.appointment.findFirst({
+    where: {
+      clinicId: user.clinicId,
+      patientId: input.patientId,
+      startTime,
+      deletedAt: null,
+      ...(recurrenceGroupId && { recurrenceGroupId }),
     },
     include: {
       patient: { select: { firstName: true, lastName: true } },
@@ -504,7 +646,12 @@ export async function createAppointment(
       room: { select: { name: true } },
       resource: { select: { name: true } },
     },
+    orderBy: { startTime: "asc" },
   });
+
+  if (!appointment) {
+    return { success: false, error: "Failed to create appointment" };
+  }
 
   revalidatePath("/calendar");
 
@@ -513,7 +660,7 @@ export async function createAppointment(
     data: {
       id: appointment.id,
       patientId: appointment.patientId,
-      patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+      patientName: appointment.patient ? `${appointment.patient.firstName} ${appointment.patient.lastName}` : "",
       providerId: appointment.providerId,
       providerName: appointment.provider.name,
       serviceId: appointment.serviceId,
@@ -526,8 +673,81 @@ export async function createAppointment(
       endTime: appointment.endTime,
       status: appointment.status,
       notes: appointment.notes,
+      recurrenceGroupId: appointment.recurrenceGroupId,
+      isBlock: appointment.isBlock,
+      blockTitle: appointment.blockTitle,
     },
   };
+}
+
+export type CreateBlockTimeInput = {
+  title: string;
+  providerId: string;
+  startTime: string;
+  endTime: string;
+  notes?: string;
+  recurrence?: RecurrenceRule;
+};
+
+/**
+ * Create a block time entry (no patient)
+ */
+export async function createBlockTime(
+  input: CreateBlockTimeInput
+): Promise<ActionResult> {
+  const user = await requirePermission("appointments", "create");
+
+  const startTime = new Date(input.startTime);
+  const endTime = new Date(input.endTime);
+  const durationMs = endTime.getTime() - startTime.getTime();
+
+  const recurrenceGroupId = input.recurrence
+    ? `rg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+    : null;
+  const recurrenceRule = input.recurrence
+    ? JSON.stringify(input.recurrence)
+    : null;
+
+  if (input.recurrence) {
+    const occurrenceDates = generateOccurrenceDates(startTime, input.recurrence);
+    await prisma.$transaction(
+      occurrenceDates.map((occStart, index) =>
+        prisma.appointment.create({
+          data: {
+            clinicId: user.clinicId,
+            patientId: null,
+            providerId: input.providerId,
+            startTime: occStart,
+            endTime: new Date(occStart.getTime() + durationMs),
+            notes: input.notes || null,
+            status: "Scheduled",
+            isBlock: true,
+            blockTitle: input.title,
+            recurrenceGroupId,
+            recurrenceRule,
+            recurrenceIndex: index,
+          },
+        })
+      )
+    );
+  } else {
+    await prisma.appointment.create({
+      data: {
+        clinicId: user.clinicId,
+        patientId: null,
+        providerId: input.providerId,
+        startTime,
+        endTime,
+        notes: input.notes || null,
+        status: "Scheduled",
+        isBlock: true,
+        blockTitle: input.title,
+      },
+    });
+  }
+
+  revalidatePath("/calendar");
+  return { success: true };
 }
 
 export type UpdateAppointmentInput = {
@@ -691,6 +911,103 @@ export async function deleteAppointment(id: string): Promise<ActionResult> {
 
   revalidatePath("/calendar");
 
+  return { success: true };
+}
+
+/**
+ * Delete a recurring appointment series (or part of it)
+ */
+export async function deleteRecurringAppointment(
+  id: string,
+  scope: RecurrenceScope
+): Promise<ActionResult<{ count: number }>> {
+  const user = await requirePermission("appointments", "delete");
+
+  const existing = await prisma.appointment.findFirst({
+    where: { id, clinicId: user.clinicId, deletedAt: null },
+  });
+
+  if (!existing) {
+    return { success: false, error: "Appointment not found" };
+  }
+
+  if (scope === "this" || !existing.recurrenceGroupId) {
+    await prisma.appointment.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    revalidatePath("/calendar");
+    return { success: true, data: { count: 1 } };
+  }
+
+  // Build where clause for series scope
+  const where: Record<string, unknown> = {
+    clinicId: user.clinicId,
+    recurrenceGroupId: existing.recurrenceGroupId,
+    deletedAt: null,
+    status: { in: ["Scheduled", "Confirmed"] },
+  };
+
+  if (scope === "thisAndFuture") {
+    where.recurrenceIndex = { gte: existing.recurrenceIndex ?? 0 };
+  }
+
+  const result = await prisma.appointment.updateMany({
+    where,
+    data: { deletedAt: new Date() },
+  });
+
+  revalidatePath("/calendar");
+  return { success: true, data: { count: result.count } };
+}
+
+/**
+ * Update a recurring appointment series (or part of it)
+ */
+export async function updateRecurringAppointment(
+  id: string,
+  input: UpdateAppointmentInput,
+  scope: RecurrenceScope
+): Promise<ActionResult> {
+  const user = await requirePermission("appointments", "edit");
+
+  const existing = await prisma.appointment.findFirst({
+    where: { id, clinicId: user.clinicId, deletedAt: null },
+  });
+
+  if (!existing) {
+    return { success: false, error: "Appointment not found" };
+  }
+
+  if (scope === "this" || !existing.recurrenceGroupId) {
+    return updateAppointment(id, input);
+  }
+
+  // Build update data (only non-time fields for bulk update)
+  const updateData: Record<string, unknown> = {};
+  if (input.providerId !== undefined) updateData.providerId = input.providerId;
+  if (input.serviceId !== undefined) updateData.serviceId = input.serviceId || null;
+  if (input.roomId !== undefined) updateData.roomId = input.roomId || null;
+  if (input.resourceId !== undefined) updateData.resourceId = input.resourceId || null;
+  if (input.notes !== undefined) updateData.notes = input.notes || null;
+
+  const where: Record<string, unknown> = {
+    clinicId: user.clinicId,
+    recurrenceGroupId: existing.recurrenceGroupId,
+    deletedAt: null,
+    status: { in: ["Scheduled", "Confirmed"] },
+  };
+
+  if (scope === "thisAndFuture") {
+    where.recurrenceIndex = { gte: existing.recurrenceIndex ?? 0 };
+  }
+
+  await prisma.appointment.updateMany({
+    where,
+    data: updateData,
+  });
+
+  revalidatePath("/calendar");
   return { success: true };
 }
 

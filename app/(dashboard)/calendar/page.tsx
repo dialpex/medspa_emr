@@ -30,7 +30,7 @@ export default async function CalendarPage({
   const params = await searchParams;
   const dateParam = params.date;
   const currentDate = dateParam ? new Date(dateParam) : new Date();
-  const view = (params.view === "day" ? "day" : "week") as "day" | "week";
+  const view = (params.view === "day" ? "day" : params.view === "month" ? "month" : "week") as "day" | "week" | "month";
   const filters = {
     providerId: params.providerId,
     roomId: params.roomId,
@@ -43,6 +43,11 @@ export default async function CalendarPage({
     startDate = new Date(currentDate);
     startDate.setHours(0, 0, 0, 0);
     endDate = new Date(currentDate);
+    endDate.setHours(23, 59, 59, 999);
+  } else if (view === "month") {
+    startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    startDate.setHours(0, 0, 0, 0);
+    endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
     endDate.setHours(23, 59, 59, 999);
   } else {
     startDate = new Date(currentDate);
@@ -80,7 +85,7 @@ async function CalendarContent({
   startDate: Date;
   endDate: Date;
   currentDate: Date;
-  view: "day" | "week";
+  view: "day" | "week" | "month";
   filters: { providerId?: string; roomId?: string };
 }) {
   const [appointments, providers, rooms, resources, services, permissions] = await Promise.all([
