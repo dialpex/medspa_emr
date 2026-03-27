@@ -129,40 +129,7 @@ export function RevenueView({ payments }: Props) {
     [overviewMonths]
   );
 
-  const chartPoints = useMemo(() => {
-    const w = 100;
-    const h = 100;
-    return overviewMonths.map((m, i) => ({
-      x: (i / (overviewMonths.length - 1)) * w,
-      y: h - (overviewMax > 0 ? (m.total / overviewMax) * (h - 10) : 0) - 5,
-      ...m,
-    }));
-  }, [overviewMonths, overviewMax]);
-
-  const areaPath = useMemo(() => {
-    if (chartPoints.length === 0) return "";
-    const line = chartPoints.map((p, i) => {
-      if (i === 0) return `M ${p.x} ${p.y}`;
-      const prev = chartPoints[i - 1];
-      const cpx1 = prev.x + (p.x - prev.x) * 0.4;
-      const cpx2 = prev.x + (p.x - prev.x) * 0.6;
-      return `C ${cpx1} ${prev.y}, ${cpx2} ${p.y}, ${p.x} ${p.y}`;
-    }).join(" ");
-    const last = chartPoints[chartPoints.length - 1];
-    const first = chartPoints[0];
-    return `${line} L ${last.x} 100 L ${first.x} 100 Z`;
-  }, [chartPoints]);
-
-  const linePath = useMemo(() => {
-    if (chartPoints.length === 0) return "";
-    return chartPoints.map((p, i) => {
-      if (i === 0) return `M ${p.x} ${p.y}`;
-      const prev = chartPoints[i - 1];
-      const cpx1 = prev.x + (p.x - prev.x) * 0.4;
-      const cpx2 = prev.x + (p.x - prev.x) * 0.6;
-      return `C ${cpx1} ${prev.y}, ${cpx2} ${p.y}, ${p.x} ${p.y}`;
-    }).join(" ");
-  }, [chartPoints]);
+  // No longer needed — replaced line/area chart with bar chart
 
   return (
     <div className="space-y-6">
@@ -224,58 +191,42 @@ export function RevenueView({ payments }: Props) {
         </div>
       </div>
 
-      {/* Revenue trend — area chart */}
+      {/* Revenue trend — gradient bar chart */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">Revenue Trend — Last 12 Months</h3>
-        <div className="relative h-48">
-          <svg
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            className="w-full h-full"
-          >
-            <defs>
-              <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="rgb(147, 51, 234)" stopOpacity="0.2" />
-                <stop offset="100%" stopColor="rgb(147, 51, 234)" stopOpacity="0.02" />
-              </linearGradient>
-            </defs>
-            {[0, 25, 50, 75].map((y) => (
-              <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="#f3f4f6" strokeWidth="0.3" />
-            ))}
-            <path d={areaPath} fill="url(#areaGrad)" />
-            <path d={linePath} fill="none" stroke="rgb(147, 51, 234)" strokeWidth="0.6" strokeLinecap="round" strokeLinejoin="round" />
-            {chartPoints.map((p) => (
-              <circle
-                key={p.key}
-                cx={p.x}
-                cy={p.y}
-                r={p.isCurrent ? "1.2" : "0.7"}
-                fill={p.isCurrent ? "rgb(147, 51, 234)" : "white"}
-                stroke="rgb(147, 51, 234)"
-                strokeWidth="0.4"
-              />
-            ))}
-          </svg>
-          <div className="absolute inset-0 flex">
-            {chartPoints.map((p) => (
-              <div key={p.key} className="flex-1 group relative">
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
+        <div className="flex items-end gap-2 h-52">
+          {overviewMonths.map((m) => {
+            const height = overviewMax > 0 ? (m.total / overviewMax) * 100 : 0;
+            return (
+              <div key={m.key} className="flex-1 flex flex-col items-center gap-1.5 group relative h-full">
+                {/* Value label on hover */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 hidden group-hover:block z-10">
                   <div className="bg-gray-900 text-white text-[10px] font-medium px-2 py-1 rounded whitespace-nowrap">
-                    {p.label}: {formatCompact(p.total)}
+                    {formatCompact(m.total)}
                   </div>
                 </div>
+                {/* Bar */}
+                <div className="w-full flex-1 flex items-end">
+                  <div
+                    className={`w-full rounded-t-md transition-all ${
+                      m.total === 0
+                        ? "bg-gray-100"
+                        : m.isCurrent
+                          ? "bg-gradient-to-t from-purple-700 to-purple-400"
+                          : m.isPast
+                            ? "bg-gradient-to-t from-purple-300 to-purple-200"
+                            : "bg-gray-200"
+                    }`}
+                    style={{ height: `${Math.max(height, 2)}%` }}
+                  />
+                </div>
+                {/* Month label */}
+                <span className={`text-[10px] ${m.isCurrent ? "font-semibold text-purple-600" : "text-gray-400"}`}>
+                  {m.label}
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
-        <div className="flex mt-2">
-          {overviewMonths.map((m) => (
-            <div key={m.key} className="flex-1 text-center">
-              <span className={`text-[10px] ${m.isCurrent ? "font-semibold text-purple-600" : "text-gray-400"}`}>
-                {m.label}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
