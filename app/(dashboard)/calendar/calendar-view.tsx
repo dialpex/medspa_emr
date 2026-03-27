@@ -6,7 +6,7 @@ import { Temporal } from "@js-temporal/polyfill";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).Temporal = Temporal;
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useCalendarApp, ScheduleXCalendar } from "@schedule-x/react";
 import { createViewDay, createViewWeek, createViewMonthGrid } from "@schedule-x/calendar";
@@ -27,6 +27,7 @@ import { BlockTimeForm } from "./block-time-form";
 import { AppointmentForm } from "./appointment-form";
 import { AppointmentPanel } from "./appointment-panel";
 import { STATUS_COLORS } from "./appointment-card";
+import { ProviderDayView } from "./provider-day-view";
 import type { AppointmentStatus } from "@prisma/client";
 
 // Status → CSS color vars for schedule-x events
@@ -271,6 +272,13 @@ export function CalendarView({
   // Panel state (view/edit existing appointment)
   const [panelAppointmentId, setPanelAppointmentId] = useState<string | null>(null);
 
+  // Key includes view + appointment fingerprint so the calendar remounts
+  // when data changes (new appointment created) but NOT on date navigation
+  const dataFingerprint = useMemo(
+    () => appointments.map((a) => a.id).sort().join(","),
+    [appointments]
+  );
+
   // Set mounted flag after hydration
   useEffect(() => {
     setIsMounted(true);
@@ -286,7 +294,7 @@ export function CalendarView({
   }
 
   return <CalendarInner
-    key={`${view}-${currentDate}`}
+    key={`${view}-${dataFingerprint}`}
     appointments={appointments}
     providers={providers}
     rooms={rooms}
@@ -335,6 +343,25 @@ function CalendarInner({
   setPanelAppointmentId: React.Dispatch<React.SetStateAction<string | null>>;
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
+
+  // Track last mouse click position so onClickDateTime can position the menu.
+  // We capture on both mousedown and click (capture phase) with a timestamp
+  // so we can verify freshness — schedule-x sometimes fires onClickDateTime
+  // asynchronously after internal processing.
+  const lastClickPos = useRef<{ x: number; y: number; ts: number }>({ x: 0, y: 0, ts: 0 });
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      lastClickPos.current = { x: e.clientX, y: e.clientY, ts: Date.now() };
+    };
+    // Capture on both phases to ensure we get it before schedule-x processes
+    document.addEventListener("mousedown", handler, true);
+    document.addEventListener("click", handler, true);
+    return () => {
+      document.removeEventListener("mousedown", handler, true);
+      document.removeEventListener("click", handler, true);
+    };
+  }, []);
 
   // Events service plugin for managing events
   const eventsService = useMemo(() => createEventsServicePlugin(), []);
@@ -345,13 +372,25 @@ function CalendarInner({
     [appointments]
   );
 
-  // Sync events when appointments change (filters, navigation, etc.)
+  // Sync selected date when navigating (without remounting).
+  // The key does NOT include currentDate, so date changes don't remount —
+  // we update schedule-x's internal date here instead.
+  const currentPlainDate = useMemo(() => toPlainDate(currentDate), [currentDate]);
+  const isFirstRender = useRef(true);
   useEffect(() => {
-    if (eventsService.$app) {
-      eventsService.set(events);
+    // Skip first render — selectedDate is already set in config
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
     }
-  }, [events, eventsService]);
-
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (calendar as any).datePickerState?.select(currentPlainDate);
+    } catch {
+      // Some schedule-x versions may not expose datePickerState
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPlainDate]);
 
   // Create calendar instance
   const calendar = useCalendarApp({
@@ -378,17 +417,43 @@ function CalendarInner({
           const startTime = utcZonedDateTimeToLocalDate(zdt);
           const endTime = new Date(startTime.getTime() + 30 * 60000);
 
-          // Position menu near the click — use center of viewport as fallback
-          const x = window.innerWidth / 2;
-          const y = window.innerHeight / 3;
+          // Use captured click position if fresh (within 500ms), otherwise
+          // compute position from the time grid DOM based on the clicked time
+          const pos = lastClickPos.current;
+          const isFresh = Date.now() - pos.ts < 500;
+          let x: number, y: number;
+
+          if (isFresh && pos.x > 0) {
+            x = pos.x;
+            y = pos.y;
+          } else {
+            // Fallback: compute from time grid geometry
+            const hour = startTime.getHours();
+            const minute = startTime.getMinutes();
+            const dateStr = `${startTime.getFullYear()}-${String(startTime.getMonth() + 1).padStart(2, "0")}-${String(startTime.getDate()).padStart(2, "0")}`;
+            const dayCol = document.querySelector<HTMLElement>(`.sx__time-grid-day[data-time-grid-date="${dateStr}"]`);
+            if (dayCol) {
+              const rect = dayCol.getBoundingClientRect();
+              const totalHours = 20 - 7; // dayBoundaries
+              const pct = ((hour - 7) * 60 + minute) / (totalHours * 60);
+              x = rect.left + rect.width / 2;
+              y = rect.top + pct * rect.height;
+            } else {
+              x = window.innerWidth / 2;
+              y = window.innerHeight / 3;
+            }
+          }
+
           setSlotMenu({ isOpen: true, x, y, startTime, endTime });
         } catch (err) {
           console.error("[Calendar] onClickDateTime error:", err, dateTime);
           const now = new Date();
+          const pos = lastClickPos.current;
+          const isFresh = Date.now() - pos.ts < 500;
           setSlotMenu({
             isOpen: true,
-            x: window.innerWidth / 2,
-            y: window.innerHeight / 3,
+            x: isFresh ? pos.x : window.innerWidth / 2,
+            y: isFresh ? pos.y : window.innerHeight / 3,
             startTime: now,
             endTime: new Date(now.getTime() + 30 * 60000),
           });
@@ -410,7 +475,7 @@ function CalendarInner({
           endTime: endTime.toISOString(),
         });
 
-        router.refresh();
+        startTransition(() => { router.refresh(); });
       },
     },
     dayBoundaries: {
@@ -428,6 +493,129 @@ function CalendarInner({
   const handleCloseForm = useCallback(() => {
     setFormState({ isOpen: false });
   }, [setFormState]);
+
+  // Memoize customComponents so ScheduleXCalendar doesn't re-mount
+  // the calendar DOM on every render (its useEffect depends on this ref)
+  const customComponents = useMemo(() => ({ timeGridEvent: TimeGridEvent }), []);
+
+  // --- Hover ghost block ---
+  const ghostDataRef = useRef<{ startTime: Date; endTime: Date } | null>(null);
+  const ghostElRef = useRef<HTMLDivElement | null>(null);
+  const DAY_START_HOUR = 7;
+  const DAY_END_HOUR = 20;
+  const GHOST_DURATION_MIN = 30;
+  const SNAP_MINUTES = 15;
+
+  useEffect(() => {
+    if (!permissions.canCreate) return;
+    if (view === "month" || view === "day") return;
+
+    // Create ghost element once
+    let ghost = ghostElRef.current;
+    if (!ghost) {
+      ghost = document.createElement("div");
+      ghost.className = "calendar-ghost-block";
+      ghost.innerHTML = '<span class="ghost-label"></span>';
+      ghostElRef.current = ghost;
+    }
+
+    let currentDayCol: HTMLElement | null = null;
+
+    const showGhost = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+
+      // Don't show ghost when hovering over an existing event
+      if (target.closest(".sx__time-grid-event, .sx__time-grid-event-inner")) {
+        if (ghost!.parentElement) ghost!.style.display = "none";
+        return;
+      }
+
+      const dayCol = target.closest<HTMLElement>(".sx__time-grid-day");
+      if (!dayCol) {
+        if (ghost!.parentElement) ghost!.style.display = "none";
+        return;
+      }
+
+      const dateStr = dayCol.getAttribute("data-time-grid-date");
+      if (!dateStr) { ghost!.style.display = "none"; return; }
+
+      // Move ghost into the day column if needed
+      if (currentDayCol !== dayCol) {
+        dayCol.appendChild(ghost!);
+        currentDayCol = dayCol;
+      }
+
+      const rect = dayCol.getBoundingClientRect();
+      const relY = e.clientY - rect.top;
+      const totalHours = DAY_END_HOUR - DAY_START_HOUR;
+      const hourFloat = DAY_START_HOUR + (relY / rect.height) * totalHours;
+
+      // Snap to nearest SNAP_MINUTES
+      const totalMinutes = Math.round((hourFloat * 60) / SNAP_MINUTES) * SNAP_MINUTES;
+      const snappedHour = Math.floor(totalMinutes / 60);
+      const snappedMin = totalMinutes % 60;
+
+      if (snappedHour < DAY_START_HOUR || snappedHour >= DAY_END_HOUR) {
+        ghost!.style.display = "none";
+        return;
+      }
+
+      const topPct = ((snappedHour - DAY_START_HOUR) * 60 + snappedMin) / (totalHours * 60) * 100;
+      const heightPct = GHOST_DURATION_MIN / (totalHours * 60) * 100;
+
+      ghost!.style.display = "block";
+      ghost!.style.top = `${topPct}%`;
+      ghost!.style.height = `${heightPct}%`;
+
+      // Time label
+      const h12 = snappedHour % 12 || 12;
+      const ampm = snappedHour >= 12 ? "pm" : "am";
+      const minStr = snappedMin > 0 ? `:${String(snappedMin).padStart(2, "0")}` : "";
+      ghost!.querySelector<HTMLElement>(".ghost-label")!.textContent = `${h12}${minStr}${ampm}`;
+
+      // Store for click
+      const [year, month, day] = dateStr.split("-").map(Number);
+      const startTime = new Date(year, month - 1, day, snappedHour, snappedMin);
+      const endTime = new Date(startTime.getTime() + GHOST_DURATION_MIN * 60000);
+      ghostDataRef.current = { startTime, endTime };
+    };
+
+    const hideGhost = () => {
+      if (ghost!.parentElement) ghost!.style.display = "none";
+      ghostDataRef.current = null;
+    };
+
+    const handleGhostClick = (e: MouseEvent) => {
+      if (!ghostDataRef.current) return;
+      e.stopPropagation();
+      e.preventDefault();
+      const { startTime, endTime } = ghostDataRef.current;
+      ghost!.style.display = "none";
+      setSlotMenu({
+        isOpen: true,
+        x: e.clientX,
+        y: e.clientY,
+        startTime,
+        endTime,
+      });
+    };
+
+    const wrapper = document.querySelector<HTMLElement>(".sx-react-calendar-wrapper");
+    if (!wrapper) return;
+
+    wrapper.addEventListener("mousemove", showGhost);
+    wrapper.addEventListener("mouseleave", hideGhost);
+    ghost.addEventListener("click", handleGhostClick);
+
+    return () => {
+      wrapper.removeEventListener("mousemove", showGhost);
+      wrapper.removeEventListener("mouseleave", hideGhost);
+      ghost!.removeEventListener("click", handleGhostClick);
+      if (ghost!.parentElement) ghost!.parentElement.removeChild(ghost!);
+      currentDayCol = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendar, view, permissions.canCreate]);
 
   return (
     <div className="calendar-wrapper">
@@ -473,13 +661,56 @@ function CalendarInner({
           border-radius: 4px;
           cursor: pointer;
         }
+        /* Make time grid days position:relative for ghost overlay */
+        .sx-react-calendar-wrapper .sx__time-grid-day {
+          position: relative;
+        }
+        /* Ghost hover block — injected into day columns */
+        .calendar-ghost-block {
+          display: none;
+          position: absolute;
+          left: 2px;
+          right: 2px;
+          pointer-events: auto;
+          cursor: pointer;
+          z-index: 5;
+          border: 2px dashed rgba(147, 51, 234, 0.45);
+          background: rgba(147, 51, 234, 0.05);
+          border-radius: 6px;
+          padding: 3px 8px;
+          box-sizing: border-box;
+          transition: top 0.06s ease-out;
+        }
+        .calendar-ghost-block:hover {
+          border-color: rgba(147, 51, 234, 0.7);
+          background: rgba(147, 51, 234, 0.1);
+        }
+        .calendar-ghost-block .ghost-label {
+          font-size: 11px;
+          font-weight: 600;
+          color: rgba(147, 51, 234, 0.6);
+          user-select: none;
+        }
       `}</style>
 
-      {/* Calendar */}
-      <ScheduleXCalendar
-        calendarApp={calendar}
-        customComponents={{ timeGridEvent: TimeGridEvent }}
-      />
+      {/* Calendar — custom provider-column view for day, schedule-x for week/month */}
+      {view === "day" ? (
+        <ProviderDayView
+          appointments={appointments}
+          providers={providers}
+          currentDate={currentDate}
+          permissions={permissions}
+          onEventClick={(id) => setPanelAppointmentId(id)}
+          onSlotClick={(x, y, start, end) =>
+            setSlotMenu({ isOpen: true, x, y, startTime: start, endTime: end })
+          }
+        />
+      ) : (
+        <ScheduleXCalendar
+          calendarApp={calendar}
+          customComponents={customComponents}
+        />
+      )}
 
       {/* Appointment Panel (slide-out for existing appointments) */}
       <AppointmentPanel
@@ -498,7 +729,10 @@ function CalendarInner({
           <div className="fixed inset-0 z-50" onClick={() => setSlotMenu({ isOpen: false, x: 0, y: 0 })} />
           <div
             className="fixed z-50 bg-white rounded-lg border border-gray-200 shadow-lg py-1 w-52"
-            style={{ left: slotMenu.x - 104, top: slotMenu.y }}
+            style={{
+              left: Math.max(8, Math.min(slotMenu.x - 104, window.innerWidth - 216)),
+              top: Math.max(8, Math.min(slotMenu.y, window.innerHeight - 120)),
+            }}
           >
             <button
               className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 flex items-center gap-3 font-medium text-gray-900"

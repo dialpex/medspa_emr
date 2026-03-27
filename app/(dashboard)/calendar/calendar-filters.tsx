@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronLeftIcon,
@@ -27,12 +27,14 @@ export function CalendarFilters({
 }: CalendarFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [, startTransition] = useTransition();
 
   const [showMiniCal, setShowMiniCal] = useState(false);
   const selectedProviderId = searchParams.get("providerId") || "";
   const selectedRoomId = searchParams.get("roomId") || "";
 
-  // Update URL with new params
+  // Update URL with new params — wrapped in startTransition to prevent
+  // Suspense fallback (loading skeleton) from flashing during navigation
   const updateParams = (updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(updates).forEach(([key, value]) => {
@@ -42,7 +44,9 @@ export function CalendarFilters({
         params.delete(key);
       }
     });
-    router.push(`/calendar?${params.toString()}`);
+    startTransition(() => {
+      router.replace(`/calendar?${params.toString()}`, { scroll: false });
+    });
   };
 
   // Navigate to a specific date
@@ -160,7 +164,7 @@ export function CalendarFilters({
             onClick={() => updateParams({ view: "day" })}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               view === "day"
-                ? "bg-gray-900 text-white"
+                ? "bg-purple-700 text-white"
                 : "bg-white text-gray-600 hover:bg-gray-50"
             }`}
           >
@@ -170,7 +174,7 @@ export function CalendarFilters({
             onClick={() => updateParams({ view: "week" })}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               view === "week"
-                ? "bg-gray-900 text-white"
+                ? "bg-purple-700 text-white"
                 : "bg-white text-gray-600 hover:bg-gray-50"
             }`}
           >
@@ -180,7 +184,7 @@ export function CalendarFilters({
             onClick={() => updateParams({ view: "month" })}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               view === "month"
-                ? "bg-gray-900 text-white"
+                ? "bg-purple-700 text-white"
                 : "bg-white text-gray-600 hover:bg-gray-50"
             }`}
           >

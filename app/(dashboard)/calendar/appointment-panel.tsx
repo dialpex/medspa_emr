@@ -22,6 +22,8 @@ import type { AppointmentStatus } from "@prisma/client";
 import {
   getAppointmentWithPatient,
   updateAppointmentStatus,
+  deleteAppointment,
+  deleteRecurringAppointment,
   getPatientTransactionHistory,
   type AppointmentDetail,
   type CalendarAppointment,
@@ -118,6 +120,7 @@ export function AppointmentPanel({
   const [loading, setLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [editFormOpen, setEditFormOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<null | "prompt" | "scope">(null);
 
   const isOpen = !!appointmentId;
 
@@ -156,6 +159,23 @@ export function AppointmentPanel({
       });
     },
     [detail, router]
+  );
+
+  const handleDelete = useCallback(
+    (scope?: "this" | "thisAndFuture" | "all") => {
+      if (!detail) return;
+      startTransition(async () => {
+        if (detail.recurrenceGroupId && scope) {
+          await deleteRecurringAppointment(detail.id, scope);
+        } else {
+          await deleteAppointment(detail.id);
+        }
+        setDeleteConfirm(null);
+        onClose();
+        router.refresh();
+      });
+    },
+    [detail, onClose, router]
   );
 
   // Build a CalendarAppointment for the edit form
@@ -397,24 +417,90 @@ export function AppointmentPanel({
               <div className="border-t p-4 space-y-2">
                 {detail.isBlock ? (
                   /* Block time: only Edit and Delete */
-                  <div className="flex gap-2">
-                    {permissions.canEdit && (
-                      <button
-                        onClick={() => setEditFormOpen(true)}
-                        className="flex-1 py-2 px-4 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center justify-center gap-2"
-                      >
-                        <EditIcon className="h-4 w-4" />
-                        Edit
-                      </button>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      {permissions.canEdit && (
+                        <button
+                          onClick={() => setEditFormOpen(true)}
+                          className="flex-1 py-2 px-4 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center justify-center gap-2"
+                        >
+                          <EditIcon className="h-4 w-4" />
+                          Edit
+                        </button>
+                      )}
+                      {permissions.canDelete && (
+                        <button
+                          onClick={() => {
+                            if (detail.recurrenceGroupId) {
+                              setDeleteConfirm("scope");
+                            } else {
+                              setDeleteConfirm("prompt");
+                            }
+                          }}
+                          disabled={isPending}
+                          className="py-2 px-4 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Delete confirmation */}
+                    {deleteConfirm === "prompt" && (
+                      <div className="p-3 bg-red-50 rounded-lg border border-red-200 space-y-2">
+                        <p className="text-sm text-red-700 font-medium">Delete this block?</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleDelete()}
+                            disabled={isPending}
+                            className="flex-1 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {isPending ? "Deleting..." : "Yes, Delete"}
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="flex-1 py-1.5 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-200 hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
                     )}
-                    {permissions.canDelete && (
-                      <button
-                        onClick={() => handleStatusChange("Cancelled")}
-                        disabled={isPending}
-                        className="py-2 px-4 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 disabled:opacity-50"
-                      >
-                        Delete
-                      </button>
+
+                    {/* Recurring scope picker */}
+                    {deleteConfirm === "scope" && (
+                      <div className="p-3 bg-red-50 rounded-lg border border-red-200 space-y-2">
+                        <p className="text-sm text-red-700 font-medium">Delete recurring block</p>
+                        <div className="space-y-1.5">
+                          <button
+                            onClick={() => handleDelete("this")}
+                            disabled={isPending}
+                            className="w-full py-1.5 text-sm font-medium text-red-700 bg-white rounded-lg border border-red-200 hover:bg-red-100 disabled:opacity-50 text-left px-3"
+                          >
+                            This event only
+                          </button>
+                          <button
+                            onClick={() => handleDelete("thisAndFuture")}
+                            disabled={isPending}
+                            className="w-full py-1.5 text-sm font-medium text-red-700 bg-white rounded-lg border border-red-200 hover:bg-red-100 disabled:opacity-50 text-left px-3"
+                          >
+                            This and future events
+                          </button>
+                          <button
+                            onClick={() => handleDelete("all")}
+                            disabled={isPending}
+                            className="w-full py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 text-left px-3"
+                          >
+                            All events in series
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="w-full py-1.5 text-sm font-medium text-gray-600 text-left px-3 hover:text-gray-900"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 ) : (
