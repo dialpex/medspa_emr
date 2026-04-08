@@ -434,8 +434,8 @@ function CalendarInner({
             const dayCol = document.querySelector<HTMLElement>(`.sx__time-grid-day[data-time-grid-date="${dateStr}"]`);
             if (dayCol) {
               const rect = dayCol.getBoundingClientRect();
-              const totalHours = 20 - 7; // dayBoundaries
-              const pct = ((hour - 7) * 60 + minute) / (totalHours * 60);
+              const totalHours = 24; // dayBoundaries
+              const pct = (hour * 60 + minute) / (totalHours * 60);
               x = rect.left + rect.width / 2;
               y = rect.top + pct * rect.height;
             } else {
@@ -479,11 +479,11 @@ function CalendarInner({
       },
     },
     dayBoundaries: {
-      start: "07:00",
-      end: "20:00",
+      start: "00:00",
+      end: "24:00",
     },
     weekOptions: {
-      gridHeight: 800,
+      gridHeight: 1488, // 62px/hour × 24hrs — same density as day view
       nDays: 7,
       eventWidth: 95,
     },
@@ -498,11 +498,23 @@ function CalendarInner({
   // the calendar DOM on every render (its useEffect depends on this ref)
   const customComponents = useMemo(() => ({ timeGridEvent: TimeGridEvent }), []);
 
+  // Auto-scroll week view to business hours (7 AM)
+  useEffect(() => {
+    if (view === "day") return; // day view handles its own scroll
+    const timer = setTimeout(() => {
+      const wrapper = document.querySelector<HTMLElement>(".sx-react-calendar-wrapper");
+      if (!wrapper) return;
+      // 1488px grid / 24 hours = 62px/hour; scroll to 7 AM
+      wrapper.scrollTop = 7 * 62;
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [view, currentDate]);
+
   // --- Hover ghost block ---
   const ghostDataRef = useRef<{ startTime: Date; endTime: Date } | null>(null);
   const ghostElRef = useRef<HTMLDivElement | null>(null);
-  const DAY_START_HOUR = 7;
-  const DAY_END_HOUR = 20;
+  const DAY_START_HOUR = 0;
+  const DAY_END_HOUR = 24;
   const GHOST_DURATION_MIN = 30;
   const SNAP_MINUTES = 15;
 
@@ -623,6 +635,7 @@ function CalendarInner({
       <style jsx global>{`
         .sx-react-calendar-wrapper {
           height: 800px;
+          overflow-y: auto;
         }
         .sx-react-calendar-wrapper .sx-calendar {
           border-radius: 0.5rem;

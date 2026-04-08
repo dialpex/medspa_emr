@@ -5,11 +5,13 @@ import type { AppointmentStatus } from "@prisma/client";
 import type { CalendarAppointment, Provider } from "@/lib/actions/appointments";
 
 // --- Constants ---
-const DAY_START_HOUR = 7;
-const DAY_END_HOUR = 20;
-const TOTAL_HOURS = DAY_END_HOUR - DAY_START_HOUR; // 13
+const DAY_START_HOUR = 0;
+const DAY_END_HOUR = 24;
+const TOTAL_HOURS = 24;
 const TOTAL_MINUTES = TOTAL_HOURS * 60;
-const GRID_HEIGHT = 800;
+const PX_PER_HOUR = 62; // Same density as original 800px / 13hrs
+const GRID_HEIGHT = PX_PER_HOUR * TOTAL_HOURS; // ~1488px
+const BUSINESS_START_HOUR = 7; // Default scroll position
 const SNAP_MINUTES = 15;
 const GHOST_DURATION_MIN = 30;
 const MIN_DISPLAY_DURATION_MIN = 30;
@@ -174,6 +176,14 @@ export function ProviderDayView({
     return providers;
   }, [providers, appointments]);
 
+  // Auto-scroll to business hours on mount
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTop = BUSINESS_START_HOUR * PX_PER_HOUR;
+  }, [currentDate]);
+
   // Ghost hover state
   const [ghost, setGhost] = useState<{
     providerId: string;
@@ -322,10 +332,11 @@ export function ProviderDayView({
         ))}
       </div>
 
-      {/* Time grid */}
+      {/* Time grid — scrollable, defaults to business hours */}
       <div
+        ref={scrollContainerRef}
         className="overflow-auto"
-        style={{ maxHeight: GRID_HEIGHT + 20 }}
+        style={{ maxHeight: 800 }}
       >
         <div
           ref={gridRef}
