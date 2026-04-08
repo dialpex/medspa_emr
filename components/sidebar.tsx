@@ -293,7 +293,7 @@ export function Sidebar({
 
         {dropdownOpen && (
           <div
-            className={`absolute bottom-full mb-1 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg ${
+            className={`absolute bottom-full mb-2 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg z-50 ${
               collapsed ? "left-full ml-1" : "left-3"
             }`}
           >
