@@ -3,6 +3,7 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { requirePermission } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+import { createAuditLog } from "@/lib/audit";
 
 function generateId(): string {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -94,15 +95,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "PhotoUpload",
-        entityType: "Photo",
-        entityId: photo.id,
-        details: JSON.stringify({ patientId, chartId }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "PhotoUpload",
+      entityType: "Photo",
+      entityId: photo.id,
+      details: JSON.stringify({ patientId, chartId }),
     });
 
     return NextResponse.json({ success: true, photo });

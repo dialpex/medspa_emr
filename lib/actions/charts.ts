@@ -7,6 +7,9 @@ import {
   AuthorizationError,
   type AuthenticatedUser,
 } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
+import { validateInput } from "@/lib/validation/helpers";
+import { chartUpdateSchema } from "@/lib/validation/schemas";
 import { createHash } from "crypto";
 import { revalidatePath } from "next/cache";
 
@@ -74,19 +77,17 @@ export async function createChart(input: {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "ChartCreate",
-        entityType: "Chart",
-        entityId: chart.id,
-        details: JSON.stringify({
-          patientId: input.patientId,
-          appointmentId: input.appointmentId,
-          templateId: input.templateId,
-        }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "ChartCreate",
+      entityType: "Chart",
+      entityId: chart.id,
+      details: JSON.stringify({
+        patientId: input.patientId,
+        appointmentId: input.appointmentId,
+        templateId: input.templateId,
+      }),
     });
 
     return { success: true, data: { id: chart.id } };
@@ -175,15 +176,13 @@ export async function getChartWithPhotos(chartId: string) {
   if (!chart) return null;
   enforceTenantIsolation(user, chart.clinicId);
 
-  await prisma.auditLog.create({
-    data: {
-      clinicId: user.clinicId,
-      userId: user.id,
-      action: "ChartView",
-      entityType: "Chart",
-      entityId: chartId,
-      details: JSON.stringify({ patientId: chart.patientId }),
-    },
+  await createAuditLog({
+    clinicId: user.clinicId,
+    userId: user.id,
+    action: "ChartView",
+    entityType: "Chart",
+    entityId: chartId,
+    details: JSON.stringify({ patientId: chart.patientId }),
   });
 
   return chart;
@@ -225,15 +224,13 @@ export async function getChart(chartId: string): Promise<ActionResult<{
     enforceTenantIsolation(user, chart.clinicId);
 
     // Log chart view
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "ChartView",
-        entityType: "Chart",
-        entityId: chartId,
-        details: JSON.stringify({ patientId: chart.patientId }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "ChartView",
+      entityType: "Chart",
+      entityId: chartId,
+      details: JSON.stringify({ patientId: chart.patientId }),
     });
 
     return { success: true, data: chart };
@@ -253,6 +250,7 @@ export async function updateChart(
   data: ChartUpdateInput
 ): Promise<ActionResult> {
   try {
+    validateInput(chartUpdateSchema, data);
     const user = await requirePermission("charts", "edit");
 
     const chart = await prisma.chart.findUnique({
@@ -291,15 +289,13 @@ export async function updateChart(
     });
 
     // Log chart update
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "ChartUpdate",
-        entityType: "Chart",
-        entityId: chartId,
-        details: JSON.stringify({ fields: Object.keys(data) }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "ChartUpdate",
+      entityType: "Chart",
+      entityId: chartId,
+      details: JSON.stringify({ fields: Object.keys(data) }),
     });
 
     return { success: true };
@@ -417,21 +413,19 @@ export async function signChart(chartId: string): Promise<ActionResult> {
     }
 
     // Log chart signing
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "ChartSign",
-        entityType: "Chart",
-        entityId: chartId,
-        details: JSON.stringify({
-          patientId: chart.patientId,
-          encounterId: chart.encounter?.id,
-          previousStatus: "NeedsSignOff",
-          newStatus: "MDSigned",
-          recordHash,
-        }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "ChartSign",
+      entityType: "Chart",
+      entityId: chartId,
+      details: JSON.stringify({
+        patientId: chart.patientId,
+        encounterId: chart.encounter?.id,
+        previousStatus: "NeedsSignOff",
+        newStatus: "MDSigned",
+        recordHash,
+      }),
     });
 
     return { success: true };
@@ -504,21 +498,19 @@ export async function signChartWithUser(
       });
     }
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "ChartSign",
-        entityType: "Chart",
-        entityId: chartId,
-        details: JSON.stringify({
-          patientId: chart.patientId,
-          encounterId: chart.encounter?.id,
-          previousStatus: "NeedsSignOff",
-          newStatus: "MDSigned",
-          recordHash,
-        }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "ChartSign",
+      entityType: "Chart",
+      entityId: chartId,
+      details: JSON.stringify({
+        patientId: chart.patientId,
+        encounterId: chart.encounter?.id,
+        previousStatus: "NeedsSignOff",
+        newStatus: "MDSigned",
+        recordHash,
+      }),
     });
 
     return { success: true };
@@ -583,15 +575,13 @@ export async function updateChartWithUser(
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "ChartUpdate",
-        entityType: "Chart",
-        entityId: chartId,
-        details: JSON.stringify({ fields: Object.keys(data) }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "ChartUpdate",
+      entityType: "Chart",
+      entityId: chartId,
+      details: JSON.stringify({ fields: Object.keys(data) }),
     });
 
     return { success: true };

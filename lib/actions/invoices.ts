@@ -2,6 +2,9 @@
 
 import { prisma } from "@/lib/prisma";
 import { requirePermission, AuthorizationError } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
+import { validateInput } from "@/lib/validation/helpers";
+import { invoiceSchema } from "@/lib/validation/schemas";
 import { revalidatePath } from "next/cache";
 
 export type InvoiceListItem = {
@@ -174,15 +177,13 @@ export async function getInvoice(id: string): Promise<InvoiceDetail | null> {
   });
 
   if (invoice) {
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "InvoiceView",
-        entityType: "Invoice",
-        entityId: invoice.id,
-        details: JSON.stringify({ invoiceNumber: invoice.invoiceNumber }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "InvoiceView",
+      entityType: "Invoice",
+      entityId: invoice.id,
+      details: JSON.stringify({ invoiceNumber: invoice.invoiceNumber }),
     });
   }
 
@@ -191,6 +192,7 @@ export async function getInvoice(id: string): Promise<InvoiceDetail | null> {
 
 export async function createInvoice(input: InvoiceInput) {
   try {
+    validateInput(invoiceSchema, input);
     const user = await requirePermission("invoices", "create");
     const invoiceNumber = await generateInvoiceNumber(user.clinicId);
     const totals = calculateTotals(input.items, input.discountAmount ?? 0, input.discountPercent ?? null, input.taxRate ?? null);
@@ -219,15 +221,13 @@ export async function createInvoice(input: InvoiceInput) {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "InvoiceCreate",
-        entityType: "Invoice",
-        entityId: invoice.id,
-        details: JSON.stringify({ patientId: input.patientId, invoiceNumber, total: totals.total }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "InvoiceCreate",
+      entityType: "Invoice",
+      entityId: invoice.id,
+      details: JSON.stringify({ patientId: input.patientId, invoiceNumber, total: totals.total }),
     });
 
     revalidatePath("/sales");
@@ -240,6 +240,7 @@ export async function createInvoice(input: InvoiceInput) {
 
 export async function updateInvoice(id: string, input: InvoiceInput) {
   try {
+    validateInput(invoiceSchema, input);
     const user = await requirePermission("invoices", "edit");
 
     const existing = await prisma.invoice.findFirst({
@@ -278,15 +279,13 @@ export async function updateInvoice(id: string, input: InvoiceInput) {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "InvoiceUpdate",
-        entityType: "Invoice",
-        entityId: invoice.id,
-        details: JSON.stringify({ invoiceNumber: existing.invoiceNumber, total: totals.total }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "InvoiceUpdate",
+      entityType: "Invoice",
+      entityId: invoice.id,
+      details: JSON.stringify({ invoiceNumber: existing.invoiceNumber, total: totals.total }),
     });
 
     revalidatePath("/sales");
@@ -311,15 +310,13 @@ export async function updateInvoiceStatus(id: string, status: string) {
       data: { status: status as "Draft" | "Sent" | "Void" | "Refunded" },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "InvoiceUpdate",
-        entityType: "Invoice",
-        entityId: id,
-        details: JSON.stringify({ previousStatus: existing.status, newStatus: status }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "InvoiceUpdate",
+      entityType: "Invoice",
+      entityId: id,
+      details: JSON.stringify({ previousStatus: existing.status, newStatus: status }),
     });
 
     revalidatePath("/sales");
@@ -355,15 +352,13 @@ export async function deleteInvoice(id: string) {
       }),
     ]);
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "InvoiceDelete",
-        entityType: "Invoice",
-        entityId: id,
-        details: JSON.stringify({ invoiceNumber: existing.invoiceNumber, total: existing.total }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "InvoiceDelete",
+      entityType: "Invoice",
+      entityId: id,
+      details: JSON.stringify({ invoiceNumber: existing.invoiceNumber, total: existing.total }),
     });
 
     revalidatePath("/sales");
@@ -395,15 +390,13 @@ export async function recordPayment(input: PaymentInput) {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "PaymentCreate",
-        entityType: "Payment",
-        entityId: payment.id,
-        details: JSON.stringify({ invoiceId: input.invoiceId, amount: input.amount, paymentMethod: input.paymentMethod }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "PaymentCreate",
+      entityType: "Payment",
+      entityId: payment.id,
+      details: JSON.stringify({ invoiceId: input.invoiceId, amount: input.amount, paymentMethod: input.paymentMethod }),
     });
 
     // Calculate new paid total

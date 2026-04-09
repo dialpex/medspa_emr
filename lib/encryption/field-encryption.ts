@@ -3,15 +3,15 @@ import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
+const ENCRYPTED_PREFIX = "enc:";
 
 function getEncryptionKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY || process.env.MIGRATION_ENCRYPTION_KEY;
   if (!key) {
     throw new Error(
-      "ENCRYPTION_KEY (or MIGRATION_ENCRYPTION_KEY) environment variable is required for encryption"
+      "ENCRYPTION_KEY environment variable is required for PHI field encryption"
     );
   }
-  // Key must be 32 bytes (256 bits) — accept hex-encoded or base64
   if (key.length === 64) {
     return Buffer.from(key, "hex");
   }
@@ -20,37 +20,33 @@ function getEncryptionKey(): Buffer {
     return buf;
   }
   throw new Error(
-    "MIGRATION_ENCRYPTION_KEY must be 32 bytes (64 hex chars or 44 base64 chars)"
+    "ENCRYPTION_KEY must be 32 bytes (64 hex chars or 44 base64 chars)"
   );
 }
 
-/**
- * Encrypt plaintext using AES-256-GCM.
- * Returns base64-encoded string: IV (12 bytes) + ciphertext + auth tag (16 bytes)
- */
-export function encrypt(plaintext: string): string {
+export function encryptField(value: string): string {
   const key = getEncryptionKey();
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
 
   const encrypted = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
+    cipher.update(value, "utf8"),
     cipher.final(),
   ]);
   const authTag = cipher.getAuthTag();
 
-  // Prepend IV, append auth tag
   const combined = Buffer.concat([iv, encrypted, authTag]);
-  return combined.toString("base64");
+  return ENCRYPTED_PREFIX + combined.toString("base64");
 }
 
-/**
- * Decrypt AES-256-GCM ciphertext.
- * Input: base64-encoded string of IV (12 bytes) + ciphertext + auth tag (16 bytes)
- */
-export function decrypt(ciphertext: string): string {
+export function decryptField(ciphertext: string): string {
+  if (!ciphertext.startsWith(ENCRYPTED_PREFIX)) {
+    // Plaintext value (not yet encrypted)
+    return ciphertext;
+  }
+
   const key = getEncryptionKey();
-  const combined = Buffer.from(ciphertext, "base64");
+  const combined = Buffer.from(ciphertext.slice(ENCRYPTED_PREFIX.length), "base64");
 
   const iv = combined.subarray(0, IV_LENGTH);
   const authTag = combined.subarray(combined.length - AUTH_TAG_LENGTH);
@@ -65,4 +61,18 @@ export function decrypt(ciphertext: string): string {
   ]);
 
   return decrypted.toString("utf8");
+}
+
+export function encryptOptional(value: string | null | undefined): string | null {
+  if (value == null || value === "") return null;
+  return encryptField(value);
+}
+
+export function decryptOptional(value: string | null | undefined): string | null {
+  if (value == null || value === "") return null;
+  return decryptField(value);
+}
+
+export function isEncrypted(value: string): boolean {
+  return value.startsWith(ENCRYPTED_PREFIX);
 }

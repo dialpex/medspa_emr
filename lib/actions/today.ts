@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission, hasPermission } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 import { derivePhase } from "@/lib/today-utils";
+import { createAuditLog } from "@/lib/audit";
 import type { AppointmentStatus, AuditAction, ChartStatus, EncounterStatus, Role } from "@prisma/client";
 import type { JourneyPhase } from "@/lib/today-utils";
 
@@ -246,15 +247,13 @@ async function writeAuditLog(
   entityId: string,
   details?: Record<string, unknown>
 ) {
-  await prisma.auditLog.create({
-    data: {
-      clinicId,
-      userId,
-      action,
-      entityType: "Appointment",
-      entityId,
-      details: details ? JSON.stringify(details) : null,
-    },
+  await createAuditLog({
+    clinicId,
+    userId,
+    action,
+    entityType: "Appointment",
+    entityId,
+    details: details ? JSON.stringify(details) : undefined,
   });
 }
 

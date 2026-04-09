@@ -2,6 +2,9 @@
 
 import { prisma } from "@/lib/prisma";
 import { requirePermission, requirePermissionForClinic } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
+import { validateInput } from "@/lib/validation/helpers";
+import { createPatientSchema, updatePatientSchema } from "@/lib/validation/schemas";
 import { revalidatePath } from "next/cache";
 
 export type PatientListItem = {
@@ -215,6 +218,16 @@ export async function getPatient(id: string): Promise<PatientDetail | null> {
     },
   });
 
+  if (patient) {
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "PatientView",
+      entityType: "Patient",
+      entityId: patient.id,
+    });
+  }
+
   return patient;
 }
 
@@ -325,6 +338,15 @@ export async function getPatientTimeline(patientId: string): Promise<PatientTime
     }),
   ]);
 
+  await createAuditLog({
+    clinicId: user.clinicId,
+    userId: user.id,
+    action: "PatientView",
+    entityType: "Patient",
+    entityId: patientId,
+    details: JSON.stringify({ scope: "timeline" }),
+  });
+
   return { appointments, charts, photos, consents, invoices, documents };
 }
 
@@ -350,6 +372,7 @@ export type CreatePatientInput = {
  */
 export async function createPatient(input: CreatePatientInput): Promise<PatientDetail> {
   const user = await requirePermission("patients", "create");
+  const validated = validateInput(createPatientSchema, input);
 
   const patient = await prisma.patient.create({
     data: {
@@ -370,15 +393,12 @@ export async function createPatient(input: CreatePatientInput): Promise<PatientD
     },
   });
 
-  // Audit log
-  await prisma.auditLog.create({
-    data: {
-      clinicId: user.clinicId,
-      userId: user.id,
-      action: "PatientCreate",
-      entityType: "Patient",
-      entityId: patient.id,
-    },
+  await createAuditLog({
+    clinicId: user.clinicId,
+    userId: user.id,
+    action: "PatientCreate",
+    entityType: "Patient",
+    entityId: patient.id,
   });
 
   revalidatePath("/patients");
@@ -396,6 +416,7 @@ export async function updatePatient(
   input: UpdatePatientInput
 ): Promise<PatientDetail> {
   const user = await requirePermission("patients", "edit");
+  validateInput(updatePatientSchema, input);
 
   // Verify patient belongs to user's clinic
   const existing = await prisma.patient.findFirst({
@@ -432,16 +453,13 @@ export async function updatePatient(
     },
   });
 
-  // Audit log
-  await prisma.auditLog.create({
-    data: {
-      clinicId: user.clinicId,
-      userId: user.id,
-      action: "PatientUpdate",
-      entityType: "Patient",
-      entityId: patient.id,
-      details: JSON.stringify({ updatedFields: Object.keys(input) }),
-    },
+  await createAuditLog({
+    clinicId: user.clinicId,
+    userId: user.id,
+    action: "PatientUpdate",
+    entityType: "Patient",
+    entityId: patient.id,
+    details: JSON.stringify({ updatedFields: Object.keys(input) }),
   });
 
   revalidatePath("/patients");

@@ -8,7 +8,7 @@ const ALLOWED_TYPES: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/png": ".png",
   "image/webp": ".webp",
-  "image/svg+xml": ".svg",
+  // SVG removed — raster-only for logos to prevent XSS via SVG injection
 };
 
 const MAX_SIZE = 2 * 1024 * 1024; // 2MB
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     if (!ALLOWED_TYPES[file.type]) {
       return NextResponse.json(
-        { error: "Only JPEG, PNG, WebP, and SVG images are allowed" },
+        { error: "Only JPEG, PNG, and WebP images are allowed" },
         { status: 400 }
       );
     }

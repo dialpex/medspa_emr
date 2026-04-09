@@ -10,6 +10,7 @@ import {
   requirePermission,
   enforceTenantIsolation,
 } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 import { compositePhotoWithAnnotations } from "@/lib/pdf/photo-compositor";
 import { EncounterDocument } from "@/lib/pdf/encounter-pdf";
 
@@ -160,18 +161,16 @@ export async function GET(
     );
 
     // 9. Audit log
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "ExportPdf",
-        entityType: "Encounter",
-        entityId: encounter.id,
-        details: JSON.stringify({
-          patientId: encounter.patientId,
-          chartId: chart.id,
-        }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "ExportPdf",
+      entityType: "Encounter",
+      entityId: encounter.id,
+      details: JSON.stringify({
+        patientId: encounter.patientId,
+        chartId: chart.id,
+      }),
     });
 
     // 10. Return PDF response

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requirePermission, enforceTenantIsolation } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 
 export async function POST(
   request: NextRequest,
@@ -73,18 +74,16 @@ export async function POST(
     });
 
     // Audit log
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "AddendumCreated",
-        entityType: "Encounter",
-        entityId: encounter.id,
-        details: JSON.stringify({
-          addendumId: addendum.id,
-          patientId: encounter.patientId,
-        }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "AddendumCreated",
+      entityType: "Encounter",
+      entityId: encounter.id,
+      details: JSON.stringify({
+        addendumId: addendum.id,
+        patientId: encounter.patientId,
+      }),
     });
 
     // Fetch author name for response

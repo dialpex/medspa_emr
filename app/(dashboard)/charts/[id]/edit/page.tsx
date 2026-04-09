@@ -24,7 +24,7 @@ export default async function ChartEditPage({
 
   const [previousTreatment, consentTemplates] = await Promise.all([
     getPreviousTreatment(chart.patientId!, chart.id, user.clinicId),
-    getConsentTemplatesForClinic(user.clinicId),
+    getConsentTemplatesForClinic(),
   ]);
 
   return (

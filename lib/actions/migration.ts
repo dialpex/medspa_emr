@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission, AuthorizationError } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { createAuditLog } from "@/lib/audit";
 import type { MigrationSource } from "@prisma/client";
 import { encrypt, decrypt } from "@/lib/migration/crypto";
 import { getMigrationProvider } from "@/lib/migration/providers";
@@ -40,15 +41,13 @@ export async function createMigrationJob(
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "MigrationStart",
-        entityType: "MigrationJob",
-        entityId: job.id,
-        details: JSON.stringify({ source }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "MigrationStart",
+      entityType: "MigrationJob",
+      entityId: job.id,
+      details: JSON.stringify({ source }),
     });
 
     revalidatePath("/settings/migration");
@@ -654,15 +653,13 @@ export async function completeMigration(
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "MigrationComplete",
-        entityType: "MigrationJob",
-        entityId: jobId,
-        details: JSON.stringify(report),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "MigrationComplete",
+      entityType: "MigrationJob",
+      entityId: jobId,
+      details: JSON.stringify(report),
     });
 
     revalidatePath("/settings/migration");
@@ -690,7 +687,10 @@ export async function deleteMigrationJob(
       return { success: false, error: "Cannot delete an active migration. Pause it first." };
     }
 
-    await prisma.migrationJob.delete({ where: { id: jobId } });
+    await prisma.migrationJob.update({
+      where: { id: jobId },
+      data: { deletedAt: new Date() },
+    });
 
     revalidatePath("/settings/migration");
     return { success: true, data: null };

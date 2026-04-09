@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
+import { validatePasswordStrength } from "@/lib/validation/password";
 import bcrypt from "bcrypt";
 
 export type AccountProfile = {
@@ -72,8 +73,9 @@ export async function changePassword(
 ): Promise<{ success: boolean; error?: string }> {
   const user = await requireAuth();
 
-  if (!newPassword || newPassword.length < 8) {
-    return { success: false, error: "New password must be at least 8 characters." };
+  const passwordCheck = validatePasswordStrength(newPassword);
+  if (!passwordCheck.valid) {
+    return { success: false, error: passwordCheck.errors.join(". ") };
   }
 
   const record = await prisma.user.findUniqueOrThrow({

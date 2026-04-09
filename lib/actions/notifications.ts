@@ -217,7 +217,10 @@ export async function deleteNotificationTemplate(
   if (existing.isSystem)
     return { success: false, error: "Cannot delete system templates" };
 
-  await prisma.notificationTemplate.delete({ where: { id } });
+  await prisma.notificationTemplate.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  });
 
   revalidatePath("/settings/notifications");
   return { success: true };
@@ -233,7 +236,10 @@ export async function resetNotificationTemplate(
   });
   if (!override) return { success: false, error: "No custom override found" };
 
-  await prisma.notificationTemplate.delete({ where: { id: override.id } });
+  await prisma.notificationTemplate.update({
+    where: { id: override.id },
+    data: { deletedAt: new Date() },
+  });
 
   revalidatePath("/settings/notifications");
   return { success: true };

@@ -3,8 +3,11 @@ import { requirePermission } from "@/lib/rbac";
 import { requireFeature } from "@/lib/feature-flags";
 import { FeatureNotAvailableError } from "@/lib/feature-flags-core";
 import { getAiProvider } from "@/lib/agents/chat";
-import { prisma } from "@/lib/prisma";
 import type { ChatMessage } from "@/lib/agents/chat/types";
+import { createAuditLogFromRequest } from "@/lib/audit";
+import { redactTextPHI } from "@/lib/agents/_shared/phi/text-redactor";
+import { validateInput } from "@/lib/validation/helpers";
+import { chatMessageSchema } from "@/lib/validation/schemas";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,18 +15,22 @@ export async function POST(request: NextRequest) {
     const user = await requirePermission("ai", "create");
 
     const body = await request.json();
-    const messages: ChatMessage[] = body.messages;
+    const validated = validateInput(chatMessageSchema, body);
+    const messages: ChatMessage[] = validated.messages;
 
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return NextResponse.json(
-        { error: "messages array is required" },
-        { status: 400 }
-      );
-    }
+    // Redact PHI from user messages before sending to LLM
+    const redactedMessages: ChatMessage[] = await Promise.all(
+      messages.map(async (msg) => {
+        if (msg.role === "user") {
+          return { ...msg, content: await redactTextPHI(msg.content, user.clinicId) };
+        }
+        return msg;
+      })
+    );
 
     const provider = getAiProvider();
     const response = await provider.chat({
-      messages,
+      messages: redactedMessages,
       context: {
         userRole: user.role,
         clinicId: user.clinicId,
@@ -33,22 +40,21 @@ export async function POST(request: NextRequest) {
 
     // Audit log (non-blocking — don't fail the response if logging fails)
     const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
-    prisma.auditLog
-      .create({
-        data: {
-          clinicId: user.clinicId,
-          userId: user.id,
-          action: "AiChat",
-          entityType: "AiChat",
-          entityId: user.id,
-          details: JSON.stringify({
-            query: lastUserMessage?.content.slice(0, 200),
-            responseType: response.type,
-            domain: response.domain,
-          }),
-        },
-      })
-      .catch((err: unknown) => console.error("[AI Chat] Audit log failed:", err));
+    createAuditLogFromRequest(
+      {
+        clinicId: user.clinicId,
+        userId: user.id,
+        action: "AiChat",
+        entityType: "AiChat",
+        entityId: user.id,
+        details: JSON.stringify({
+          query: lastUserMessage?.content.slice(0, 200),
+          responseType: response.type,
+          domain: response.domain,
+        }),
+      },
+      request
+    ).catch((err: unknown) => console.error("[AI Chat] Audit log failed:", err));
 
     return NextResponse.json(response);
   } catch (error) {
