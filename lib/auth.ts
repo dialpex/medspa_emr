@@ -2,40 +2,10 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
 import { prisma } from "./prisma";
-import type { Role } from "@prisma/client";
-
-declare module "next-auth" {
-  interface User {
-    id: string;
-    email: string;
-    name: string;
-    role: Role;
-    clinicId: string;
-  }
-
-  interface Session {
-    user: {
-      id: string;
-      email: string;
-      name: string;
-      role: Role;
-      clinicId: string;
-    };
-  }
-}
-
-declare module "@auth/core/jwt" {
-  interface JWT {
-    id: string;
-    role: Role;
-    clinicId: string;
-    lastActivity?: number;
-    mfaPending?: boolean;
-    mfaVerified?: boolean;
-  }
-}
+import { authConfig } from "./auth.config";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       name: "credentials",
@@ -96,65 +66,31 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
+    ...authConfig.callbacks,
     async jwt({ token, user, trigger }) {
-      if (user) {
-        token.id = user.id;
-        token.role = user.role;
-        token.clinicId = user.clinicId;
-        token.lastActivity = Date.now();
-        // MFA pending flag
-        const mfaPending = (user as any).mfaPending;
-        if (mfaPending) {
-          token.mfaPending = true;
-          token.mfaVerified = false;
-        }
-      }
+      // Run the edge-safe base logic first
+      const result = await authConfig.callbacks!.jwt!({
+        token,
+        user,
+        trigger,
+      } as any);
 
-      // Session timeout: 15 minutes of inactivity
-      if (token.lastActivity) {
-        const elapsed = Date.now() - token.lastActivity;
-        if (elapsed > 15 * 60 * 1000) {
-          // Force re-login by clearing token
-          return {} as any;
-        }
-      }
-
-      // Refresh activity on session update (user activity)
-      if (trigger === "update") {
-        token.lastActivity = Date.now();
-
-        // Check if MFA was just verified (DB stamp from /api/auth/verify-mfa)
-        if (token.mfaPending && !token.mfaVerified) {
-          const dbUser = await prisma.user.findUnique({
-            where: { id: token.id },
-            select: { totpVerifiedAt: true },
-          });
-          if (dbUser?.totpVerifiedAt) {
-            const verifiedAge = Date.now() - dbUser.totpVerifiedAt.getTime();
-            if (verifiedAge < 5 * 60 * 1000) { // within last 5 minutes
-              token.mfaVerified = true;
-              token.mfaPending = false;
-            }
+      // Server-side only: check MFA verification from DB
+      if (trigger === "update" && result?.mfaPending && !result.mfaVerified) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: result.id },
+          select: { totpVerifiedAt: true },
+        });
+        if (dbUser?.totpVerifiedAt) {
+          const verifiedAge = Date.now() - dbUser.totpVerifiedAt.getTime();
+          if (verifiedAge < 5 * 60 * 1000) {
+            result.mfaVerified = true;
+            result.mfaPending = false;
           }
         }
       }
 
-      return token;
+      return result;
     },
-    async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id;
-        session.user.role = token.role;
-        session.user.clinicId = token.clinicId;
-      }
-      return session;
-    },
-  },
-  pages: {
-    signIn: "/login",
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 15 * 60, // 15 minutes
   },
 });

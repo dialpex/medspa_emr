@@ -1,6 +1,9 @@
-import { auth } from "@/lib/auth";
+import NextAuth from "next-auth";
+import { authConfig } from "@/lib/auth.config";
 import { NextResponse } from "next/server";
 import { rateLimit } from "@/lib/rate-limit";
+
+const { auth } = NextAuth(authConfig);
 
 const PUBLIC_PATHS = [
   "/login",
@@ -21,12 +24,13 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
 
   // Rate limiting for API routes
+  // Only rate-limit sign-in (brute force protection), not session checks
   if (pathname.startsWith("/api/")) {
     const ip = getClientIp(req);
-    const isAuthRoute = pathname.startsWith("/api/auth");
-    const limit = isAuthRoute ? 5 : 100;
+    const isSignIn = pathname === "/api/auth/callback/credentials";
+    const limit = isSignIn ? 10 : 100;
     const window = 60_000; // 1 minute
-    const key = `${isAuthRoute ? "auth" : "api"}:${ip}`;
+    const key = `${isSignIn ? "signin" : "api"}:${ip}`;
 
     const result = rateLimit(key, limit, window);
     if (!result.success) {

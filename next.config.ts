@@ -1,9 +1,19 @@
 import type { NextConfig } from "next";
 
+const isProd = process.env.NODE_ENV === "production";
+
 const securityHeaders = [
   {
     key: "Content-Security-Policy",
-    value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'none'; font-src 'self' data:",
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "connect-src 'self' https://cdn.jsdelivr.net",
+      "font-src 'self' data:",
+      "frame-ancestors 'none'",
+    ].join("; "),
   },
   {
     key: "Strict-Transport-Security",
@@ -29,6 +39,17 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   async headers() {
+    // CSP interferes with Turbopack HMR/websockets in dev
+    if (!isProd) {
+      return [
+        {
+          source: "/(.*)",
+          headers: securityHeaders.filter(
+            (h) => h.key !== "Content-Security-Policy"
+          ),
+        },
+      ];
+    }
     return [
       {
         source: "/(.*)",

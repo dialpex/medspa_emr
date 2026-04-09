@@ -1,39 +1,39 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { PrismaClient } from "@prisma/client";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { assertAuditDeletionAllowed } from "../lib/prisma";
 
 describe("Audit Log Deletion Protection", () => {
-  // Use a fresh PrismaClient with extensions to test the protection
-  // We can't use the extended client directly in tests because the
-  // test env has NODE_ENV=test which bypasses the protection.
-  // Instead, we test the logic inline.
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalAllow = process.env.ALLOW_AUDIT_DELETE;
 
-  it("the protection is bypassed in test environment", async () => {
-    // This verifies the escape hatch works so tests can clean up
-    expect(process.env.NODE_ENV).toBe("test");
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+    if (originalAllow !== undefined) {
+      process.env.ALLOW_AUDIT_DELETE = originalAllow;
+    } else {
+      delete process.env.ALLOW_AUDIT_DELETE;
+    }
   });
 
-  it("protection logic rejects deletion outside test/allowed contexts", () => {
-    // Simulate the check logic from lib/prisma.ts
-    const nodeEnv: string = "production";
-    const allowAuditDelete: string | undefined = undefined;
-
-    const shouldBlock =
-      nodeEnv !== "test" && allowAuditDelete !== "true";
-
-    expect(shouldBlock).toBe(true);
+  it("allows deletion in test environment", () => {
+    process.env.NODE_ENV = "test";
+    expect(() => assertAuditDeletionAllowed()).not.toThrow();
   });
 
-  it("protection logic allows deletion in test environment", () => {
-    const nodeEnv: string = "test";
-    const shouldBlock = nodeEnv !== "test";
-    expect(shouldBlock).toBe(false);
+  it("allows deletion with ALLOW_AUDIT_DELETE=true", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ALLOW_AUDIT_DELETE = "true";
+    expect(() => assertAuditDeletionAllowed()).not.toThrow();
   });
 
-  it("protection logic allows deletion with ALLOW_AUDIT_DELETE=true", () => {
-    const nodeEnv: string = "production";
-    const allowAuditDelete: string = "true";
-    const shouldBlock =
-      nodeEnv !== "test" && allowAuditDelete !== "true";
-    expect(shouldBlock).toBe(false);
+  it("blocks deletion in production without override", () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.ALLOW_AUDIT_DELETE;
+    expect(() => assertAuditDeletionAllowed()).toThrow("Audit logs cannot be deleted");
+  });
+
+  it("blocks deletion in development without override", () => {
+    process.env.NODE_ENV = "development";
+    delete process.env.ALLOW_AUDIT_DELETE;
+    expect(() => assertAuditDeletionAllowed()).toThrow("Audit logs cannot be deleted");
   });
 });
