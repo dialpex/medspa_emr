@@ -1,6 +1,7 @@
 import type { MigrationProvider, ProviderInfo } from "./types";
 import { MockMigrationProvider } from "./mock";
 import { BoulevardProvider } from "./boulevard";
+import { AestheticsRecordProvider } from "./aesthetics-record";
 import type { MigrationSource } from "@prisma/client";
 
 export const PROVIDER_REGISTRY: Record<MigrationSource, ProviderInfo> = {
@@ -42,6 +43,7 @@ export function getMigrationProvider(source: MigrationSource): MigrationProvider
     case "Boulevard":
       return new BoulevardProvider();
     case "AestheticsRecord":
+      return new AestheticsRecordProvider();
     case "CsvUpload":
       console.warn(`[Migration] ${source} provider not yet implemented — using MockProvider`);
       return new MockMigrationProvider();

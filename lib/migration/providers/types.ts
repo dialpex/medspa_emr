@@ -33,6 +33,28 @@ export interface ConnectionTestResult {
   businessName?: string;
   locationId?: string;
   errorMessage?: string;
+  /** OTP challenge — provider needs a verification code before connection completes */
+  otpRequired?: boolean;
+  /** Opaque token to pass back with the OTP code (session state, challenge ID, etc.) */
+  otpSessionToken?: string;
+  /** Where the OTP was sent (e.g., "SMS to ***1234" or "Email to a***@gmail.com") */
+  otpDeliveryHint?: string;
+}
+
+/**
+ * Extended provider interface for vendors that require multi-step authentication (e.g., OTP).
+ * Providers that need OTP should implement this alongside MigrationProvider.
+ */
+export interface OTPCapableProvider {
+  /**
+   * Submit the OTP code to complete authentication.
+   * Called after testConnection() returns otpRequired: true.
+   */
+  submitOTP(
+    credentials: MigrationCredentials,
+    otpCode: string,
+    sessionToken: string
+  ): Promise<ConnectionTestResult>;
 }
 
 // Normalized source records — each includes rawData for AI context

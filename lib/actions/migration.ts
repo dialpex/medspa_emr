@@ -5,9 +5,9 @@ import { requirePermission, AuthorizationError } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import type { MigrationSource } from "@prisma/client";
-import { encrypt } from "@/lib/migration/crypto";
+import { encrypt, decrypt } from "@/lib/migration/crypto";
 import { getMigrationProvider } from "@/lib/migration/providers";
-import type { MigrationCredentials } from "@/lib/migration/providers/types";
+import type { MigrationCredentials, OTPCapableProvider } from "@/lib/migration/providers/types";
 import {
   discoverSourceData as agentDiscover,
   proposeServiceMappings as agentProposeMappings,
@@ -63,7 +63,7 @@ export async function connectMigrationSource(
   jobId: string,
   credentials: MigrationCredentials,
   consentAcknowledged: boolean
-): Promise<ActionResult<{ businessName?: string }>> {
+): Promise<ActionResult<{ businessName?: string; otpRequired?: boolean; otpSessionToken?: string; otpDeliveryHint?: string }>> {
   try {
     const user = await requirePermission("migration", "create");
 
@@ -80,6 +80,26 @@ export async function connectMigrationSource(
     // Test connection
     const provider = getMigrationProvider(job.source);
     const result = await provider.testConnection(credentials);
+
+    // OTP challenge — store credentials temporarily and return challenge to UI
+    if (result.otpRequired) {
+      // Store encrypted credentials so we can resume after OTP
+      await prisma.migrationJob.update({
+        where: { id: jobId },
+        data: {
+          credentialsEncrypted: encrypt(JSON.stringify(credentials)),
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          otpRequired: true,
+          otpSessionToken: result.otpSessionToken,
+          otpDeliveryHint: result.otpDeliveryHint,
+        },
+      };
+    }
 
     if (!result.connected) {
       return { success: false, error: result.errorMessage || "Connection failed" };
@@ -100,6 +120,73 @@ export async function connectMigrationSource(
       data: {
         status: "Connected",
         credentialsEncrypted: encrypt(JSON.stringify(credentials)),
+        connectionValidatedAt: new Date(),
+        consentText,
+        consentSignedAt: new Date(),
+        consentSignedById: user.id,
+        consentIpAddress: ipAddress,
+      },
+    });
+
+    revalidatePath(`/settings/migration/${jobId}`);
+    return { success: true, data: { businessName: result.businessName } };
+  } catch (error) {
+    if (error instanceof AuthorizationError) return { success: false, error: error.message };
+    throw error;
+  }
+}
+
+/**
+ * Submit OTP code to complete authentication for providers that require it.
+ * Called after connectMigrationSource() returns otpRequired: true.
+ */
+export async function submitMigrationOTP(
+  jobId: string,
+  otpCode: string,
+  otpSessionToken: string
+): Promise<ActionResult<{ businessName?: string }>> {
+  try {
+    const user = await requirePermission("migration", "create");
+
+    const job = await prisma.migrationJob.findFirst({
+      where: { id: jobId, clinicId: user.clinicId },
+    });
+    if (!job) return { success: false, error: "Migration job not found" };
+
+    if (!job.credentialsEncrypted) {
+      return { success: false, error: "No credentials found — please reconnect" };
+    }
+
+    // Decrypt stored credentials
+    const credentials: MigrationCredentials = JSON.parse(decrypt(job.credentialsEncrypted));
+
+    // Get provider and verify it supports OTP
+    const provider = getMigrationProvider(job.source);
+    if (!("submitOTP" in provider)) {
+      return { success: false, error: "This provider does not support OTP verification" };
+    }
+
+    const otpProvider = provider as unknown as OTPCapableProvider;
+    const result = await otpProvider.submitOTP(credentials, otpCode, otpSessionToken);
+
+    if (!result.connected) {
+      return { success: false, error: result.errorMessage || "OTP verification failed" };
+    }
+
+    // OTP verified — complete connection setup
+    const headersList = await headers();
+    const ipAddress =
+      headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      headersList.get("x-real-ip") ||
+      "unknown";
+
+    const sourceName = job.source;
+    const consentText = `I authorize Neuvvia to connect to ${sourceName} using the credentials I've provided and to read my clinic's data (patients, appointments, services, charts, photos, and invoices) for the purpose of migrating it to Neuvvia. Neuvvia will NOT modify or delete any data on ${sourceName}.`;
+
+    await prisma.migrationJob.update({
+      where: { id: jobId },
+      data: {
+        status: "Connected",
         connectionValidatedAt: new Date(),
         consentText,
         consentSignedAt: new Date(),
