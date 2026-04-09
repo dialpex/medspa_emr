@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
+import { createAuditLog } from "@/lib/audit";
 
 interface ReceiveStockInput {
   productId: string;
@@ -77,21 +78,19 @@ export async function receiveStock(input: ReceiveStockInput): Promise<ReceiveSto
     return { transaction, updated };
   });
 
-  await prisma.auditLog.create({
-    data: {
-      clinicId: user.clinicId,
-      userId: user.id,
-      action: "PatientCreate", // reusing closest available audit action
-      entityType: "Product",
-      entityId: input.productId,
-      details: JSON.stringify({
-        type: "inventory_receive",
-        quantity: input.quantity,
-        lotNumber: input.lotNumber,
-        reference: input.reference,
-        transactionId: result.transaction.id,
-      }),
-    },
+  await createAuditLog({
+    clinicId: user.clinicId,
+    userId: user.id,
+    action: "PatientCreate", // reusing closest available audit action
+    entityType: "Product",
+    entityId: input.productId,
+    details: JSON.stringify({
+      type: "inventory_receive",
+      quantity: input.quantity,
+      lotNumber: input.lotNumber,
+      reference: input.reference,
+      transactionId: result.transaction.id,
+    }),
   });
 
   revalidatePath("/settings/products");

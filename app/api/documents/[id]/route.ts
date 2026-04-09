@@ -3,6 +3,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { requirePermission, enforceTenantIsolation } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+import { createAuditLog } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -22,14 +23,12 @@ export async function GET(
     const filePath = path.join(process.cwd(), document.storagePath);
     const fileBuffer = await readFile(filePath);
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "DocumentView",
-        entityType: "PatientDocument",
-        entityId: id,
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "DocumentView",
+      entityType: "PatientDocument",
+      entityId: id,
     });
 
     return new NextResponse(fileBuffer, {

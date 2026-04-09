@@ -9,6 +9,7 @@ import {
 import { requireFeature } from "@/lib/feature-flags";
 import { revalidatePath } from "next/cache";
 import { sendMessage, normalizeToE164 } from "@/lib/messaging/service";
+import { createAuditLog } from "@/lib/audit";
 import type { MessagePurpose, MessageChannel } from "@prisma/client";
 
 export interface ActionResult<T = void> {
@@ -74,14 +75,12 @@ export async function getConversationMessages(conversationId: string) {
   });
 
   // Audit log
-  await prisma.auditLog.create({
-    data: {
-      clinicId: user.clinicId,
-      userId: user.id,
-      action: "ConversationView",
-      entityType: "Conversation",
-      entityId: conversationId,
-    },
+  await createAuditLog({
+    clinicId: user.clinicId,
+    userId: user.id,
+    action: "ConversationView",
+    entityType: "Conversation",
+    entityId: conversationId,
   });
 
   const messages = await prisma.message.findMany({
@@ -151,20 +150,18 @@ export async function sendMessageAction(input: {
   });
 
   // Audit log
-  await prisma.auditLog.create({
-    data: {
-      clinicId: user.clinicId,
-      userId: user.id,
-      action: result.success ? "MessageSend" : "MessageFailed",
-      entityType: "Message",
-      entityId: result.messageId,
-      details: JSON.stringify({
-        conversationId: input.conversationId,
-        patientId: conversation.patientId,
-        purpose: input.purpose || "Generic",
-        error: result.error,
-      }),
-    },
+  await createAuditLog({
+    clinicId: user.clinicId,
+    userId: user.id,
+    action: result.success ? "MessageSend" : "MessageFailed",
+    entityType: "Message",
+    entityId: result.messageId,
+    details: JSON.stringify({
+      conversationId: input.conversationId,
+      patientId: conversation.patientId,
+      purpose: input.purpose || "Generic",
+      error: result.error,
+    }),
   });
 
   revalidatePath("/inbox");

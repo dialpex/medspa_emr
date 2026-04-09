@@ -5,6 +5,7 @@ import {
   requirePermission,
   AuthorizationError,
 } from "@/lib/rbac";
+import { createAuditLog } from "@/lib/audit";
 
 export async function createPhotoRecord(data: {
   patientId: string;
@@ -49,15 +50,13 @@ export async function createPhotoRecord(data: {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "PhotoUpload",
-        entityType: "Photo",
-        entityId: photo.id,
-        details: JSON.stringify({ patientId: data.patientId, chartId: data.chartId }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "PhotoUpload",
+      entityType: "Photo",
+      entityId: photo.id,
+      details: JSON.stringify({ patientId: data.patientId, chartId: data.chartId }),
     });
 
     return { success: true as const, data: photo };
@@ -97,15 +96,13 @@ export async function updatePhotoAnnotations(id: string, annotations: string) {
       data: { annotations },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "PhotoAnnotationUpdate",
-        entityType: "Photo",
-        entityId: id,
-        details: JSON.stringify({ patientId: photo.patientId }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "PhotoAnnotationUpdate",
+      entityType: "Photo",
+      entityId: id,
+      details: JSON.stringify({ patientId: photo.patientId }),
     });
 
     return { success: true as const };
@@ -145,15 +142,13 @@ export async function deletePhoto(id: string) {
       data: { deletedAt: new Date() },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "PhotoDelete",
-        entityType: "Photo",
-        entityId: id,
-        details: JSON.stringify({ patientId: photo.patientId, filename: photo.filename }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "PhotoDelete",
+      entityType: "Photo",
+      entityId: id,
+      details: JSON.stringify({ patientId: photo.patientId, filename: photo.filename }),
     });
 
     return { success: true as const };
@@ -179,15 +174,13 @@ export async function getPhotosForChart(chartId: string) {
   });
 
   if (photos.length > 0) {
-    await prisma.auditLog.create({
-      data: {
-        clinicId: user.clinicId,
-        userId: user.id,
-        action: "PhotoView",
-        entityType: "Chart",
-        entityId: chartId,
-        details: JSON.stringify({ photoCount: photos.length }),
-      },
+    await createAuditLog({
+      clinicId: user.clinicId,
+      userId: user.id,
+      action: "PhotoView",
+      entityType: "Chart",
+      entityId: chartId,
+      details: JSON.stringify({ photoCount: photos.length }),
     });
   }
 

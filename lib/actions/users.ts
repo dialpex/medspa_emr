@@ -2,6 +2,9 @@
 
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/rbac";
+import { validatePasswordStrength } from "@/lib/validation/password";
+import { validateInput } from "@/lib/validation/helpers";
+import { userCreateSchema, userUpdateSchema } from "@/lib/validation/schemas";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcrypt";
 
@@ -66,26 +69,29 @@ type UserInput = {
 
 export async function createUser(input: UserInput) {
   const user = await requirePermission("users", "create");
-  if (!input.name || !input.email || !input.role || !input.password) {
-    throw new Error("Name, email, role, and password are required");
+  const validated = validateInput(userCreateSchema, input);
+
+  const pwCheck = validatePasswordStrength(validated.password);
+  if (!pwCheck.valid) {
+    throw new Error(pwCheck.errors.join(". "));
   }
 
   const existing = await prisma.user.findUnique({
-    where: { email: input.email },
+    where: { email: validated.email },
   });
   if (existing) throw new Error("A user with this email already exists");
 
-  const passwordHash = await bcrypt.hash(input.password, 10);
+  const passwordHash = await bcrypt.hash(validated.password, 10);
 
   await prisma.user.create({
     data: {
       clinicId: user.clinicId,
-      name: input.name,
-      email: input.email,
-      role: input.role as any,
-      phone: input.phone || null,
-      alias: input.alias || null,
-      pronouns: input.pronouns || null,
+      name: validated.name,
+      email: validated.email,
+      role: validated.role as any,
+      phone: validated.phone || null,
+      alias: validated.alias || null,
+      pronouns: validated.pronouns || null,
       passwordHash,
     },
   });
@@ -94,6 +100,7 @@ export async function createUser(input: UserInput) {
 }
 
 export async function updateUser(id: string, input: UserInput) {
+  validateInput(userUpdateSchema, input);
   const user = await requirePermission("users", "edit");
   const existing = await prisma.user.findFirst({
     where: { id, clinicId: user.clinicId },
@@ -118,6 +125,10 @@ export async function updateUser(id: string, input: UserInput) {
   };
 
   if (input.password) {
+    const pwCheck = validatePasswordStrength(input.password);
+    if (!pwCheck.valid) {
+      throw new Error(pwCheck.errors.join(". "));
+    }
     data.passwordHash = await bcrypt.hash(input.password, 10);
   }
 

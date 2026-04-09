@@ -105,6 +105,12 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // MFA (TOTP)
+  totpSecret        String?   // Encrypted TOTP secret
+  totpEnabled       Boolean   @default(false)
+  totpVerifiedAt    DateTime?
+  backupCodes       String?   // Encrypted JSON of hashed backup codes
+
   // MD Review supervision
   requiresMDReview  Boolean  @default(false)
   supervisingMDId   String?
@@ -566,6 +572,7 @@ model PatientConsent {
   ipAddress         String?
   userAgent         String?
   templateSnapshot  String?   // Snapshot of template content at signing time
+  integrityHash     String?   // SHA-256 hash for tamper detection
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   deletedAt         DateTime? // Soft delete
@@ -995,6 +1002,7 @@ model NotificationTemplate {
   systemKey     String?
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
+  deletedAt     DateTime?
 
   clinic Clinic @relation(fields: [clinicId], references: [id])
 
@@ -1088,6 +1096,7 @@ model MigrationJob {
   errorMessage         String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+  deletedAt            DateTime?
 
   // Relations
   clinic     Clinic              @relation(fields: [clinicId], references: [id])
