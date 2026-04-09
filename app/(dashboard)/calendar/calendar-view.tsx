@@ -498,16 +498,30 @@ function CalendarInner({
   // the calendar DOM on every render (its useEffect depends on this ref)
   const customComponents = useMemo(() => ({ timeGridEvent: TimeGridEvent }), []);
 
-  // Auto-scroll week view to business hours (7 AM)
+  // Auto-scroll week/month view to business hours (8 AM)
   useEffect(() => {
-    if (view === "day") return; // day view handles its own scroll
-    const timer = setTimeout(() => {
-      const wrapper = document.querySelector<HTMLElement>(".sx-react-calendar-wrapper");
-      if (!wrapper) return;
-      // 1488px grid / 24 hours = 62px/hour; scroll to 7 AM
-      wrapper.scrollTop = 7 * 62;
-    }, 100);
-    return () => clearTimeout(timer);
+    if (view === "day") return; // day view handles its own scroll via ProviderDayView
+    const scrollToBusinessHours = () => {
+      // schedule-x uses .sx__view-container as the scrollable container
+      const selectors = [
+        ".sx__view-container",
+        ".sx__time-grid-wrapper",
+        ".sx-react-calendar-wrapper",
+      ];
+      for (const sel of selectors) {
+        const el = document.querySelector<HTMLElement>(sel);
+        if (el && el.scrollHeight > el.clientHeight) {
+          el.scrollTop = 8 * 62; // 62px/hour, scroll to 8 AM
+          return true;
+        }
+      }
+      return false;
+    };
+    // Try multiple times as schedule-x renders asynchronously
+    const t1 = setTimeout(scrollToBusinessHours, 50);
+    const t2 = setTimeout(scrollToBusinessHours, 200);
+    const t3 = setTimeout(scrollToBusinessHours, 500);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [view, currentDate]);
 
   // --- Hover ghost block ---
