@@ -18,7 +18,7 @@ type ScrollColumnProps = {
 function ScrollColumn({ items, selectedIndex, onChange }: ScrollColumnProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const suppressSnap = useRef(false);
-  const snapTimer = useRef<ReturnType<typeof setTimeout>>();
+  const snapTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const scrollToIndex = useCallback((index: number, smooth = false) => {
     const el = containerRef.current;
     if (!el) return;
@@ -51,7 +51,7 @@ function ScrollColumn({ items, selectedIndex, onChange }: ScrollColumnProps) {
     }
   }, [items.length, selectedIndex, onChange]);
 
-  const scrollDebounce = useRef<ReturnType<typeof setTimeout>>();
+  const scrollDebounce = useRef<ReturnType<typeof setTimeout>>(undefined);
   const handleScroll = useCallback(() => {
     clearTimeout(scrollDebounce.current);
     scrollDebounce.current = setTimeout(onScrollEnd, 80);
