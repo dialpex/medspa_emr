@@ -1,22 +1,23 @@
 #!/usr/bin/env tsx
 /**
- * One-time migration script to encrypt existing plaintext PHI fields.
+ * One-time migration script to encrypt existing plaintext PHI fields
+ * and populate blind indexes (emailHash, phoneHash).
+ *
  * Usage: ENCRYPTION_KEY=... npx tsx scripts/encrypt-existing-phi.ts
  *
  * Safe to run multiple times — skips already-encrypted values.
  */
 
 import { PrismaClient } from "@prisma/client";
-import { encryptField, isEncrypted } from "../lib/encryption/field-encryption";
+import { encryptField, isEncrypted, blindIndexOptional } from "../lib/encryption/field-encryption";
 
 const prisma = new PrismaClient();
 
-const PATIENT_PHI_FIELDS = [
+const PATIENT_STRING_FIELDS = [
   "firstName",
   "lastName",
   "email",
   "phone",
-  "dateOfBirth",
   "address",
 ] as const;
 
@@ -26,9 +27,12 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("Encrypting Patient PHI fields...");
+  console.log("Encrypting Patient PHI fields and populating blind indexes...");
   const patients = await prisma.patient.findMany({
-    select: { id: true, firstName: true, lastName: true, email: true, phone: true, dateOfBirth: true, address: true },
+    select: {
+      id: true, firstName: true, lastName: true, email: true, phone: true, address: true,
+      emailHash: true, phoneHash: true,
+    },
   });
 
   let updated = 0;
@@ -36,15 +40,33 @@ async function main() {
     const data: Record<string, string | null> = {};
     let needsUpdate = false;
 
-    for (const field of PATIENT_PHI_FIELDS) {
+    // Store plaintext values for blind index before encryption
+    const plaintextEmail = patient.email && !isEncrypted(patient.email) ? patient.email : null;
+    const plaintextPhone = patient.phone && !isEncrypted(patient.phone) ? patient.phone : null;
+
+    for (const field of PATIENT_STRING_FIELDS) {
       const value = patient[field];
       if (value == null) continue;
+      if (isEncrypted(value)) continue;
 
-      const strValue = value instanceof Date ? value.toISOString() : String(value);
-      if (isEncrypted(strValue)) continue;
-
-      data[field] = encryptField(strValue);
+      data[field] = encryptField(value);
       needsUpdate = true;
+    }
+
+    // Populate blind indexes if missing
+    if (!patient.emailHash && (plaintextEmail || patient.email)) {
+      const email = plaintextEmail || patient.email;
+      if (email) {
+        data.emailHash = blindIndexOptional(email);
+        needsUpdate = true;
+      }
+    }
+    if (!patient.phoneHash && (plaintextPhone || patient.phone)) {
+      const phone = plaintextPhone || patient.phone;
+      if (phone) {
+        data.phoneHash = blindIndexOptional(phone);
+        needsUpdate = true;
+      }
     }
 
     if (needsUpdate) {
@@ -52,7 +74,7 @@ async function main() {
       updated++;
     }
   }
-  console.log(`Encrypted ${updated}/${patients.length} patient records.`);
+  console.log(`Updated ${updated}/${patients.length} patient records.`);
 
   console.log("Encrypting PatientConsent signatureData...");
   const consents = await prisma.patientConsent.findMany({

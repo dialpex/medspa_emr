@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission, hasPermission } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 import type { AppointmentStatus, Role } from "@prisma/client";
+import { decryptPatientData } from "@/lib/encryption/patient-encryption";
 
 // ===========================================
 // TYPES
@@ -113,7 +114,7 @@ export async function getAppointments(
   return appointments.map((apt) => ({
     id: apt.id,
     patientId: apt.patientId,
-    patientName: apt.patient ? `${apt.patient.firstName} ${apt.patient.lastName}` : (apt.blockTitle || "Block"),
+    patientName: apt.patient ? (() => { const d = decryptPatientData(apt.patient as any); return `${d.firstName} ${d.lastName}`; })() : (apt.blockTitle || "Block"),
     providerId: apt.providerId,
     providerName: apt.provider.name,
     serviceId: apt.serviceId,
@@ -158,7 +159,7 @@ export async function getAppointment(id: string): Promise<CalendarAppointment | 
   return {
     id: apt.id,
     patientId: apt.patientId,
-    patientName: apt.patient ? `${apt.patient.firstName} ${apt.patient.lastName}` : (apt.blockTitle || "Block"),
+    patientName: apt.patient ? (() => { const d = decryptPatientData(apt.patient as any); return `${d.firstName} ${d.lastName}`; })() : (apt.blockTitle || "Block"),
     providerId: apt.providerId,
     providerName: apt.provider.name,
     serviceId: apt.serviceId,
@@ -278,16 +279,11 @@ export async function searchPatients(query: string): Promise<PatientSearchResult
 
   const searchTerm = query.trim().toLowerCase();
 
-  const patients = await prisma.patient.findMany({
+  // Fetch all patients for clinic and filter in memory (PHI fields are encrypted)
+  const allPatients = await prisma.patient.findMany({
     where: {
       clinicId: user.clinicId,
       deletedAt: null,
-      OR: [
-        { firstName: { contains: searchTerm } },
-        { lastName: { contains: searchTerm } },
-        { email: { contains: searchTerm } },
-        { phone: { contains: searchTerm } },
-      ],
     },
     select: {
       id: true,
@@ -296,11 +292,23 @@ export async function searchPatients(query: string): Promise<PatientSearchResult
       email: true,
       phone: true,
     },
-    take: 10,
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });
 
-  return patients;
+  const results: PatientSearchResult[] = [];
+  for (const p of allPatients) {
+    const d = decryptPatientData(p as any);
+    const fn = (d.firstName as string).toLowerCase();
+    const ln = (d.lastName as string).toLowerCase();
+    const em = ((d.email as string) || "").toLowerCase();
+    const ph = ((d.phone as string) || "").toLowerCase();
+    if (fn.includes(searchTerm) || ln.includes(searchTerm) || em.includes(searchTerm) || ph.includes(searchTerm)) {
+      results.push({ id: d.id as string, firstName: d.firstName as string, lastName: d.lastName as string, email: d.email as string | null, phone: d.phone as string | null });
+      if (results.length >= 10) break;
+    }
+  }
+
+  return results;
 }
 
 // ===========================================
@@ -396,10 +404,11 @@ export async function getAppointmentWithPatient(
     servicePrice: apt.service?.price ? Number(apt.service.price) : null,
     roomName: apt.room?.name ?? null,
     patientId: apt.patient?.id ?? null,
-    patientFirstName: apt.patient?.firstName ?? "",
-    patientLastName: apt.patient?.lastName ?? "",
-    patientEmail: apt.patient?.email ?? null,
-    patientPhone: apt.patient?.phone ?? null,
+    ...(() => {
+      if (!apt.patient) return { patientFirstName: "", patientLastName: "", patientEmail: null as string | null, patientPhone: null as string | null };
+      const dp = decryptPatientData(apt.patient as any);
+      return { patientFirstName: dp.firstName as string, patientLastName: dp.lastName as string, patientEmail: dp.email as string | null, patientPhone: dp.phone as string | null };
+    })(),
     patientDateOfBirth: apt.patient?.dateOfBirth ?? null,
     patientGender: apt.patient?.gender ?? null,
     patientAllergies: apt.patient?.allergies ?? null,

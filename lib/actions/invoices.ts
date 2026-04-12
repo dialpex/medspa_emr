@@ -6,6 +6,7 @@ import { createAuditLog } from "@/lib/audit";
 import { validateInput } from "@/lib/validation/helpers";
 import { invoiceSchema } from "@/lib/validation/schemas";
 import { revalidatePath } from "next/cache";
+import { decryptPatientData } from "@/lib/encryption/patient-encryption";
 
 export type InvoiceListItem = {
   id: string;
@@ -444,19 +445,26 @@ export async function quickCreatePatient(input: { firstName: string; lastName: s
 export async function searchPatients(query: string) {
   const user = await requirePermission("patients", "view");
   if (!query || query.length < 2) return [];
-  const q = query.trim();
-  // Use raw query for case-insensitive search on SQLite
-  const patients = await prisma.$queryRaw<
-    { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; tags: string | null }[]
-  >`
-    SELECT id, firstName, lastName, email, phone, tags
-    FROM Patient
-    WHERE clinicId = ${user.clinicId}
-      AND deletedAt IS NULL
-      AND (firstName LIKE ${'%' + q + '%'} OR lastName LIKE ${'%' + q + '%'} OR (firstName || ' ' || lastName) LIKE ${'%' + q + '%'})
-    LIMIT 10
-  `;
-  return patients;
+  const q = query.trim().toLowerCase();
+
+  // Fetch all and filter in memory (PHI fields are encrypted at rest)
+  const allPatients = await prisma.patient.findMany({
+    where: { clinicId: user.clinicId, deletedAt: null },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true, tags: true },
+  });
+
+  const results: typeof allPatients = [];
+  for (const p of allPatients) {
+    const d = decryptPatientData(p as any);
+    const fn = (d.firstName as string).toLowerCase();
+    const ln = (d.lastName as string).toLowerCase();
+    const full = `${fn} ${ln}`;
+    if (fn.includes(q) || ln.includes(q) || full.includes(q)) {
+      results.push({ ...p, firstName: d.firstName as string, lastName: d.lastName as string, email: d.email as string | null, phone: d.phone as string | null, tags: p.tags });
+      if (results.length >= 10) break;
+    }
+  }
+  return results;
 }
 
 export type ClinicInfo = {

@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { sendMessage, normalizeToE164 } from "@/lib/messaging/service";
 import { createAuditLog } from "@/lib/audit";
 import type { MessagePurpose, MessageChannel } from "@prisma/client";
+import { decryptPatientData } from "@/lib/encryption/patient-encryption";
 
 export interface ActionResult<T = void> {
   success: boolean;
@@ -25,19 +26,8 @@ export async function getConversations(search?: string) {
   await requireFeature("sms_messaging");
   const user = await requirePermission("messaging", "view");
 
-  const where: Record<string, unknown> = { clinicId: user.clinicId };
-
-  if (search) {
-    where.patient = {
-      OR: [
-        { firstName: { contains: search } },
-        { lastName: { contains: search } },
-      ],
-    };
-  }
-
   const conversations = await prisma.conversation.findMany({
-    where,
+    where: { clinicId: user.clinicId },
     include: {
       patient: {
         include: {
@@ -48,7 +38,21 @@ export async function getConversations(search?: string) {
     orderBy: { lastMessageAt: { sort: "desc", nulls: "last" } },
   });
 
-  return conversations;
+  // Decrypt patient data and filter in memory (PHI fields are encrypted)
+  const decrypted = conversations.map((c) => ({
+    ...c,
+    patient: c.patient ? decryptPatientData(c.patient as any) : c.patient,
+  }));
+
+  if (!search) return decrypted;
+
+  const term = search.toLowerCase();
+  return decrypted.filter((c) => {
+    if (!c.patient) return false;
+    const fn = ((c.patient as any).firstName as string || "").toLowerCase();
+    const ln = ((c.patient as any).lastName as string || "").toLowerCase();
+    return fn.includes(term) || ln.includes(term);
+  });
 }
 
 /**
