@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "crypto";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -75,4 +75,20 @@ export function decryptOptional(value: string | null | undefined): string | null
 
 export function isEncrypted(value: string): boolean {
   return value.startsWith(ENCRYPTED_PREFIX);
+}
+
+/**
+ * Generate a deterministic HMAC-SHA256 blind index for encrypted field lookups.
+ * Normalizes value (lowercase, trim) before hashing for consistent matching.
+ */
+export function blindIndex(value: string): string {
+  const key = getEncryptionKey();
+  const normalized = value.toLowerCase().trim();
+  return createHmac("sha256", key).update(normalized).digest("hex");
+}
+
+/** Blind index for optional fields — returns null if value is empty */
+export function blindIndexOptional(value: string | null | undefined): string | null {
+  if (value == null || value === "") return null;
+  return blindIndex(value);
 }

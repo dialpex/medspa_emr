@@ -6,6 +6,7 @@ import { createAuditLog } from "@/lib/audit";
 import { validateInput } from "@/lib/validation/helpers";
 import { createPatientSchema, updatePatientSchema } from "@/lib/validation/schemas";
 import { revalidatePath } from "next/cache";
+import { encryptPatientData, decryptPatientData, decryptPatientList } from "@/lib/encryption/patient-encryption";
 
 export type PatientListItem = {
   id: string;
@@ -138,23 +139,26 @@ export async function getPatients(search?: string): Promise<PatientListItem[]> {
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     });
 
-    return patients.map((p) => ({
-      id: p.id,
-      firstName: p.firstName,
-      lastName: p.lastName,
-      email: p.email,
-      phone: p.phone,
-      dateOfBirth: p.dateOfBirth,
-      tags: p.tags,
-      lastAppointment: p.appointments[0]?.startTime ?? null,
-    }));
+    return patients.map((p) => {
+      const d = decryptPatientData(p as any);
+      return {
+        id: d.id,
+        firstName: d.firstName,
+        lastName: d.lastName,
+        email: d.email,
+        phone: d.phone,
+        dateOfBirth: d.dateOfBirth,
+        tags: d.tags,
+        lastAppointment: p.appointments[0]?.startTime ?? null,
+      };
+    });
   }
 
   const searchTerm = search.trim().toLowerCase();
   const searchDigits = normalizePhone(searchTerm);
 
   // Fetch all patients for this clinic and filter in memory
-  // This handles phone number formatting differences
+  // (required because PHI fields are encrypted — no DB-level text search)
   const allPatients = await prisma.patient.findMany({
     where: baseWhere,
     select: {
@@ -175,33 +179,37 @@ export async function getPatients(search?: string): Promise<PatientListItem[]> {
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });
 
-  // Filter patients matching search term
-  const filtered = allPatients.filter((p) => {
-    const firstName = p.firstName.toLowerCase();
-    const lastName = p.lastName.toLowerCase();
-    const email = (p.email || "").toLowerCase();
-    const phone = p.phone || "";
+  // Decrypt then filter — required because PHI fields are encrypted at rest
+  const results: PatientListItem[] = [];
+  for (const p of allPatients) {
+    const d = decryptPatientData(p as any);
+    const firstName = (d.firstName as string).toLowerCase();
+    const lastName = (d.lastName as string).toLowerCase();
+    const email = ((d.email as string) || "").toLowerCase();
+    const phone = (d.phone as string) || "";
     const phoneDigits = normalizePhone(phone);
 
-    return (
+    if (
       firstName.includes(searchTerm) ||
       lastName.includes(searchTerm) ||
       email.includes(searchTerm) ||
       phone.includes(searchTerm) ||
       (searchDigits.length >= 3 && phoneDigits.includes(searchDigits))
-    );
-  });
+    ) {
+      results.push({
+        id: d.id as string,
+        firstName: d.firstName as string,
+        lastName: d.lastName as string,
+        email: d.email as string | null,
+        phone: d.phone as string | null,
+        dateOfBirth: d.dateOfBirth as Date | null,
+        tags: d.tags as string | null,
+        lastAppointment: p.appointments[0]?.startTime ?? null,
+      });
+    }
+  }
 
-  return filtered.map((p) => ({
-    id: p.id,
-    firstName: p.firstName,
-    lastName: p.lastName,
-    email: p.email,
-    phone: p.phone,
-    dateOfBirth: p.dateOfBirth,
-    tags: p.tags,
-    lastAppointment: p.appointments[0]?.startTime ?? null,
-  }));
+  return results;
 }
 
 /**
@@ -226,9 +234,10 @@ export async function getPatient(id: string): Promise<PatientDetail | null> {
       entityType: "Patient",
       entityId: patient.id,
     });
+    return decryptPatientData(patient as any) as PatientDetail;
   }
 
-  return patient;
+  return null;
 }
 
 /**
@@ -375,7 +384,7 @@ export async function createPatient(input: CreatePatientInput): Promise<PatientD
   const validated = validateInput(createPatientSchema, input);
 
   const patient = await prisma.patient.create({
-    data: {
+    data: encryptPatientData({
       clinicId: user.clinicId,
       firstName: input.firstName,
       lastName: input.lastName,
@@ -390,7 +399,7 @@ export async function createPatient(input: CreatePatientInput): Promise<PatientD
       allergies: input.allergies || null,
       medicalNotes: input.medicalNotes || null,
       tags: input.tags || null,
-    },
+    }) as any,
   });
 
   await createAuditLog({
@@ -403,7 +412,7 @@ export async function createPatient(input: CreatePatientInput): Promise<PatientD
 
   revalidatePath("/patients");
 
-  return patient;
+  return decryptPatientData(patient as any) as PatientDetail;
 }
 
 export type UpdatePatientInput = Partial<CreatePatientInput>;
@@ -431,26 +440,28 @@ export async function updatePatient(
     throw new Error("Patient not found");
   }
 
+  const updateData = encryptPatientData({
+    ...(input.firstName !== undefined && { firstName: input.firstName }),
+    ...(input.lastName !== undefined && { lastName: input.lastName }),
+    ...(input.email !== undefined && { email: input.email || null }),
+    ...(input.phone !== undefined && { phone: input.phone || null }),
+    ...(input.dateOfBirth !== undefined && {
+      dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
+    }),
+    ...(input.gender !== undefined && { gender: input.gender || null }),
+    ...(input.address !== undefined && { address: input.address || null }),
+    ...(input.city !== undefined && { city: input.city || null }),
+    ...(input.state !== undefined && { state: input.state || null }),
+    ...(input.zipCode !== undefined && { zipCode: input.zipCode || null }),
+    ...(input.allergies !== undefined && { allergies: input.allergies || null }),
+    ...(input.medicalNotes !== undefined && { medicalNotes: input.medicalNotes || null }),
+    ...(input.tags !== undefined && { tags: input.tags || null }),
+    ...(input.status !== undefined && { status: input.status as "Active" | "Fired" }),
+  });
+
   const patient = await prisma.patient.update({
     where: { id },
-    data: {
-      ...(input.firstName !== undefined && { firstName: input.firstName }),
-      ...(input.lastName !== undefined && { lastName: input.lastName }),
-      ...(input.email !== undefined && { email: input.email || null }),
-      ...(input.phone !== undefined && { phone: input.phone || null }),
-      ...(input.dateOfBirth !== undefined && {
-        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
-      }),
-      ...(input.gender !== undefined && { gender: input.gender || null }),
-      ...(input.address !== undefined && { address: input.address || null }),
-      ...(input.city !== undefined && { city: input.city || null }),
-      ...(input.state !== undefined && { state: input.state || null }),
-      ...(input.zipCode !== undefined && { zipCode: input.zipCode || null }),
-      ...(input.allergies !== undefined && { allergies: input.allergies || null }),
-      ...(input.medicalNotes !== undefined && { medicalNotes: input.medicalNotes || null }),
-      ...(input.tags !== undefined && { tags: input.tags || null }),
-      ...(input.status !== undefined && { status: input.status as "Active" | "Fired" }),
-    },
+    data: updateData as any,
   });
 
   await createAuditLog({
@@ -465,7 +476,7 @@ export async function updatePatient(
   revalidatePath("/patients");
   revalidatePath(`/patients/${id}`);
 
-  return patient;
+  return decryptPatientData(patient as any) as PatientDetail;
 }
 
 /**

@@ -145,13 +145,13 @@ enum PatientStatus {
 model Patient {
   id            String        @id @default(cuid())
   clinicId      String
-  firstName     String
-  lastName      String
-  email         String?
-  phone         String?
+  firstName     String        // Encrypted at rest (AES-256-GCM)
+  lastName      String        // Encrypted at rest
+  email         String?       // Encrypted at rest
+  phone         String?       // Encrypted at rest
   dateOfBirth   DateTime?
   gender        String?
-  address       String?
+  address       String?       // Encrypted at rest
   city          String?
   state         String?
   zipCode       String?
@@ -163,6 +163,10 @@ model Patient {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime? // Soft delete
+
+  // Blind indexes for encrypted field lookups (HMAC-SHA256)
+  emailHash     String?
+  phoneHash     String?
 
   // Relations
   clinic           Clinic            @relation(fields: [clinicId], references: [id])
@@ -179,9 +183,8 @@ model Patient {
   messages         Message[]
 
   @@index([clinicId])
-  @@index([lastName, firstName])
-  @@index([email])
-  @@index([phone])
+  @@index([emailHash])
+  @@index([phoneHash])
 }
 
 // ===========================================

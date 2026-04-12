@@ -29,8 +29,18 @@ declare module "@auth/core/jwt" {
     lastActivity?: number;
     mfaPending?: boolean;
     mfaVerified?: boolean;
+    mfaRequired?: boolean;
+    mfaEnrolled?: boolean;
   }
 }
+
+/** Roles that must have MFA enabled (HIPAA: access to PHI) */
+export const MFA_REQUIRED_ROLES: Role[] = [
+  "Owner",
+  "Admin",
+  "Provider",
+  "MedicalDirector",
+];
 
 /**
  * Edge-safe NextAuth configuration.
@@ -48,9 +58,11 @@ export const authConfig: NextAuthConfig = {
         token.role = user.role;
         token.clinicId = user.clinicId;
         token.lastActivity = Date.now();
-        // MFA pending flag
-        const mfaPending = (user as any).mfaPending;
-        if (mfaPending) {
+        // MFA flags
+        const totpEnabled = (user as any).totpEnabled;
+        token.mfaEnrolled = !!totpEnabled;
+        token.mfaRequired = MFA_REQUIRED_ROLES.includes(user.role);
+        if (totpEnabled) {
           token.mfaPending = true;
           token.mfaVerified = false;
         }

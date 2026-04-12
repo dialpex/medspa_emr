@@ -57,13 +57,26 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  // MFA pending check — restrict to MFA page only
   const token = req.auth as unknown as Record<string, unknown>;
+
+  // MFA pending check — user has MFA enabled, needs to verify code
   if (token.mfaPending && !token.mfaVerified && !pathname.startsWith("/login/mfa")) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "MFA verification required" }, { status: 403 });
     }
     return NextResponse.redirect(new URL("/login/mfa", req.url));
+  }
+
+  // MFA enrollment enforcement — required roles must set up MFA
+  if (
+    token.mfaRequired &&
+    !token.mfaEnrolled &&
+    !pathname.startsWith("/settings/security") &&
+    !pathname.startsWith("/api/")
+  ) {
+    const setupUrl = new URL("/settings/security", req.url);
+    setupUrl.searchParams.set("reason", "mfa-required");
+    return NextResponse.redirect(setupUrl);
   }
 
   return NextResponse.next();

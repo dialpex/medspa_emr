@@ -60,7 +60,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.name,
           role: user.role,
           clinicId: user.clinicId,
-          mfaPending: user.totpEnabled || undefined,
+          totpEnabled: user.totpEnabled,
         } as any;
       },
     }),

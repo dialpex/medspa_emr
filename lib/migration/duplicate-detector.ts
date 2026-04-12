@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { blindIndex } from "@/lib/encryption/field-encryption";
+import { decryptPatientData } from "@/lib/encryption/patient-encryption";
 
 interface PatientMatch {
   id: string;
@@ -28,7 +30,7 @@ function normalizePhone(phone: string): string {
 
 /**
  * Check if a source patient already exists in Neuvvia.
- * Uses deterministic matching (exact email, exact phone) first,
+ * Uses deterministic matching (exact email via blind index, exact phone) first,
  * then fuzzy name + DOB matching.
  */
 export async function detectDuplicate(
@@ -41,12 +43,13 @@ export async function detectDuplicate(
     dateOfBirth?: string;
   }
 ): Promise<DuplicateResult> {
-  // 1. Exact email match
+  // 1. Exact email match via blind index
   if (sourcePatient.email) {
+    const hash = blindIndex(sourcePatient.email.toLowerCase());
     const emailMatch = await prisma.patient.findFirst({
       where: {
         clinicId,
-        email: sourcePatient.email.toLowerCase(),
+        emailHash: hash,
         deletedAt: null,
       },
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, dateOfBirth: true },
@@ -62,7 +65,7 @@ export async function detectDuplicate(
     }
   }
 
-  // 2. Exact phone match (E.164 normalized)
+  // 2. Exact phone match (E.164 normalized, decrypt and compare)
   if (sourcePatient.phone) {
     const normalized = normalizePhone(sourcePatient.phone);
     const patients = await prisma.patient.findMany({
@@ -74,9 +77,10 @@ export async function detectDuplicate(
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, dateOfBirth: true },
     });
 
-    const phoneMatch = patients.find(
-      (p) => p.phone && normalizePhone(p.phone) === normalized
-    );
+    const phoneMatch = patients.find((p) => {
+      const d = decryptPatientData(p as any);
+      return d.phone && normalizePhone(d.phone as string) === normalized;
+    });
 
     if (phoneMatch) {
       return {
@@ -101,20 +105,23 @@ export async function detectDuplicate(
     });
 
     const fuzzyMatch = nameMatches.find((p) => {
-      const firstSimilar =
-        p.firstName.toLowerCase().trim() === sourcePatient.firstName.toLowerCase().trim() ||
-        p.firstName.toLowerCase().startsWith(sourcePatient.firstName.toLowerCase().substring(0, 3));
-      const lastSimilar =
-        p.lastName.toLowerCase().trim() === sourcePatient.lastName.toLowerCase().trim();
+      const d = decryptPatientData(p as any);
+      const fn = (d.firstName as string).toLowerCase().trim();
+      const ln = (d.lastName as string).toLowerCase().trim();
+      const srcFn = sourcePatient.firstName.toLowerCase().trim();
+      const srcLn = sourcePatient.lastName.toLowerCase().trim();
+      const firstSimilar = fn === srcFn || fn.startsWith(srcFn.substring(0, 3));
+      const lastSimilar = ln === srcLn;
       return firstSimilar && lastSimilar;
     });
 
     if (fuzzyMatch) {
+      const d = decryptPatientData(fuzzyMatch as any);
       return {
         isDuplicate: true,
         existingPatientId: fuzzyMatch.id,
         matchType: "fuzzy_name_dob",
-        reasoning: `Matched to existing patient "${fuzzyMatch.firstName} ${fuzzyMatch.lastName}" by similar name + same date of birth`,
+        reasoning: `Matched to existing patient "${d.firstName} ${d.lastName}" by similar name + same date of birth`,
       };
     }
   }
