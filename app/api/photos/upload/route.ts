@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import sharp from "sharp";
 import { requirePermission } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit";
@@ -70,15 +71,21 @@ export async function POST(request: NextRequest) {
     }
 
     const fileId = generateId();
-    const ext = file.type === "image/png" ? ".png" : ".jpg";
+    const ext = ".jpg"; // Always output JPEG for consistency
     const filename = `${fileId}${ext}`;
     const storagePath = `storage/photos/${user.clinicId}/${patientId}/${filename}`;
 
     const dir = path.join(process.cwd(), "storage/photos", user.clinicId, patientId);
     await mkdir(dir, { recursive: true });
 
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    await writeFile(path.join(dir, filename), bytes);
+    // Normalize: auto-rotate EXIF, resize to max 2048px, output JPEG
+    const rawBytes = new Uint8Array(await file.arrayBuffer());
+    const processed = await sharp(rawBytes)
+      .rotate()                          // Auto-rotate based on EXIF orientation
+      .resize(2048, 2048, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+    await writeFile(path.join(dir, filename), processed);
 
     const photo = await prisma.photo.create({
       data: {
@@ -88,8 +95,8 @@ export async function POST(request: NextRequest) {
         takenById: user.id,
         filename: file.name,
         storagePath,
-        mimeType: file.type,
-        sizeBytes: file.size,
+        mimeType: "image/jpeg",
+        sizeBytes: processed.length,
         category,
         caption,
       },
