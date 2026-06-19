@@ -53,6 +53,11 @@ export const authConfig: NextAuthConfig = {
   providers: [], // Providers added in lib/auth.ts (server-only)
   callbacks: {
     async jwt({ token, user, trigger }) {
+      // Invalidate stale/incomplete tokens (missing required fields)
+      if (!user && (!token.id || !token.role || !token.clinicId)) {
+        return {} as any;
+      }
+
       if (user) {
         token.id = user.id;
         token.role = user.role;

@@ -806,29 +806,30 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log(`Created ${membershipPlans.length} membership plans`);
 
   // ===========================================
-  // APPOINTMENTS — anchored to the current week (dynamic)
+  // APPOINTMENTS — anchored to TODAY (dynamic)
   // ===========================================
-  // Dates are relative to today so demo data always looks live
+  // Dates are relative to today so demo data always looks live.
+  // "today" always has the richest set (full patient journey demo),
+  // past days have completed appointments, future days have scheduled ones.
   const now = new Date();
-  const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
-  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
 
+  /** Returns a Date `offset` days from today (negative = past, positive = future) */
   const makeDay = (offset: number): Date => {
-    const d = new Date(now);
-    d.setDate(d.getDate() + mondayOffset + offset);
-    d.setHours(0, 0, 0, 0);
+    const d = new Date(today);
+    d.setDate(d.getDate() + offset);
     return d;
   };
 
-  const monday    = makeDay(0);
-  const tuesday   = makeDay(1);
-  const wednesday = makeDay(2);
-  const thursday  = makeDay(3);
-  const friday    = makeDay(4);
-
-  // Keep these aliases for backward-compat in memberships/comms sections
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  // Day aliases — centered on today
+  const dayMinus3 = makeDay(-3);  // 3 days ago — completed
+  const dayMinus2 = makeDay(-2);  // 2 days ago — completed
+  const dayMinus1 = makeDay(-1);  // yesterday — completed + pending review
+  const dayToday  = makeDay(0);   // TODAY — full journey (completed, in-progress, checked-in, confirmed, scheduled)
+  const dayPlus1  = makeDay(1);   // tomorrow — scheduled
+  const dayPlus2  = makeDay(2);   // day after — scheduled
+  const dayPlus3  = makeDay(3);   // 3 days out — scheduled
 
   // Helper to create appointment times
   const setTime = (date: Date, hours: number, minutes: number): Date => {
@@ -856,7 +857,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
   // 8=IPL Photofacial, 9=Laser Hair Removal, 10=Consultation, 11=Follow-Up
 
   const appointments = await Promise.all([
-    // ── MONDAY (past — all completed+checked out) ──
+    // ── 3 DAYS AGO (past — all completed+checked out) ──
     // [0] Jennifer Williams / Botox Forehead / provider1 (NP) → Completed+CheckedOut
     prisma.appointment.create({
       data: {
@@ -865,14 +866,14 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[0].id,
         roomId: rooms[0].id,
-        startTime: setTime(monday, 9, 0),
-        endTime: setTime(monday, 9, 30),
+        startTime: setTime(dayMinus3, 9, 0),
+        endTime: setTime(dayMinus3, 9, 30),
         status: "Completed",
         notes: "Patient tolerated procedure well. 20 units forehead.",
-        checkedInAt: setTime(monday, 8, 50),
-        startedAt: setTime(monday, 9, 2),
-        completedAt: setTime(monday, 9, 28),
-        checkedOutAt: setTime(monday, 9, 35),
+        checkedInAt: setTime(dayMinus3, 8, 50),
+        startedAt: setTime(dayMinus3, 9, 2),
+        completedAt: setTime(dayMinus3, 9, 28),
+        checkedOutAt: setTime(dayMinus3, 9, 35),
       },
     }),
     // [1] Lisa Chen / Juvederm Lips / provider2 → Completed+CheckedOut
@@ -883,14 +884,14 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider2.id,
         serviceId: services[3].id,
         roomId: rooms[1].id,
-        startTime: setTime(monday, 10, 30),
-        endTime: setTime(monday, 11, 15),
+        startTime: setTime(dayMinus3, 10, 30),
+        endTime: setTime(dayMinus3, 11, 15),
         status: "Completed",
         notes: "1 syringe Juvederm Ultra XC. Patient happy with results.",
-        checkedInAt: setTime(monday, 10, 20),
-        startedAt: setTime(monday, 10, 32),
-        completedAt: setTime(monday, 11, 10),
-        checkedOutAt: setTime(monday, 11, 18),
+        checkedInAt: setTime(dayMinus3, 10, 20),
+        startedAt: setTime(dayMinus3, 10, 32),
+        completedAt: setTime(dayMinus3, 11, 10),
+        checkedOutAt: setTime(dayMinus3, 11, 18),
       },
     }),
     // [2] Amanda Taylor / Sculptra / provider2 → Completed+CheckedOut
@@ -901,18 +902,18 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider2.id,
         serviceId: services[5].id,
         roomId: rooms[1].id,
-        startTime: setTime(monday, 14, 0),
-        endTime: setTime(monday, 15, 0),
+        startTime: setTime(dayMinus2, 14, 0),
+        endTime: setTime(dayMinus2, 15, 0),
         status: "Completed",
         notes: "Full face Sculptra session 2 of 3",
-        checkedInAt: setTime(monday, 13, 50),
-        startedAt: setTime(monday, 14, 5),
-        completedAt: setTime(monday, 14, 55),
-        checkedOutAt: setTime(monday, 15, 5),
+        checkedInAt: setTime(dayMinus2, 13, 50),
+        startedAt: setTime(dayMinus2, 14, 5),
+        completedAt: setTime(dayMinus2, 14, 55),
+        checkedOutAt: setTime(dayMinus2, 15, 5),
       },
     }),
 
-    // ── TUESDAY (yesterday — mix of completed and pending review) ──
+    // ── YESTERDAY (mix of completed and pending review) ──
     // [3] Michael Johnson / Botox Forehead / provider1 (NP) → Completed (pending MD review)
     prisma.appointment.create({
       data: {
@@ -921,13 +922,13 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[0].id,
         roomId: rooms[0].id,
-        startTime: setTime(tuesday, 9, 0),
-        endTime: setTime(tuesday, 9, 30),
+        startTime: setTime(dayMinus1, 9, 0),
+        endTime: setTime(dayMinus1, 9, 30),
         status: "Completed",
         notes: "First time Botox patient. 20 units forehead.",
-        checkedInAt: setTime(tuesday, 8, 50),
-        startedAt: setTime(tuesday, 9, 2),
-        completedAt: setTime(tuesday, 9, 28),
+        checkedInAt: setTime(dayMinus1, 8, 50),
+        startedAt: setTime(dayMinus1, 9, 2),
+        completedAt: setTime(dayMinus1, 9, 28),
       },
     }),
     // [4] David Martinez / Microneedling / provider2 → Completed+CheckedOut
@@ -938,14 +939,14 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider2.id,
         serviceId: services[7].id,
         roomId: rooms[1].id,
-        startTime: setTime(tuesday, 11, 0),
-        endTime: setTime(tuesday, 12, 0),
+        startTime: setTime(dayMinus1, 11, 0),
+        endTime: setTime(dayMinus1, 12, 0),
         status: "Completed",
         notes: "Full face microneedling. Good tolerance.",
-        checkedInAt: setTime(tuesday, 10, 50),
-        startedAt: setTime(tuesday, 11, 5),
-        completedAt: setTime(tuesday, 11, 55),
-        checkedOutAt: setTime(tuesday, 12, 5),
+        checkedInAt: setTime(dayMinus1, 10, 50),
+        startedAt: setTime(dayMinus1, 11, 5),
+        completedAt: setTime(dayMinus1, 11, 55),
+        checkedOutAt: setTime(dayMinus1, 12, 5),
       },
     }),
     // [5] Amanda Taylor / Juvederm Voluma Cheeks / provider1 (NP) → Completed (pending MD review)
@@ -956,17 +957,17 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[4].id,
         roomId: rooms[0].id,
-        startTime: setTime(tuesday, 14, 0),
-        endTime: setTime(tuesday, 14, 45),
+        startTime: setTime(dayMinus1, 14, 0),
+        endTime: setTime(dayMinus1, 14, 45),
         status: "Completed",
         notes: "Cheek volume restoration. 1 syringe Voluma per side.",
-        checkedInAt: setTime(tuesday, 13, 50),
-        startedAt: setTime(tuesday, 14, 5),
-        completedAt: setTime(tuesday, 14, 42),
+        checkedInAt: setTime(dayMinus1, 13, 50),
+        startedAt: setTime(dayMinus1, 14, 5),
+        completedAt: setTime(dayMinus1, 14, 42),
       },
     }),
 
-    // ── WEDNESDAY (today — full journey coverage) ──
+    // ── TODAY — full journey coverage ──
     // [6] Robert Davis / Chemical Peel / provider1 → Completed+CheckedOut (done early)
     prisma.appointment.create({
       data: {
@@ -975,14 +976,14 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[6].id,
         roomId: rooms[0].id,
-        startTime: setTime(wednesday, 8, 0),
-        endTime: setTime(wednesday, 8, 30),
+        startTime: setTime(dayToday, 8, 0),
+        endTime: setTime(dayToday, 8, 30),
         status: "Completed",
         notes: "Light peel completed, good tolerance",
-        checkedInAt: setTime(wednesday, 7, 50),
-        startedAt: setTime(wednesday, 8, 2),
-        completedAt: setTime(wednesday, 8, 28),
-        checkedOutAt: setTime(wednesday, 8, 35),
+        checkedInAt: setTime(dayToday, 7, 50),
+        startedAt: setTime(dayToday, 8, 2),
+        completedAt: setTime(dayToday, 8, 28),
+        checkedOutAt: setTime(dayToday, 8, 35),
       },
     }),
     // [7] Emily Nguyen / Follow-Up / provider2 → Completed+CheckedOut (done early)
@@ -993,14 +994,14 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider2.id,
         serviceId: services[11].id,
         roomId: rooms[2].id,
-        startTime: setTime(wednesday, 8, 30),
-        endTime: setTime(wednesday, 8, 45),
+        startTime: setTime(dayToday, 8, 30),
+        endTime: setTime(dayToday, 8, 45),
         status: "Completed",
         notes: "2-week follow-up, healing well",
-        checkedInAt: setTime(wednesday, 8, 22),
-        startedAt: setTime(wednesday, 8, 30),
-        completedAt: setTime(wednesday, 8, 42),
-        checkedOutAt: setTime(wednesday, 8, 48),
+        checkedInAt: setTime(dayToday, 8, 22),
+        startedAt: setTime(dayToday, 8, 30),
+        completedAt: setTime(dayToday, 8, 42),
+        checkedOutAt: setTime(dayToday, 8, 48),
       },
     }),
     // [8] Sarah Kim / Botox Crow's Feet / provider1 (NP) → InProgress
@@ -1011,12 +1012,12 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[1].id,
         roomId: rooms[0].id,
-        startTime: setTime(wednesday, 9, 0),
-        endTime: setTime(wednesday, 9, 20),
+        startTime: setTime(dayToday, 9, 0),
+        endTime: setTime(dayToday, 9, 20),
         status: "InProgress",
         notes: "Crow's feet treatment",
-        checkedInAt: setTime(wednesday, 8, 50),
-        startedAt: setTime(wednesday, 9, 2),
+        checkedInAt: setTime(dayToday, 8, 50),
+        startedAt: setTime(dayToday, 9, 2),
       },
     }),
     // [9] Kevin Brown / IPL Photofacial / provider2 → InProgress
@@ -1027,12 +1028,12 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider2.id,
         serviceId: services[8].id,
         roomId: rooms[1].id,
-        startTime: setTime(wednesday, 9, 30),
-        endTime: setTime(wednesday, 10, 15),
+        startTime: setTime(dayToday, 9, 30),
+        endTime: setTime(dayToday, 10, 15),
         status: "InProgress",
         notes: "Sun damage treatment",
-        checkedInAt: setTime(wednesday, 9, 20),
-        startedAt: setTime(wednesday, 9, 32),
+        checkedInAt: setTime(dayToday, 9, 20),
+        startedAt: setTime(dayToday, 9, 32),
       },
     }),
     // [10] Maria Garcia / Chemical Peel / provider1 → CheckedIn
@@ -1043,11 +1044,11 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[6].id,
         roomId: rooms[2].id,
-        startTime: setTime(wednesday, 10, 0),
-        endTime: setTime(wednesday, 10, 30),
+        startTime: setTime(dayToday, 10, 0),
+        endTime: setTime(dayToday, 10, 30),
         status: "CheckedIn",
         notes: "Light glycolic peel",
-        checkedInAt: setTime(wednesday, 9, 50),
+        checkedInAt: setTime(dayToday, 9, 50),
       },
     }),
     // [11] James Wilson / Laser Hair Removal / provider2 → CheckedIn
@@ -1058,11 +1059,11 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider2.id,
         serviceId: services[9].id,
         roomId: rooms[1].id,
-        startTime: setTime(wednesday, 10, 0),
-        endTime: setTime(wednesday, 10, 30),
+        startTime: setTime(dayToday, 10, 0),
+        endTime: setTime(dayToday, 10, 30),
         status: "CheckedIn",
         notes: "Upper lip and chin hair removal",
-        checkedInAt: setTime(wednesday, 9, 52),
+        checkedInAt: setTime(dayToday, 9, 52),
       },
     }),
     // [12] Jennifer Williams / Botox Glabella / provider1 (NP) → Confirmed
@@ -1073,8 +1074,8 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[2].id,
         roomId: rooms[0].id,
-        startTime: setTime(wednesday, 11, 0),
-        endTime: setTime(wednesday, 11, 20),
+        startTime: setTime(dayToday, 11, 0),
+        endTime: setTime(dayToday, 11, 20),
         status: "Confirmed",
       },
     }),
@@ -1086,8 +1087,8 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider2.id,
         serviceId: services[8].id,
         roomId: rooms[1].id,
-        startTime: setTime(wednesday, 11, 30),
-        endTime: setTime(wednesday, 12, 15),
+        startTime: setTime(dayToday, 11, 30),
+        endTime: setTime(dayToday, 12, 15),
         status: "Confirmed",
       },
     }),
@@ -1099,8 +1100,8 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[11].id,
         roomId: rooms[2].id,
-        startTime: setTime(wednesday, 14, 0),
-        endTime: setTime(wednesday, 14, 15),
+        startTime: setTime(dayToday, 14, 0),
+        endTime: setTime(dayToday, 14, 15),
         status: "Scheduled",
       },
     }),
@@ -1112,8 +1113,8 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider2.id,
         serviceId: services[10].id,
         roomId: rooms[2].id,
-        startTime: setTime(wednesday, 14, 30),
-        endTime: setTime(wednesday, 15, 0),
+        startTime: setTime(dayToday, 14, 30),
+        endTime: setTime(dayToday, 15, 0),
         status: "Scheduled",
       },
     }),
@@ -1125,13 +1126,13 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[3].id,
         roomId: rooms[0].id,
-        startTime: setTime(wednesday, 15, 0),
-        endTime: setTime(wednesday, 15, 45),
+        startTime: setTime(dayToday, 15, 0),
+        endTime: setTime(dayToday, 15, 45),
         status: "Scheduled",
       },
     }),
 
-    // ── THURSDAY ──
+    // ── TOMORROW ──
     // [17] Amanda Taylor / Botox Forehead / provider1 (NP) → Scheduled
     prisma.appointment.create({
       data: {
@@ -1140,8 +1141,8 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[0].id,
         roomId: rooms[0].id,
-        startTime: setTime(thursday, 9, 0),
-        endTime: setTime(thursday, 9, 30),
+        startTime: setTime(dayPlus1, 9, 0),
+        endTime: setTime(dayPlus1, 9, 30),
         status: "Scheduled",
       },
     }),
@@ -1153,8 +1154,8 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider2.id,
         serviceId: services[7].id,
         roomId: rooms[1].id,
-        startTime: setTime(thursday, 10, 0),
-        endTime: setTime(thursday, 11, 0),
+        startTime: setTime(dayPlus1, 10, 0),
+        endTime: setTime(dayPlus1, 11, 0),
         status: "Scheduled",
       },
     }),
@@ -1166,13 +1167,13 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[4].id,
         roomId: rooms[0].id,
-        startTime: setTime(thursday, 14, 0),
-        endTime: setTime(thursday, 14, 45),
+        startTime: setTime(dayPlus1, 14, 0),
+        endTime: setTime(dayPlus1, 14, 45),
         status: "Scheduled",
       },
     }),
 
-    // ── FRIDAY ──
+    // ── 2 DAYS FROM NOW ──
     // [20] Robert Davis / Botox Crow's Feet / provider2 → Scheduled
     prisma.appointment.create({
       data: {
@@ -1181,8 +1182,8 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider2.id,
         serviceId: services[1].id,
         roomId: rooms[1].id,
-        startTime: setTime(friday, 9, 0),
-        endTime: setTime(friday, 9, 20),
+        startTime: setTime(dayPlus2, 9, 0),
+        endTime: setTime(dayPlus2, 9, 20),
         status: "Scheduled",
       },
     }),
@@ -1194,8 +1195,36 @@ By signing below, I confirm my consent to proceed with treatment.`,
         providerId: provider1.id,
         serviceId: services[10].id,
         roomId: rooms[2].id,
-        startTime: setTime(friday, 11, 0),
-        endTime: setTime(friday, 11, 30),
+        startTime: setTime(dayPlus2, 11, 0),
+        endTime: setTime(dayPlus2, 11, 30),
+        status: "Scheduled",
+      },
+    }),
+
+    // ── 3 DAYS FROM NOW ──
+    // [22] Rachel Patel / Microneedling / provider2 → Scheduled
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[11].id,
+        providerId: provider2.id,
+        serviceId: services[7].id,
+        roomId: rooms[1].id,
+        startTime: setTime(dayPlus3, 10, 0),
+        endTime: setTime(dayPlus3, 11, 0),
+        status: "Scheduled",
+      },
+    }),
+    // [23] Lisa Chen / Botox Forehead / provider1 → Scheduled
+    prisma.appointment.create({
+      data: {
+        clinicId: clinic.id,
+        patientId: patients[2].id,
+        providerId: provider1.id,
+        serviceId: services[0].id,
+        roomId: rooms[0].id,
+        startTime: setTime(dayPlus3, 14, 0),
+        endTime: setTime(dayPlus3, 14, 30),
         status: "Scheduled",
       },
     }),
@@ -1217,7 +1246,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       providerId: provider1.id,
       status: "Finalized",
       requiresSupervision: true,
-      finalizedAt: setTime(monday, 16, 0),
+      finalizedAt: setTime(dayMinus3, 16, 0),
     },
   });
   const chartMon1 = await prisma.chart.create({
@@ -1235,11 +1264,11 @@ By signing below, I confirm my consent to proceed with treatment.`,
       technique: "Standard injection technique, 5 injection points across forehead",
       aftercareNotes: "Avoid lying down for 4 hours. No strenuous exercise for 24 hours.",
       additionalNotes: "Patient tolerated well. No immediate adverse reactions.",
-      providerSignedAt: setTime(monday, 9, 30),
+      providerSignedAt: setTime(dayMinus3, 9, 30),
       providerSignedById: provider1.id,
       signedById: medicalDirector.id,
       signedByName: medicalDirector.name,
-      signedAt: setTime(monday, 16, 0),
+      signedAt: setTime(dayMinus3, 16, 0),
       recordHash: "sha256:mon1_cosigned_hash_demo",
     },
   });
@@ -1251,7 +1280,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       patientId: patients[2].id,
       providerId: provider2.id,
       status: "Finalized",
-      finalizedAt: setTime(monday, 16, 30),
+      finalizedAt: setTime(dayMinus3, 16, 30),
     },
   });
   const chartMon2 = await prisma.chart.create({
@@ -1271,7 +1300,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       additionalNotes: "Achieved natural enhancement per patient preference. Symmetry achieved.",
       signedById: provider2.id,
       signedByName: provider2.name,
-      signedAt: setTime(monday, 16, 30),
+      signedAt: setTime(dayMinus3, 16, 30),
       recordHash: "sha256:mon2_direct_hash_demo",
     },
   });
@@ -1283,7 +1312,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       patientId: patients[4].id,
       providerId: provider2.id,
       status: "Finalized",
-      finalizedAt: setTime(monday, 17, 0),
+      finalizedAt: setTime(dayMinus3, 17, 0),
     },
   });
   const chartMon3 = await prisma.chart.create({
@@ -1303,7 +1332,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       additionalNotes: "Good volume distribution achieved. Schedule session 3 in 6 weeks.",
       signedById: provider2.id,
       signedByName: provider2.name,
-      signedAt: setTime(monday, 17, 0),
+      signedAt: setTime(dayMinus3, 17, 0),
       recordHash: "sha256:mon3_direct_hash_demo",
     },
   });
@@ -1335,7 +1364,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       technique: "Standard injection technique, 5 points across forehead",
       aftercareNotes: "Avoid lying down for 4 hours. No exercise for 24 hours.",
       additionalNotes: "First time patient. Tolerated well. Discussed expectations.",
-      providerSignedAt: setTime(tuesday, 9, 30),
+      providerSignedAt: setTime(dayMinus1, 9, 30),
       providerSignedById: provider1.id,
     },
   });
@@ -1347,7 +1376,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       patientId: patients[3].id,
       providerId: provider2.id,
       status: "Finalized",
-      finalizedAt: setTime(tuesday, 16, 0),
+      finalizedAt: setTime(dayMinus1, 16, 0),
     },
   });
   const chartTue2 = await prisma.chart.create({
@@ -1367,7 +1396,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       additionalNotes: "Good skin response. Mild erythema expected 24-48 hours.",
       signedById: provider2.id,
       signedByName: provider2.name,
-      signedAt: setTime(tuesday, 16, 0),
+      signedAt: setTime(dayMinus1, 16, 0),
       recordHash: "sha256:tue2_direct_hash_demo",
     },
   });
@@ -1397,7 +1426,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       technique: "Deep injection with fanning technique, supraperiosteal plane",
       aftercareNotes: "Ice 10 minutes every hour for first 4 hours. Avoid strenuous activity 24 hours.",
       additionalNotes: "Excellent cheek projection achieved. Symmetry verified.",
-      providerSignedAt: setTime(tuesday, 14, 45),
+      providerSignedAt: setTime(dayMinus1, 14, 45),
       providerSignedById: provider1.id,
     },
   });
@@ -1411,7 +1440,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       patientId: patients[6].id,
       providerId: provider1.id,
       status: "Finalized",
-      finalizedAt: setTime(wednesday, 8, 35),
+      finalizedAt: setTime(dayToday, 8, 35),
     },
   });
   const chartWed1 = await prisma.chart.create({
@@ -1430,7 +1459,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       additionalNotes: "Good tolerance. Mild erythema post-peel.",
       signedById: provider1.id,
       signedByName: provider1.name,
-      signedAt: setTime(wednesday, 8, 35),
+      signedAt: setTime(dayToday, 8, 35),
       recordHash: "sha256:wed1_direct_hash_demo",
     },
   });
@@ -1500,7 +1529,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         patientId: patients[0].id,
         templateId: consentTemplates[0].id,
         signatureData: "data:image/png;base64,signature_placeholder",
-        signedAt: setTime(monday, 8, 45),
+        signedAt: setTime(dayMinus3, 8, 45),
         ipAddress: "192.168.1.100",
         userAgent: "Mozilla/5.0 (iPad)",
         templateSnapshot: consentTemplates[0].content,
@@ -1512,7 +1541,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         patientId: patients[2].id,
         templateId: consentTemplates[1].id,
         signatureData: "data:image/png;base64,signature_placeholder",
-        signedAt: setTime(monday, 10, 15),
+        signedAt: setTime(dayMinus3, 10, 15),
         ipAddress: "192.168.1.101",
         userAgent: "Mozilla/5.0 (iPhone)",
         templateSnapshot: consentTemplates[1].content,
@@ -1524,7 +1553,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         patientId: patients[1].id,
         templateId: consentTemplates[0].id,
         signatureData: "data:image/png;base64,signature_placeholder",
-        signedAt: setTime(tuesday, 8, 45),
+        signedAt: setTime(dayMinus1, 8, 45),
         ipAddress: "192.168.1.102",
         userAgent: "Mozilla/5.0 (iPhone)",
         templateSnapshot: consentTemplates[0].content,
@@ -1549,13 +1578,13 @@ By signing below, I confirm my consent to proceed with treatment.`,
       discountAmount: 0,
       taxAmount: 0,
       total: 350,
-      paidAt: setTime(monday, 9, 35),
-      createdAt: setTime(monday, 9, 35),
+      paidAt: setTime(dayMinus3, 9, 35),
+      createdAt: setTime(dayMinus3, 9, 35),
       items: {
         create: [{ clinicId: clinic.id, serviceId: services[0].id, description: "Botox - Forehead (20 units)", quantity: 1, unitPrice: 350, total: 350 }],
       },
       payments: {
-        create: [{ clinicId: clinic.id, amount: 350, paymentMethod: "credit", reference: "VISA-4242", createdAt: setTime(monday, 9, 35) }],
+        create: [{ clinicId: clinic.id, amount: 350, paymentMethod: "credit", reference: "VISA-4242", createdAt: setTime(dayMinus3, 9, 35) }],
       },
     },
   });
@@ -1572,13 +1601,13 @@ By signing below, I confirm my consent to proceed with treatment.`,
       taxAmount: 0,
       total: 585,
       notes: "10% membership discount applied",
-      paidAt: setTime(monday, 11, 18),
-      createdAt: setTime(monday, 11, 18),
+      paidAt: setTime(dayMinus3, 11, 18),
+      createdAt: setTime(dayMinus3, 11, 18),
       items: {
         create: [{ clinicId: clinic.id, serviceId: services[3].id, description: "Juvederm Ultra - Lips (1 syringe)", quantity: 1, unitPrice: 650, total: 650 }],
       },
       payments: {
-        create: [{ clinicId: clinic.id, amount: 585, paymentMethod: "credit", reference: "AMEX-3310", createdAt: setTime(monday, 11, 18) }],
+        create: [{ clinicId: clinic.id, amount: 585, paymentMethod: "credit", reference: "AMEX-3310", createdAt: setTime(dayMinus3, 11, 18) }],
       },
     },
   });
@@ -1593,13 +1622,13 @@ By signing below, I confirm my consent to proceed with treatment.`,
       discountAmount: 0,
       taxAmount: 0,
       total: 950,
-      paidAt: setTime(monday, 15, 5),
-      createdAt: setTime(monday, 15, 5),
+      paidAt: setTime(dayMinus3, 15, 5),
+      createdAt: setTime(dayMinus3, 15, 5),
       items: {
         create: [{ clinicId: clinic.id, serviceId: services[5].id, description: "Sculptra - Full Face (2 vials)", quantity: 1, unitPrice: 950, total: 950 }],
       },
       payments: {
-        create: [{ clinicId: clinic.id, amount: 950, paymentMethod: "credit", reference: "MC-7788", createdAt: setTime(monday, 15, 5) }],
+        create: [{ clinicId: clinic.id, amount: 950, paymentMethod: "credit", reference: "MC-7788", createdAt: setTime(dayMinus3, 15, 5) }],
       },
     },
   });
@@ -1616,13 +1645,13 @@ By signing below, I confirm my consent to proceed with treatment.`,
       discountAmount: 0,
       taxAmount: 0,
       total: 350,
-      paidAt: setTime(tuesday, 12, 5),
-      createdAt: setTime(tuesday, 12, 5),
+      paidAt: setTime(dayMinus1, 12, 5),
+      createdAt: setTime(dayMinus1, 12, 5),
       items: {
         create: [{ clinicId: clinic.id, serviceId: services[7].id, description: "Microneedling", quantity: 1, unitPrice: 350, total: 350 }],
       },
       payments: {
-        create: [{ clinicId: clinic.id, amount: 350, paymentMethod: "debit", reference: "DBT-5501", createdAt: setTime(tuesday, 12, 5) }],
+        create: [{ clinicId: clinic.id, amount: 350, paymentMethod: "debit", reference: "DBT-5501", createdAt: setTime(dayMinus1, 12, 5) }],
       },
     },
   });
@@ -1639,7 +1668,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
       discountAmount: 0,
       taxAmount: 0,
       total: 150,
-      createdAt: setTime(wednesday, 8, 35),
+      createdAt: setTime(dayToday, 8, 35),
       items: {
         create: [{ clinicId: clinic.id, serviceId: services[6].id, description: "Chemical Peel - Light", quantity: 1, unitPrice: 150, total: 150 }],
       },
@@ -2016,7 +2045,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         entityId: chartMon1.id,
         details: JSON.stringify({ patientId: patients[0].id, providerName: provider1.name }),
         ipAddress: "192.168.1.100",
-        createdAt: setTime(monday, 9, 30),
+        createdAt: setTime(dayMinus3, 9, 30),
       },
     }),
     prisma.auditLog.create({
@@ -2033,7 +2062,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
           recordHash: chartMon1.recordHash,
         }),
         ipAddress: "192.168.1.50",
-        createdAt: setTime(monday, 16, 0),
+        createdAt: setTime(dayMinus3, 16, 0),
       },
     }),
     // Tuesday: NP provider signs pending-review charts
@@ -2046,7 +2075,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         entityId: chartTue1.id,
         details: JSON.stringify({ patientId: patients[1].id, providerName: provider1.name }),
         ipAddress: "192.168.1.100",
-        createdAt: setTime(tuesday, 9, 30),
+        createdAt: setTime(dayMinus1, 9, 30),
       },
     }),
     prisma.auditLog.create({
@@ -2058,7 +2087,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         entityId: chartTue3.id,
         details: JSON.stringify({ patientId: patients[4].id, providerName: provider1.name }),
         ipAddress: "192.168.1.100",
-        createdAt: setTime(tuesday, 14, 45),
+        createdAt: setTime(dayMinus1, 14, 45),
       },
     }),
     // General audit entries
@@ -2071,7 +2100,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         entityId: chartMon1.id,
         details: JSON.stringify({ patientId: patients[0].id }),
         ipAddress: "192.168.1.50",
-        createdAt: setTime(monday, 15, 55),
+        createdAt: setTime(dayMinus3, 15, 55),
       },
     }),
     prisma.auditLog.create({
@@ -2082,7 +2111,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         entityType: "Patient",
         entityId: patients[1].id,
         ipAddress: "192.168.1.200",
-        createdAt: setTime(tuesday, 8, 45),
+        createdAt: setTime(dayMinus1, 8, 45),
       },
     }),
     prisma.auditLog.create({
@@ -2092,7 +2121,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
         action: "Login",
         ipAddress: "192.168.1.1",
         userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-        createdAt: setTime(wednesday, 7, 30),
+        createdAt: setTime(dayToday, 7, 30),
       },
     }),
   ]);
@@ -2368,16 +2397,16 @@ By signing below, I confirm my consent to proceed with treatment.`,
   );
 
   console.log("\nDatabase seeding completed successfully!");
-  console.log(`\n=== Demo Week: ${monday.toLocaleDateString()} – ${friday.toLocaleDateString()} ===`);
+  console.log(`\n=== Demo Data: ${dayMinus3.toLocaleDateString()} – ${dayPlus3.toLocaleDateString()} (centered on today: ${dayToday.toLocaleDateString()}) ===`);
   console.log("\nSummary:");
   console.log("- 1 Clinic, 3 Rooms");
   console.log("- 6 Users (Owner, MedicalDirector, 2 Providers [1 NP w/ MD supervision], FrontDesk, Billing)");
   console.log("- 12 Services, 6 Products, 12 Patients");
   console.log("- 3 Consent Templates, 3 Chart Templates, 3 Membership Plans");
-  console.log("- 22 Appointments across Mon–Fri:");
-  console.log("  Mon: 3 Completed+CheckedOut | Tue: 3 (1 CheckedOut, 2 pending MD review)");
-  console.log("  Wed: 11 (2 done, 2 InProgress, 2 CheckedIn, 2 Confirmed, 3 Scheduled)");
-  console.log("  Thu: 3 Scheduled | Fri: 2 Scheduled");
+  console.log("- 24 Appointments across 7 days (centered on today):");
+  console.log("  Past: 6 Completed (3 checked out, 2 pending MD review)");
+  console.log("  Today: 11 (2 done, 2 InProgress, 2 CheckedIn, 2 Confirmed, 3 Scheduled)");
+  console.log("  Tomorrow+: 7 Scheduled");
   console.log("- 10 Charts: 4 MDSigned, 2 NeedsSignOff (MD Review queue), 3 Draft, 1 standalone Draft");
   console.log("- Treatment cards on all charts (filled for completed, empty for in-progress)");
   console.log("- MD Review queue: 2 charts awaiting co-sign (Michael J + Amanda T from Tuesday)");
