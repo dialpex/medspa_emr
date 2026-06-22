@@ -45,7 +45,7 @@ export default async function PatientPage({
 
   // Compute lastAppointmentDate from completed/checked-in appointments
   const completedAppointments = timeline.appointments.filter(
-    (a) => a.status === "Completed" || a.status === "CheckedIn"
+    (a) => a.status === "Completed" || a.status === "CheckedIn" || a.status === "InProgress"
   );
   const lastAppointmentDate = completedAppointments.length > 0
     ? new Date(Math.max(...completedAppointments.map((a) => new Date(a.startTime).getTime())))

@@ -93,5 +93,6 @@ export async function updateLocationData(data: LocationData) {
     },
   });
   revalidatePath("/settings/location");
+  revalidatePath("/", "layout");
   return { success: true };
 }

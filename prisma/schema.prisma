@@ -168,8 +168,12 @@ model Patient {
   emailHash     String?
   phoneHash     String?
 
+  // Avatar
+  avatarPhotoId    String? @unique
+
   // Relations
   clinic           Clinic            @relation(fields: [clinicId], references: [id])
+  avatarPhoto      Photo?            @relation("PatientAvatar", fields: [avatarPhotoId], references: [id])
   appointments     Appointment[]
   encounters       Encounter[]
   charts           Chart[]
@@ -537,6 +541,7 @@ model Photo {
   patient       Patient        @relation(fields: [patientId], references: [id])
   chart         Chart?         @relation(fields: [chartId], references: [id])
   takenBy       User           @relation(fields: [takenById], references: [id])
+  avatarOf      Patient?       @relation("PatientAvatar")
 
   @@index([clinicId])
   @@index([patientId])

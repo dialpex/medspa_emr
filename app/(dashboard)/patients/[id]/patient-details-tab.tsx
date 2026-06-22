@@ -1,14 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   CheckCircle,
   MessageSquare,
   CalendarPlus,
   User,
+  Sparkles,
+  AlertCircle,
+  Clock,
+  Lightbulb,
 } from "lucide-react";
 import type { PatientDetail, PatientTimeline } from "@/lib/actions/patients";
+import { getPatientSuggestions } from "@/lib/actions/patients";
 import { PatientDetails } from "./patient-details";
 import { CollapsibleCard } from "@/components/ui/collapsible-card";
 
@@ -149,7 +154,7 @@ function NextAppointment({
         Next Appointment
       </h3>
       <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 w-12 h-14 rounded-lg bg-purple-100 text-purple-700 flex flex-col items-center justify-center">
+        <div className="flex-shrink-0 size-12 rounded-full bg-purple-100 text-purple-700 flex flex-col items-center justify-center">
           <span className="text-[10px] font-bold leading-none">{monthAbbr}</span>
           <span className="text-lg font-bold leading-tight">{dayNum}</span>
         </div>
@@ -207,6 +212,76 @@ function PatientInfoCard({
   );
 }
 
+// ─── Smart Suggestions ──────────────────────────────────────
+
+const URGENCY_CONFIG = {
+  high: { icon: AlertCircle, color: "text-red-600", badge: "bg-red-100 text-red-700" },
+  medium: { icon: Clock, color: "text-amber-600", badge: "bg-amber-100 text-amber-700" },
+  low: { icon: Lightbulb, color: "text-blue-600", badge: "bg-blue-100 text-blue-700" },
+} as const;
+
+function SmartSuggestions({ patientId }: { patientId: string }) {
+  const [suggestions, setSuggestions] = useState<
+    { title: string; reason: string; urgency: "high" | "medium" | "low" }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPatientSuggestions(patientId)
+      .then((data) => {
+        if (!cancelled) setSuggestions(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [patientId]);
+
+  if (!loading && suggestions.length === 0) return null;
+
+  return (
+    <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-200 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="size-4 text-purple-600" />
+        <h3 className="text-sm font-semibold text-gray-900">AI Insights</h3>
+      </div>
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2].map((i) => (
+            <div key={i} className="animate-pulse space-y-2">
+              <div className="h-4 bg-purple-100 rounded w-3/4" />
+              <div className="h-3 bg-purple-100 rounded w-full" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {suggestions.map((suggestion, i) => {
+            const config = URGENCY_CONFIG[suggestion.urgency];
+            const Icon = config.icon;
+            return (
+              <div key={i} className="flex items-start gap-2.5">
+                <Icon className={`size-4 flex-shrink-0 mt-0.5 ${config.color}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900">{suggestion.title}</span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${config.badge}`}>
+                      {suggestion.urgency}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-0.5">{suggestion.reason}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Export ─────────────────────────────────────────────
 
 export function PatientDetailsTab({
@@ -220,6 +295,7 @@ export function PatientDetailsTab({
       <div className="w-[340px] flex-shrink-0 space-y-4">
         <QuickActions patientId={patient.id} />
         <NextAppointment appointments={timeline.appointments} />
+        <SmartSuggestions patientId={patient.id} />
       </div>
 
       {/* Right column */}

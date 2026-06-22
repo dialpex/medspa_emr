@@ -36,6 +36,7 @@ export type PatientDetail = {
   medicalNotes: string | null;
   tags: string | null;
   status: string;
+  avatarPhotoId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -477,6 +478,72 @@ export async function updatePatient(
   revalidatePath(`/patients/${id}`);
 
   return decryptPatientData(patient as any) as PatientDetail;
+}
+
+/**
+ * Update patient avatar photo
+ */
+export async function updatePatientAvatar(
+  patientId: string,
+  photoId: string
+): Promise<{ success: boolean }> {
+  const user = await requirePermission("patients", "edit");
+
+  const patient = await prisma.patient.findFirst({
+    where: { id: patientId, clinicId: user.clinicId, deletedAt: null },
+  });
+  if (!patient) throw new Error("Patient not found");
+
+  // Verify photo exists and belongs to this patient/clinic
+  const photo = await prisma.photo.findFirst({
+    where: { id: photoId, clinicId: user.clinicId, patientId },
+  });
+  if (!photo) throw new Error("Photo not found");
+
+  await prisma.patient.update({
+    where: { id: patientId },
+    data: { avatarPhoto: { connect: { id: photoId } } },
+  });
+
+  await createAuditLog({
+    clinicId: user.clinicId,
+    userId: user.id,
+    action: "PatientUpdate",
+    entityType: "Patient",
+    entityId: patientId,
+    details: JSON.stringify({ field: "avatarPhotoId", photoId }),
+  });
+
+  revalidatePath(`/patients/${patientId}`);
+  return { success: true };
+}
+
+/**
+ * Get AI-powered upsell suggestions for a patient
+ */
+export async function getPatientSuggestions(
+  patientId: string
+): Promise<{ title: string; reason: string; urgency: "high" | "medium" | "low" }[]> {
+  const user = await requirePermission("patients", "view");
+
+  const patient = await prisma.patient.findFirst({
+    where: { id: patientId, clinicId: user.clinicId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!patient) return [];
+
+  const appointments = await prisma.appointment.findMany({
+    where: { patientId, deletedAt: null },
+    select: {
+      startTime: true,
+      status: true,
+      service: { select: { name: true } },
+    },
+    orderBy: { startTime: "desc" },
+  });
+
+  const { getSuggestions } = await import("@/lib/agents/upsell");
+  return getSuggestions(patientId, appointments);
 }
 
 /**
