@@ -334,6 +334,8 @@ export type AppointmentDetail = {
   patientDateOfBirth: Date | null;
   patientGender: string | null;
   patientAllergies: string | null;
+  patientMedicalNotes: string | null;
+  patientAvatarPhotoId: string | null;
   patientCreatedAt: Date;
   patientVisitCount: number;
   hasChart: boolean;
@@ -372,6 +374,8 @@ export async function getAppointmentWithPatient(
           dateOfBirth: true,
           gender: true,
           allergies: true,
+          medicalNotes: true,
+          avatarPhotoId: true,
           createdAt: true,
           _count: {
             select: {
@@ -412,6 +416,8 @@ export async function getAppointmentWithPatient(
     patientDateOfBirth: apt.patient?.dateOfBirth ?? null,
     patientGender: apt.patient?.gender ?? null,
     patientAllergies: apt.patient?.allergies ?? null,
+    patientMedicalNotes: apt.patient?.medicalNotes ?? null,
+    patientAvatarPhotoId: apt.patient?.avatarPhotoId ?? null,
     patientCreatedAt: apt.patient?.createdAt ?? apt.createdAt,
     patientVisitCount: apt.patient?._count.appointments ?? 0,
     hasChart: !!apt.chart,

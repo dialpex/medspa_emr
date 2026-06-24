@@ -411,6 +411,34 @@ export async function checkOutAppointment(id: string) {
 // BEGIN SERVICE (unified start session + create chart)
 // ===========================================
 
+export async function markNoShow(id: string) {
+  const user = await requirePermission("appointments", "edit");
+  if (!["FrontDesk", "Admin", "Owner"].includes(user.role)) {
+    return { success: false, error: "Permission denied" };
+  }
+
+  const apt = await prisma.appointment.findFirst({
+    where: { id, clinicId: user.clinicId, deletedAt: null },
+  });
+  if (!apt) return { success: false, error: "Appointment not found" };
+  if (!["Scheduled", "Confirmed"].includes(apt.status)) {
+    return { success: false, error: "Can only mark scheduled or confirmed appointments as no-show" };
+  }
+
+  await prisma.appointment.update({
+    where: { id },
+    data: { status: "NoShow" },
+  });
+
+  await writeAuditLog(user.clinicId, user.id, "AppointmentNoShow", id, {
+    previousStatus: apt.status,
+  });
+
+  revalidatePath("/today");
+  revalidatePath("/calendar");
+  return { success: true };
+}
+
 export async function beginService(appointmentId: string): Promise<{
   success: boolean;
   data?: { chartId: string; encounterId: string };

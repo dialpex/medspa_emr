@@ -784,6 +784,7 @@ enum AuditAction {
   AppointmentStart
   AppointmentComplete
   AppointmentCheckOut
+  AppointmentNoShow
   AppointmentUndoCheckIn
   AppointmentUndoStart
   AppointmentUndoComplete
