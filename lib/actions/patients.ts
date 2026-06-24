@@ -289,7 +289,7 @@ export async function getPatientTimeline(patientId: string): Promise<PatientTime
       },
     }),
     prisma.photo.findMany({
-      where: { patientId, deletedAt: null },
+      where: { patientId, deletedAt: null, category: { not: "avatar" } },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
