@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/rbac";
 import { TemplateForm } from "../template-form";
 import type { TemplateFieldConfig } from "@/lib/types/charts";
 import { getLocationData } from "@/lib/actions/location";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 interface ImportData {
   fields?: TemplateFieldConfig[];
@@ -43,6 +44,13 @@ export default async function NewTemplatePage({
 
   return (
     <div className="h-[calc(100vh-64px)]">
+      <div className="px-6 pt-4">
+        <Breadcrumbs items={buildBreadcrumbItems(
+          { label: "System Config", href: "/settings" },
+          { label: "Templates", href: "/settings/templates" },
+          { label: "New" }
+        )} />
+      </div>
       <TemplateForm initialFields={initialFields} importMeta={importMeta} clinicLogoUrl={clinicLogoUrl} />
     </div>
   );

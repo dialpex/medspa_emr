@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { MFA_REQUIRED_ROLES } from "@/lib/auth.config";
 import { SecuritySettings } from "./security-settings";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 export default async function SecurityPage({
   searchParams,
@@ -24,6 +25,10 @@ export default async function SecurityPage({
 
   return (
     <div className="max-w-2xl mx-auto p-6">
+      <Breadcrumbs items={buildBreadcrumbItems(
+        { label: "System Config", href: "/settings" },
+        { label: "Security" }
+      )} />
       <h1 className="text-2xl font-semibold mb-6">Security Settings</h1>
       {showEnrollmentBanner && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">

@@ -5,6 +5,7 @@ import { getAllTemplates } from "@/lib/actions/chart-templates";
 import { PageCard } from "@/components/ui/page-card";
 import { TemplatesList } from "./templates-list";
 import { ImportButton } from "./import-button";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 export default async function TemplatesPage() {
   const user = await requirePermission("charts", "view");
@@ -13,6 +14,10 @@ export default async function TemplatesPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      <Breadcrumbs items={buildBreadcrumbItems(
+        { label: "System Config", href: "/settings" },
+        { label: "Templates" }
+      )} />
       <PageCard
         title="Forms & Charts"
         headerAction={

@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/rbac";
 import { getChartWithPhotos, getPreviousTreatment } from "@/lib/actions/charts";
 import { getEffectiveStatus } from "@/lib/encounter-utils";
 import { ChartEditor } from "./chart-editor";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 export default async function ChartEditPage({
   params,
@@ -27,11 +28,25 @@ export default async function ChartEditPage({
     user.clinicId
   );
 
+  const patientName = chart.patient
+    ? `${chart.patient.firstName} ${chart.patient.lastName}`
+    : "Patient";
+
   return (
+    <>
+    <div className="px-6 pt-4">
+      <Breadcrumbs items={buildBreadcrumbItems(
+        { label: "Patient Directory", href: "/patients" },
+        { label: patientName, href: chart.patientId ? `/patients/${chart.patientId}` : undefined },
+        { label: "Chart", href: `/charts/${id}` },
+        { label: "Edit" }
+      )} />
+    </div>
     <ChartEditor
       chart={chart as Parameters<typeof ChartEditor>[0]["chart"]}
       currentUserRole={user.role}
       previousTreatment={previousTreatment}
     />
+    </>
   );
 }

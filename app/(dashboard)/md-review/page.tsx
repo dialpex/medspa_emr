@@ -66,7 +66,7 @@ export default async function MDReviewPage() {
                     </td>
                     <td className="py-3">
                       <Link
-                        href={`/charts/${chart.id}`}
+                        href={`/charts/${chart.id}?from=md-review`}
                         className="text-purple-600 hover:text-purple-700 font-medium"
                       >
                         Review

@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import {
   User,
   Clock,
@@ -8,8 +7,8 @@ import {
   ClipboardList,
   FolderOpen,
   Receipt,
-  ChevronRight,
 } from "lucide-react";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 import { getPatient, getPatientTimeline } from "@/lib/actions/patients";
 import { getCharts } from "@/lib/actions/charts";
 import { requirePermission, hasPermission } from "@/lib/rbac";
@@ -137,15 +136,10 @@ export default async function PatientPage({
 
   return (
     <div className="px-4 py-6 space-y-4">
-      <nav className="flex items-center gap-1 text-sm text-gray-500">
-        <Link href="/patients" className="hover:text-gray-900 transition-colors">
-          Patients
-        </Link>
-        <ChevronRight className="size-3.5" />
-        <span className="text-gray-900 font-medium">
-          {patient.firstName} {patient.lastName}
-        </span>
-      </nav>
+      <Breadcrumbs items={buildBreadcrumbItems(
+        { label: "Patient Directory", href: "/patients" },
+        { label: `${patient.firstName} ${patient.lastName}` }
+      )} />
 
       <PatientHeader
         patient={patient}
