@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FileTextIcon, Loader2Icon } from "lucide-react";
 import { getTemplates } from "@/lib/actions/chart-templates";
 import { createChart } from "@/lib/actions/charts";
@@ -22,10 +22,13 @@ type Patient = {
 
 export default function NewChartPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectedPatientId = searchParams.get("patientId") ?? "";
+
   const [templates, setTemplates] = useState<Template[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
-  const [selectedPatient, setSelectedPatient] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState(preselectedPatientId);
   const [patientSearch, setPatientSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -34,14 +37,29 @@ export default function NewChartPage() {
     getTemplates().then(setTemplates);
   }, []);
 
-  // Load patients from server action
+  // Load patients from server action (skip if patient is preselected)
   useEffect(() => {
+    if (preselectedPatientId) return;
     import("@/lib/actions/patients").then(({ getPatients }) => {
       getPatients("").then((result) => {
         if (Array.isArray(result)) setPatients(result);
       });
     });
-  }, []);
+  }, [preselectedPatientId]);
+
+  // If preselected, fetch just that patient's name for display
+  const [preselectedPatientName, setPreselectedPatientName] = useState("");
+  useEffect(() => {
+    if (!preselectedPatientId) return;
+    import("@/lib/actions/patients").then(({ getPatients }) => {
+      getPatients("").then((result) => {
+        if (Array.isArray(result)) {
+          const found = result.find((p: Patient) => p.id === preselectedPatientId);
+          if (found) setPreselectedPatientName(`${found.firstName} ${found.lastName}`);
+        }
+      });
+    });
+  }, [preselectedPatientId]);
 
   const filteredPatients = patients.filter((p) => {
     if (!patientSearch) return true;
@@ -86,34 +104,42 @@ export default function NewChartPage() {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Patient
           </label>
-          <input
-            type="text"
-            value={patientSearch}
-            onChange={(e) => setPatientSearch(e.target.value)}
-            placeholder="Search patients..."
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-2 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-          />
-          <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
-            {filteredPatients.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setSelectedPatient(p.id)}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
-                  selectedPatient === p.id
-                    ? "bg-purple-50 text-purple-700 font-medium"
-                    : "text-gray-700"
-                }`}
-              >
-                {p.firstName} {p.lastName}
-              </button>
-            ))}
-            {filteredPatients.length === 0 && (
-              <div className="px-3 py-4 text-sm text-gray-500 text-center">
-                No patients found
+          {preselectedPatientId ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-50 border border-purple-200 text-sm font-medium text-purple-700">
+              {preselectedPatientName || "Loading..."}
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                value={patientSearch}
+                onChange={(e) => setPatientSearch(e.target.value)}
+                placeholder="Search patients..."
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-2 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+              />
+              <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
+                {filteredPatients.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedPatient(p.id)}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                      selectedPatient === p.id
+                        ? "bg-purple-50 text-purple-700 font-medium"
+                        : "text-gray-700"
+                    }`}
+                  >
+                    {p.firstName} {p.lastName}
+                  </button>
+                ))}
+                {filteredPatients.length === 0 && (
+                  <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                    No patients found
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
 
         {/* Template Selection */}

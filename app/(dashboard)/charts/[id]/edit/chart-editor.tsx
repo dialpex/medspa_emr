@@ -5,18 +5,19 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   CheckCircleIcon, Loader2Icon,
-  ArrowLeftIcon, SaveIcon, FileTextIcon,
+  ArrowLeftIcon, SaveIcon,
 } from "lucide-react";
 import { updateChart, providerSignChart } from "@/lib/actions/charts";
 import { getEffectiveStatus } from "@/lib/encounter-utils";
 import { ChartFormFields } from "./chart-form-fields";
 import { PhotoAnnotator } from "@/components/photo-annotator";
-import { AftercareConsent } from "@/components/aftercare-consent";
 import { ChartAiContextPanel } from "@/components/chart-ai-context-panel";
 import { SmartPhotoGallery } from "@/components/smart-photo-gallery";
-import { ProcedureDetailsCard } from "@/components/procedure-details-card";
-
-import { CollapsibleCard } from "@/components/ui/collapsible-card";
+import {
+  ProcedureDetailsCard,
+  isConsumedByProcedureDetails,
+  isRemovedField,
+} from "@/components/procedure-details-card";
 import type { PreviousTreatmentSummary } from "@/lib/actions/charts";
 import type { TemplateFieldConfig } from "@/lib/types/charts";
 import type { Role } from "@prisma/client";
@@ -36,8 +37,6 @@ type ChartData = {
   patientId: string;
   chiefComplaint: string | null;
   areasTreated: string | null;
-  productsUsed: string | null;
-  dosageUnits: string | null;
   aftercareNotes: string | null;
   additionalNotes: string | null;
   patient: {
@@ -120,12 +119,10 @@ export function ChartEditor({
   chart,
   currentUserRole,
   previousTreatment,
-  consentTemplates,
 }: {
   chart: ChartData;
   currentUserRole: Role;
   previousTreatment: PreviousTreatmentSummary | null;
-  consentTemplates: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
@@ -133,7 +130,6 @@ export function ChartEditor({
 
   // Standard chart fields
   const [chiefComplaint, setChiefComplaint] = useState(chart.chiefComplaint ?? "");
-  const [areasTreated, setAreasTreated] = useState(chart.areasTreated ?? "");
   const [additionalNotes, setAdditional] = useState(chart.additionalNotes ?? "");
 
   // Photo slots
@@ -213,7 +209,6 @@ export function ChartEditor({
   const handleStandardChange = (field: string, value: string) => {
     const setters: Record<string, (v: string) => void> = {
       chiefComplaint: setChiefComplaint,
-      areasTreated: setAreasTreated,
       additionalNotes: setAdditional,
     };
     setters[field]?.(value);
@@ -281,8 +276,13 @@ export function ChartEditor({
   };
 
   useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, []);
+    const handleBeforeUnload = () => { flushSave(); };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [flushSave]);
 
   const [providerSigning, setProviderSigning] = useState(false);
   const [providerConfirming, setProviderConfirming] = useState(false);
@@ -437,48 +437,38 @@ export function ChartEditor({
           <ProcedureDetailsCard
             chiefComplaint={chiefComplaint}
             onChiefComplaintChange={(v) => handleStandardChange("chiefComplaint", v)}
-            areasTreated={areasTreated}
-            onAreasTreatedChange={(v) => handleStandardChange("areasTreated", v)}
+            additionalNotes={chart.template ? (templateValues._provider_notes ?? "") : additionalNotes}
+            onAdditionalNotesChange={(v) => {
+              if (chart.template) {
+                handleTemplateChange("_provider_notes", v);
+              } else {
+                handleStandardChange("additionalNotes", v);
+              }
+            }}
+            templateFields={templateFields}
+            templateValues={templateValues}
+            onTemplateChange={handleTemplateChange}
             disabled={isLocked}
           />
 
-          {/* Template-driven fields */}
-          {chart.template && templateFields.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <ChartFormFields
-                fields={templateFields}
-                values={templateValues}
-                onChange={handleTemplateChange}
-                disabled={isLocked}
-                chartId={chart.id}
-                patientId={chart.patientId}
-              />
-            </div>
-          )}
-
-          {/* Provider Notes */}
-          {additionalNotes !== undefined && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Provider Notes</label>
-              <textarea
-                value={additionalNotes}
-                onChange={(e) => handleStandardChange("additionalNotes", e.target.value)}
-                disabled={isLocked}
-                rows={2}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 disabled:bg-gray-50"
-                placeholder="Additional observations or notes..."
-              />
-            </div>
-          )}
-
-          {/* Aftercare & Consent */}
-          <CollapsibleCard
-            icon={FileTextIcon}
-            title="Aftercare & Consent"
-            subtitle="Post-treatment instructions and consent documentation"
-          >
-            <AftercareConsent consentTemplates={consentTemplates} />
-          </CollapsibleCard>
+          {/* Remaining template fields (e.g. provider_signature) */}
+          {chart.template && (() => {
+            const remainingFields = templateFields.filter(
+              (f) => !isConsumedByProcedureDetails(f) && !isRemovedField(f)
+            );
+            return remainingFields.length > 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <ChartFormFields
+                  fields={remainingFields}
+                  values={templateValues}
+                  onChange={handleTemplateChange}
+                  disabled={isLocked}
+                  chartId={chart.id}
+                  patientId={chart.patientId}
+                />
+              </div>
+            ) : null;
+          })()}
         </div>
 
         {/* Right Column — AI Context Panel */}

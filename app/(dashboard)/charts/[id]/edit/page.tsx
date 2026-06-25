@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac";
 import { getChartWithPhotos, getPreviousTreatment } from "@/lib/actions/charts";
-import { getConsentTemplatesForClinic } from "@/lib/actions/consent";
 import { getEffectiveStatus } from "@/lib/encounter-utils";
 import { ChartEditor } from "./chart-editor";
 
@@ -22,17 +21,17 @@ export default async function ChartEditPage({
     redirect(`/charts/${id}`);
   }
 
-  const [previousTreatment, consentTemplates] = await Promise.all([
-    getPreviousTreatment(chart.patientId!, chart.id, user.clinicId),
-    getConsentTemplatesForClinic(),
-  ]);
+  const previousTreatment = await getPreviousTreatment(
+    chart.patientId!,
+    chart.id,
+    user.clinicId
+  );
 
   return (
     <ChartEditor
       chart={chart as Parameters<typeof ChartEditor>[0]["chart"]}
       currentUserRole={user.role}
       previousTreatment={previousTreatment}
-      consentTemplates={consentTemplates}
     />
   );
 }
