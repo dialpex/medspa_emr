@@ -22,8 +22,6 @@ type ChartData = {
   status: string;
   chiefComplaint: string | null;
   areasTreated: string | null;
-  productsUsed: string | null;
-  dosageUnits: string | null;
   aftercareNotes: string | null;
   additionalNotes: string | null;
   providerSignedAt: Date | null;
@@ -212,9 +210,6 @@ export function ChartDetail({ chart }: { chart: ChartData }) {
           {!chart.template && (
             <>
               <JsonDisplay label="Areas Treated" value={chart.areasTreated} />
-              <JsonDisplay label="Products Used" value={chart.productsUsed} />
-              <DetailRow label="Dosage/Units" value={chart.dosageUnits} />
-
               <DetailRow label="Aftercare Notes" value={chart.aftercareNotes} />
               <DetailRow label="Additional Notes" value={chart.additionalNotes} />
             </>

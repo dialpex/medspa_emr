@@ -61,75 +61,6 @@ function AreaPicker({
   );
 }
 
-function ProductRows({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: Array<{ name: string; lot: string; expiration: string; quantity: string }>;
-  onChange: (v: Array<{ name: string; lot: string; expiration: string; quantity: string }>) => void;
-  disabled?: boolean;
-}) {
-  const addRow = () =>
-    onChange([...value, { name: "", lot: "", expiration: "", quantity: "" }]);
-  const removeRow = (i: number) => onChange(value.filter((_, idx) => idx !== i));
-  const updateRow = (i: number, field: string, val: string) =>
-    onChange(value.map((r, idx) => (idx === i ? { ...r, [field]: val } : r)));
-
-  return (
-    <div className="space-y-2">
-      {value.map((row, i) => (
-        <div key={`row-${i}-${row.name || ""}-${row.lot || ""}`} className="grid grid-cols-4 gap-2">
-          <input
-            type="text"
-            value={row.name}
-            onChange={(e) => updateRow(i, "name", e.target.value)}
-            placeholder="Product name"
-            disabled={disabled}
-            className="rounded border border-gray-300 px-2 py-1.5 text-sm"
-          />
-          <input
-            type="text"
-            value={row.lot}
-            onChange={(e) => updateRow(i, "lot", e.target.value)}
-            placeholder="Lot #"
-            disabled={disabled}
-            className="rounded border border-gray-300 px-2 py-1.5 text-sm"
-          />
-          <input
-            type="text"
-            value={row.expiration}
-            onChange={(e) => updateRow(i, "expiration", e.target.value)}
-            placeholder="Expiration"
-            disabled={disabled}
-            className="rounded border border-gray-300 px-2 py-1.5 text-sm"
-          />
-          <div className="flex gap-1">
-            <input
-              type="text"
-              value={row.quantity}
-              onChange={(e) => updateRow(i, "quantity", e.target.value)}
-              placeholder="Qty/Units"
-              disabled={disabled}
-              className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
-            />
-            {!disabled && (
-              <button type="button" onClick={() => removeRow(i)} className="px-2 text-red-400 hover:text-red-600">
-                ×
-              </button>
-            )}
-          </div>
-        </div>
-      ))}
-      {!disabled && (
-        <button type="button" onClick={addRow} className="text-sm text-purple-600 hover:text-purple-700">
-          + Add Product
-        </button>
-      )}
-    </div>
-  );
-}
-
 function ChecklistField({
   options,
   value,
@@ -586,14 +517,6 @@ function SingleField({
       {field.type === "json-areas" && (
         <AreaPicker
           options={field.options ?? []}
-          value={val ? parseJson(val, []) : []}
-          onChange={(v) => onChange(field.key, JSON.stringify(v))}
-          disabled={disabled}
-        />
-      )}
-
-      {field.type === "json-products" && (
-        <ProductRows
           value={val ? parseJson(val, []) : []}
           onChange={(v) => onChange(field.key, JSON.stringify(v))}
           disabled={disabled}

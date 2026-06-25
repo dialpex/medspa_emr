@@ -86,9 +86,6 @@ async function main() {
       status: "MDSigned",
       chiefComplaint: "Forehead lines and glabellar frown lines",
       areasTreated: JSON.stringify(["Forehead", "Glabella"]),
-      productsUsed: JSON.stringify(["Botox 50 units"]),
-      dosageUnits: "50 units",
-      technique: "Standard injection pattern — 5 points forehead, 5 points glabella",
       aftercareNotes: "Avoid rubbing area for 4 hours. No strenuous exercise for 24 hours.",
     },
   });

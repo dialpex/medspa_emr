@@ -18,8 +18,6 @@ function generateRecordHash(chart: {
   id: string;
   chiefComplaint: string | null;
   areasTreated: string | null;
-  productsUsed: string | null;
-  dosageUnits: string | null;
   aftercareNotes: string | null;
   additionalNotes: string | null;
 }): string {
@@ -27,8 +25,6 @@ function generateRecordHash(chart: {
     id: chart.id,
     chiefComplaint: chart.chiefComplaint,
     areasTreated: chart.areasTreated,
-    productsUsed: chart.productsUsed,
-    dosageUnits: chart.dosageUnits,
     aftercareNotes: chart.aftercareNotes,
     additionalNotes: chart.additionalNotes,
   });

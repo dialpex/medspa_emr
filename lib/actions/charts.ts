@@ -16,9 +16,6 @@ import { revalidatePath } from "next/cache";
 export interface ChartUpdateInput {
   chiefComplaint?: string;
   areasTreated?: string;
-  productsUsed?: string;
-  dosageUnits?: string;
-
   aftercareNotes?: string;
   additionalNotes?: string;
 }
@@ -36,9 +33,6 @@ function generateRecordHash(chart: {
   id: string;
   chiefComplaint: string | null;
   areasTreated: string | null;
-  productsUsed: string | null;
-  dosageUnits: string | null;
-
   aftercareNotes: string | null;
   additionalNotes: string | null;
 }): string {
@@ -46,9 +40,6 @@ function generateRecordHash(chart: {
     id: chart.id,
     chiefComplaint: chart.chiefComplaint,
     areasTreated: chart.areasTreated,
-    productsUsed: chart.productsUsed,
-    dosageUnits: chart.dosageUnits,
-
     aftercareNotes: chart.aftercareNotes,
     additionalNotes: chart.additionalNotes,
   });
@@ -198,9 +189,6 @@ export async function getChart(chartId: string): Promise<ActionResult<{
   status: string;
   chiefComplaint: string | null;
   areasTreated: string | null;
-  productsUsed: string | null;
-  dosageUnits: string | null;
-
   aftercareNotes: string | null;
   additionalNotes: string | null;
   signedById: string | null;

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Open_Sans, IBM_Plex_Mono, Hanken_Grotesk } from "next/font/google";
+import { Open_Sans, IBM_Plex_Mono, Hanken_Grotesk, Sora } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -11,6 +11,12 @@ const openSans = Open_Sans({
 const hankenGrotesk = Hanken_Grotesk({
   variable: "--font-brand",
   weight: ["400", "500", "600"],
+  subsets: ["latin"],
+});
+
+const sora = Sora({
+  variable: "--font-sora",
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
 });
 
@@ -33,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${openSans.variable} ${ibmPlexMono.variable} ${hankenGrotesk.variable} antialiased`}
+        className={`${openSans.variable} ${ibmPlexMono.variable} ${hankenGrotesk.variable} ${sora.variable} antialiased`}
       >
         <Providers>{children}</Providers>
       </body>

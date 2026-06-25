@@ -32,8 +32,6 @@ export const updatePatientSchema = createPatientSchema.partial();
 export const chartUpdateSchema = z.object({
   chiefComplaint: z.string().max(2000).optional(),
   areasTreated: z.string().max(5000).optional(),
-  productsUsed: z.string().max(5000).optional(),
-  dosageUnits: z.string().max(500).optional(),
   aftercareNotes: z.string().max(5000).optional(),
   additionalNotes: z.string().max(10000).optional(),
 });
