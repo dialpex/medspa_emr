@@ -1237,6 +1237,32 @@ By signing below, I confirm my consent to proceed with treatment.`,
   ]);
   console.log(`Created ${appointments.length} appointments`);
 
+  // ─── Sarah Kim: past Botox history (for Neuvvia Insights) ───
+  // Two completed Botox appointments ~90 days apart → analyzer detects overdue pattern
+  const sarahBotoxPast1 = await prisma.appointment.create({
+    data: {
+      clinicId: clinic.id,
+      patientId: patients[5].id,
+      providerId: provider1.id,
+      serviceId: services[1].id,
+      startTime: new Date(now.getTime() - (98 + 90) * 24 * 60 * 60 * 1000),
+      endTime: new Date(now.getTime() - (98 + 90) * 24 * 60 * 60 * 1000 + 30 * 60 * 1000),
+      status: "Completed",
+    },
+  });
+  const sarahBotoxPast2 = await prisma.appointment.create({
+    data: {
+      clinicId: clinic.id,
+      patientId: patients[5].id,
+      providerId: provider1.id,
+      serviceId: services[1].id,
+      startTime: new Date(now.getTime() - 98 * 24 * 60 * 60 * 1000),
+      endTime: new Date(now.getTime() - 98 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000),
+      status: "Completed",
+    },
+  });
+  console.log("Created Sarah Kim past Botox appointments for upsell insights");
+
   // ===========================================
   // ENCOUNTERS & CHARTS — lifecycle states for demo week
   // ===========================================

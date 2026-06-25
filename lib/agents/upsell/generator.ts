@@ -39,5 +39,5 @@ Generate 2-3 smart, concise suggestions.`;
     }
   );
 
-  return result.suggestions.slice(0, 3);
+  return result.suggestions.slice(0, 2);
 }

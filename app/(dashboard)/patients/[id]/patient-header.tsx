@@ -75,16 +75,16 @@ function MedicalChips({
   if (!allergies && !medicalNotes) return null;
   return (
     <>
-      {allergies && (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-red-50 text-red-700 border border-red-200">
-          <AlertTriangle className="size-3" />
-          {allergies}
+      {allergies && allergies.split(",").map((a) => a.trim()).filter(Boolean).slice(0, 3).map((allergy) => (
+        <span key={allergy} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-red-50 text-red-700 border border-red-200 max-w-[200px]">
+          <AlertTriangle className="size-3 shrink-0" />
+          <span className="truncate">{allergy}</span>
         </span>
-      )}
+      ))}
       {medicalNotes && (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-          <AlertTriangle className="size-3" />
-          {medicalNotes}
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-50 text-amber-700 border border-amber-200 max-w-[200px]">
+          <AlertTriangle className="size-3 shrink-0" />
+          <span className="truncate">{medicalNotes}</span>
         </span>
       )}
     </>
@@ -414,7 +414,7 @@ export function PatientHeader({
 
   return (
     <div className="rounded-lg border bg-white shadow-sm p-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-center justify-between gap-4">
         {/* Left: avatar + info */}
         <div className="flex items-start gap-5 min-w-0">
           <UploadableAvatar patient={patient} />

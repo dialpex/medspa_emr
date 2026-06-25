@@ -14,7 +14,7 @@ interface AppointmentRecord {
 
 const COMPLEMENTARY_SERVICES: Record<string, { name: string; reason: string }[]> = {
   botox: [
-    { name: "Dermal Filler", reason: "Combine neuromodulator with filler for a full-face rejuvenation" },
+    { name: "Skincare Serum Replenishment", reason: "It's been 2 months since her last skincare serum — time to replenish for optimal results between treatments" },
     { name: "Chemical Peel", reason: "Enhance skin texture between neurotoxin appointments" },
   ],
   filler: [
@@ -24,6 +24,7 @@ const COMPLEMENTARY_SERVICES: Record<string, { name: string; reason: string }[]>
   facial: [
     { name: "Chemical Peel", reason: "Step up from basic facials for deeper exfoliation" },
     { name: "Microneedling", reason: "Amplify collagen production beyond what facials achieve" },
+    { name: "Medical-Grade Skincare", reason: "Extend facial results at home with a personalized skincare regimen" },
   ],
   laser: [
     { name: "IPL", reason: "Address pigmentation alongside laser treatments" },
@@ -31,6 +32,61 @@ const COMPLEMENTARY_SERVICES: Record<string, { name: string; reason: string }[]>
   ],
   microneedling: [
     { name: "PRP", reason: "Add PRP to microneedling for enhanced collagen stimulation" },
+    { name: "Medical-Grade Skincare", reason: "Support collagen recovery with targeted serums and growth factors" },
+  ],
+  // BHRT / Hormone therapy
+  pellet: [
+    { name: "Lab Panel", reason: "Routine labs ensure hormone levels are optimized before next pellet insertion" },
+    { name: "Weight Management Consult", reason: "Hormone optimization pairs well with a structured weight management plan" },
+    { name: "Peptide Therapy", reason: "Peptides can complement hormone therapy for energy, recovery, and body composition" },
+  ],
+  bhrt: [
+    { name: "Lab Panel", reason: "Monitor hormone levels to fine-tune BHRT dosing" },
+    { name: "Peptide Therapy", reason: "Peptides support the anti-aging and recovery benefits of hormone therapy" },
+    { name: "IV Therapy", reason: "Micronutrient infusions support hormonal balance and overall wellness" },
+  ],
+  hormone: [
+    { name: "Lab Panel", reason: "Follow-up labs are essential for safe, effective hormone management" },
+    { name: "Weight Management Consult", reason: "Hormone changes often impact metabolism — proactive weight support improves outcomes" },
+  ],
+  // IV Therapy
+  iv: [
+    { name: "IV Membership", reason: "Regular IV therapy patients benefit from membership pricing and scheduled sessions" },
+    { name: "Peptide Therapy", reason: "Combine IV micronutrients with peptides for enhanced recovery and performance" },
+    { name: "Lab Panel", reason: "Baseline labs help tailor IV formulations to actual nutrient deficiencies" },
+  ],
+  drip: [
+    { name: "IV Membership", reason: "Lock in recurring drip sessions with a membership for consistency and savings" },
+    { name: "Vitamin Injection", reason: "Quick vitamin shots between drip sessions maintain nutrient levels" },
+  ],
+  // Skincare
+  skincare: [
+    { name: "Chemical Peel", reason: "In-office peels accelerate results from a home skincare routine" },
+    { name: "Microneedling", reason: "Microneedling boosts product penetration and collagen for better skincare outcomes" },
+    { name: "Hydrafacial", reason: "Deep cleansing and infusion complement daily skincare products" },
+  ],
+  // Weight management
+  "weight loss": [
+    { name: "Lab Panel", reason: "Metabolic labs help personalize the weight management approach" },
+    { name: "Peptide Therapy", reason: "Peptides like BPC-157 or semaglutide support weight management goals" },
+    { name: "IV Therapy", reason: "Lipotropic and nutrient IVs support metabolism during weight loss" },
+    { name: "BHRT Consult", reason: "Hormonal imbalances can stall weight loss — a BHRT evaluation may help" },
+  ],
+  semaglutide: [
+    { name: "Lab Panel", reason: "Monitor metabolic markers while on GLP-1 therapy" },
+    { name: "IV Therapy", reason: "Nutrient support helps offset potential deficiencies during weight loss" },
+    { name: "Body Contouring", reason: "Non-invasive body contouring complements weight loss for stubborn areas" },
+  ],
+  tirzepatide: [
+    { name: "Lab Panel", reason: "Track metabolic health and adjust dosing with routine labs" },
+    { name: "IV Therapy", reason: "Hydration and nutrient IVs support patients on GLP-1 medications" },
+    { name: "Body Contouring", reason: "Sculpt and tighten as the body composition changes with treatment" },
+  ],
+  // Peptide therapy
+  peptide: [
+    { name: "Lab Panel", reason: "Labs help track biomarkers and validate peptide therapy outcomes" },
+    { name: "IV Therapy", reason: "IV micronutrients complement peptide protocols for optimal results" },
+    { name: "BHRT Consult", reason: "Peptides and hormones work synergistically for anti-aging and performance" },
   ],
 };
 
@@ -91,8 +147,8 @@ export function analyzeServiceHistory(appointments: AppointmentRecord[]): Patien
         avgIntervalDays,
       });
 
-      // Flag as overdue if > 1.2x the average interval
-      if (daysSinceLast > avgIntervalDays * 1.2) {
+      // Flag as overdue if past the average interval
+      if (daysSinceLast > avgIntervalDays) {
         overdueServices.push({
           serviceName,
           lastDate: lastDate.toISOString(),
@@ -142,9 +198,17 @@ export function profileToSuggestions(profile: PatientServiceProfile): UpsellSugg
 
   for (const overdue of profile.overdueServices.slice(0, 2)) {
     const ratio = overdue.daysSinceLast / overdue.avgIntervalDays;
+    const isNeuromodulator = normalizeServiceName(overdue.serviceName).includes("botox") ||
+      normalizeServiceName(overdue.serviceName).includes("dysport") ||
+      normalizeServiceName(overdue.serviceName).includes("xeomin") ||
+      normalizeServiceName(overdue.serviceName).includes("jeuveau");
     suggestions.push({
-      title: `${overdue.serviceName} — Overdue`,
-      reason: `Last visit was ${overdue.daysSinceLast} days ago (usually every ${overdue.avgIntervalDays} days)`,
+      title: isNeuromodulator
+        ? "Neuromodulator Treatment Due"
+        : `${overdue.serviceName} — Overdue`,
+      reason: isNeuromodulator
+        ? `Due for next neuromodulator treatment — last session was ${overdue.daysSinceLast} days ago (usually every ${overdue.avgIntervalDays} days)`
+        : `Last visit was ${overdue.daysSinceLast} days ago (usually every ${overdue.avgIntervalDays} days)`,
       urgency: ratio > 2 ? "high" : "medium",
     });
   }
@@ -157,5 +221,5 @@ export function profileToSuggestions(profile: PatientServiceProfile): UpsellSugg
     });
   }
 
-  return suggestions.slice(0, 3);
+  return suggestions.slice(0, 2);
 }

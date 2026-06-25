@@ -151,6 +151,7 @@ model Patient {
   phone         String?       // Encrypted at rest
   dateOfBirth   DateTime?
   gender        String?
+  pronouns      String?
   address       String?       // Encrypted at rest
   city          String?
   state         String?
@@ -158,6 +159,7 @@ model Patient {
   allergies     String?       // Stored as text, can be JSON in practice
   medicalNotes  String?
   tags          String?       // Comma-separated or JSON array
+  referralSource String?      // How did this patient find us
   status        PatientStatus @default(Active)
   isActive      Boolean       @default(true)
   createdAt     DateTime  @default(now())
@@ -890,6 +892,7 @@ model PatientCommunicationPreference {
   smsOptIn      Boolean       @default(false)
   smsOptInAt    DateTime?
   smsOptOutAt   DateTime?
+  emailOptIn    Boolean       @default(false)
   consentSource ConsentSource @default(FrontDesk)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt

@@ -28,6 +28,7 @@ export type PatientDetail = {
   phone: string | null;
   dateOfBirth: Date | null;
   gender: string | null;
+  pronouns: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -35,8 +36,11 @@ export type PatientDetail = {
   allergies: string | null;
   medicalNotes: string | null;
   tags: string | null;
+  referralSource: string | null;
   status: string;
   avatarPhotoId: string | null;
+  smsOptIn: boolean;
+  emailOptIn: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -225,6 +229,11 @@ export async function getPatient(id: string): Promise<PatientDetail | null> {
       clinicId: user.clinicId,
       deletedAt: null,
     },
+    include: {
+      communicationPreference: {
+        select: { smsOptIn: true, emailOptIn: true },
+      },
+    },
   });
 
   if (patient) {
@@ -235,7 +244,12 @@ export async function getPatient(id: string): Promise<PatientDetail | null> {
       entityType: "Patient",
       entityId: patient.id,
     });
-    return decryptPatientData(patient as any) as PatientDetail;
+    const decrypted = decryptPatientData(patient as any);
+    return {
+      ...decrypted,
+      smsOptIn: patient.communicationPreference?.smsOptIn ?? false,
+      emailOptIn: patient.communicationPreference?.emailOptIn ?? false,
+    } as PatientDetail;
   }
 
   return null;
@@ -367,6 +381,7 @@ export type CreatePatientInput = {
   phone?: string;
   dateOfBirth?: string;
   gender?: string;
+  pronouns?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -374,7 +389,10 @@ export type CreatePatientInput = {
   allergies?: string;
   medicalNotes?: string;
   tags?: string;
+  referralSource?: string;
   status?: string;
+  smsOptIn?: boolean;
+  emailOptIn?: boolean;
 };
 
 /**
@@ -393,6 +411,7 @@ export async function createPatient(input: CreatePatientInput): Promise<PatientD
       phone: input.phone || null,
       dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
       gender: input.gender || null,
+      pronouns: input.pronouns || null,
       address: input.address || null,
       city: input.city || null,
       state: input.state || null,
@@ -400,6 +419,7 @@ export async function createPatient(input: CreatePatientInput): Promise<PatientD
       allergies: input.allergies || null,
       medicalNotes: input.medicalNotes || null,
       tags: input.tags || null,
+      referralSource: input.referralSource || null,
     }) as any,
   });
 
@@ -450,6 +470,7 @@ export async function updatePatient(
       dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
     }),
     ...(input.gender !== undefined && { gender: input.gender || null }),
+    ...(input.pronouns !== undefined && { pronouns: input.pronouns || null }),
     ...(input.address !== undefined && { address: input.address || null }),
     ...(input.city !== undefined && { city: input.city || null }),
     ...(input.state !== undefined && { state: input.state || null }),
@@ -457,6 +478,7 @@ export async function updatePatient(
     ...(input.allergies !== undefined && { allergies: input.allergies || null }),
     ...(input.medicalNotes !== undefined && { medicalNotes: input.medicalNotes || null }),
     ...(input.tags !== undefined && { tags: input.tags || null }),
+    ...(input.referralSource !== undefined && { referralSource: input.referralSource || null }),
     ...(input.status !== undefined && { status: input.status as "Active" | "Fired" }),
   });
 
@@ -464,6 +486,29 @@ export async function updatePatient(
     where: { id },
     data: updateData as any,
   });
+
+  // Update communication preferences if opt-in fields changed
+  if (input.smsOptIn !== undefined || input.emailOptIn !== undefined) {
+    const commData: Record<string, unknown> = {};
+    if (input.smsOptIn !== undefined) {
+      commData.smsOptIn = input.smsOptIn;
+      if (input.smsOptIn) commData.smsOptInAt = new Date();
+      else commData.smsOptOutAt = new Date();
+    }
+    if (input.emailOptIn !== undefined) {
+      commData.emailOptIn = input.emailOptIn;
+    }
+
+    await prisma.patientCommunicationPreference.upsert({
+      where: { patientId: id },
+      update: commData,
+      create: {
+        clinicId: user.clinicId,
+        patientId: id,
+        ...commData,
+      },
+    });
+  }
 
   await createAuditLog({
     clinicId: user.clinicId,
@@ -477,7 +522,21 @@ export async function updatePatient(
   revalidatePath("/patients");
   revalidatePath(`/patients/${id}`);
 
-  return decryptPatientData(patient as any) as PatientDetail;
+  // Re-fetch with comm prefs to return full detail
+  const updated = await prisma.patient.findUnique({
+    where: { id },
+    include: {
+      communicationPreference: {
+        select: { smsOptIn: true, emailOptIn: true },
+      },
+    },
+  });
+  const decrypted = decryptPatientData(updated as any);
+  return {
+    ...decrypted,
+    smsOptIn: updated?.communicationPreference?.smsOptIn ?? false,
+    emailOptIn: updated?.communicationPreference?.emailOptIn ?? false,
+  } as PatientDetail;
 }
 
 /**

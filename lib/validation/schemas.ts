@@ -13,6 +13,7 @@ export const createPatientSchema = z.object({
   phone: z.string().max(30).optional().or(z.literal("")),
   dateOfBirth: isoDateString,
   gender: z.string().max(50).optional().or(z.literal("")),
+  pronouns: z.string().max(50).optional().or(z.literal("")),
   address: z.string().max(500).optional().or(z.literal("")),
   city: z.string().max(100).optional().or(z.literal("")),
   state: z.string().max(100).optional().or(z.literal("")),
@@ -20,7 +21,10 @@ export const createPatientSchema = z.object({
   allergies: z.string().max(2000).optional().or(z.literal("")),
   medicalNotes: z.string().max(5000).optional().or(z.literal("")),
   tags: z.string().max(500).optional().or(z.literal("")),
+  referralSource: z.string().max(200).optional().or(z.literal("")),
   status: z.enum(["Active", "Fired"]).optional(),
+  smsOptIn: z.boolean().optional(),
+  emailOptIn: z.boolean().optional(),
 });
 
 export const updatePatientSchema = createPatientSchema.partial();

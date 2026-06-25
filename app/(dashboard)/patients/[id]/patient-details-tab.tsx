@@ -6,7 +6,6 @@ import {
   CheckCircle,
   MessageSquare,
   CalendarPlus,
-  User,
   Sparkles,
   AlertCircle,
   Clock,
@@ -15,7 +14,6 @@ import {
 import type { PatientDetail, PatientTimeline } from "@/lib/actions/patients";
 import { getPatientSuggestions } from "@/lib/actions/patients";
 import { PatientDetails } from "./patient-details";
-import { CollapsibleCard } from "@/components/ui/collapsible-card";
 
 interface PatientDetailsTabProps {
   patient: PatientDetail;
@@ -23,33 +21,11 @@ interface PatientDetailsTabProps {
   canEdit: boolean;
 }
 
-function formatDate(date: Date): string {
-  return new Date(date).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 function formatTime(date: Date): string {
   return new Date(date).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function timeAgo(date: Date): string {
-  const now = new Date();
-  const d = new Date(date);
-  const diffMs = now.getTime() - d.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) return `${diffDays}d ago`;
-  return formatDate(date);
 }
 
 // ─── Quick Actions ───────────────────────────────────────────
@@ -174,44 +150,6 @@ function NextAppointment({
   );
 }
 
-// ─── Patient Info Card ───────────────────────────────────────
-
-function PatientInfoCard({
-  patient,
-  canEdit,
-}: {
-  patient: PatientDetail;
-  canEdit: boolean;
-}) {
-  const [isEditing, setIsEditing] = useState(false);
-
-  const editButton =
-    canEdit && !isEditing ? (
-      <button
-        onClick={() => setIsEditing(true)}
-        className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-      >
-        Edit
-      </button>
-    ) : null;
-
-  return (
-    <CollapsibleCard
-      icon={User}
-      title="Patient Information"
-      subtitle={`Edited ${timeAgo(patient.updatedAt)}`}
-      headerAction={editButton}
-    >
-      <PatientDetails
-        patient={patient}
-        canEdit={canEdit}
-        isEditing={isEditing}
-        onEditChange={setIsEditing}
-      />
-    </CollapsibleCard>
-  );
-}
-
 // ─── Smart Suggestions ──────────────────────────────────────
 
 const URGENCY_CONFIG = {
@@ -245,7 +183,7 @@ function SmartSuggestions({ patientId }: { patientId: string }) {
     <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-200 p-4">
       <div className="flex items-center gap-2 mb-3">
         <Sparkles className="size-4 text-purple-600" />
-        <h3 className="text-sm font-semibold text-gray-900">AI Insights</h3>
+        <h3 className="text-sm font-semibold text-gray-900">Neuvvia Insights</h3>
       </div>
       {loading ? (
         <div className="space-y-3">
@@ -300,7 +238,7 @@ export function PatientDetailsTab({
 
       {/* Right column */}
       <div className="flex-1 min-w-0">
-        <PatientInfoCard patient={patient} canEdit={canEdit} />
+        <PatientDetails patient={patient} canEdit={canEdit} />
       </div>
     </div>
   );
