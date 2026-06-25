@@ -331,7 +331,7 @@ export function ChartEditor({
       {/* Top Editing Bar */}
       <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-gray-200 flex-shrink-0">
         <Link
-          href="/charts"
+          href={`/patients/${chart.patientId}`}
           className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <ArrowLeftIcon className="size-5" />
