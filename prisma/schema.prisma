@@ -68,6 +68,7 @@ model Clinic {
   migrationJobs             MigrationJob[]
   migrationRuns             MigrationRun[]
   inventoryTransactions     InventoryTransaction[]
+  boardEntries              BoardEntry[]
 }
 
 // ===========================================
@@ -128,6 +129,9 @@ model User {
   photosTaken          Photo[]
   uploadedDocuments    PatientDocument[]
   inventoryTransactions InventoryTransaction[]
+  boardEntriesCreated   BoardEntry[]    @relation("BoardEntryCreatedBy")
+  boardEntriesAssigned  BoardEntry[]    @relation("BoardEntryAssignedTo")
+  boardEntriesCompleted BoardEntry[]    @relation("BoardEntryCompletedBy")
 
   @@index([clinicId])
   @@index([email])
@@ -1299,4 +1303,41 @@ model CanonicalStagingRecord {
 
   @@unique([runId, entityType, canonicalId])
   @@index([runId, status])
+}
+
+// ===========================================
+// TEAM BOARD
+// ===========================================
+
+model BoardEntry {
+  id            String    @id @default(cuid())
+  clinicId      String
+  clinic        Clinic    @relation(fields: [clinicId], references: [id])
+
+  content       String                        // The message/task text (max 500 chars)
+  type          String    @default("task")    // "task" | "note" | "reminder"
+  priority      String    @default("normal")  // "urgent" | "normal"
+  category      String?                       // "general" | "clinical" | "admin" | "handoff"
+
+  isCompleted   Boolean   @default(false)
+  completedAt   DateTime?
+  completedById String?
+  completedBy   User?     @relation("BoardEntryCompletedBy", fields: [completedById], references: [id])
+
+  assignedToId  String?
+  assignedTo    User?     @relation("BoardEntryAssignedTo", fields: [assignedToId], references: [id])
+
+  mentions      String?                       // JSON array of user IDs
+
+  isRecurring     Boolean  @default(false)
+  recurrenceRule  String?                     // "daily" | "weekdays" | "weekly" | "monthly"
+
+  createdById   String
+  createdBy     User      @relation("BoardEntryCreatedBy", fields: [createdById], references: [id])
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([clinicId, isCompleted, deletedAt])
 }

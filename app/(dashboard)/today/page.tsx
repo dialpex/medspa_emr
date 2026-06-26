@@ -13,6 +13,7 @@ import {
 import { TodayFilters } from "./today-filters";
 import { TodayList } from "./today-list";
 import { TodaySkeleton } from "./loading";
+import { BoardWidget } from "./board-widget";
 
 type SearchParams = Promise<{
   providerId?: string;
@@ -125,15 +126,18 @@ async function TodayContent({
         <div className="hidden xl:flex flex-col gap-5">
           {/* Two widgets side by side */}
           <div className="grid grid-cols-2 gap-5">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 min-h-[340px] flex flex-col">
-              <div className="mb-4">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Widget 1</p>
-                <h3 className="text-lg font-semibold text-gray-900 mt-1">Coming Soon</h3>
+            <Suspense fallback={
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 min-h-[340px] flex flex-col">
+                <div className="mb-4">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Team Board</p>
+                </div>
+                <div className="flex-1 flex items-center justify-center">
+                  <span className="text-sm text-gray-300">Loading...</span>
+                </div>
               </div>
-              <div className="flex-1 flex items-center justify-center">
-                <span className="text-sm text-gray-300">Content placeholder</span>
-              </div>
-            </div>
+            }>
+              <BoardWidget />
+            </Suspense>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 min-h-[340px] flex flex-col">
               <div className="mb-4">
                 <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Widget 2</p>
