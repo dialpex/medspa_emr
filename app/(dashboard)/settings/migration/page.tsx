@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageCard } from "@/components/ui/page-card";
 import { getMigrationJobs } from "@/lib/actions/migration";
 import { NewMigrationButton } from "./new-migration-button";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   Connecting: { label: "Connecting", color: "bg-yellow-100 text-yellow-800" },
@@ -28,6 +29,10 @@ export default async function MigrationDashboardPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      <Breadcrumbs items={buildBreadcrumbItems(
+        { label: "System Config", href: "/settings" },
+        { label: "Migration" }
+      )} />
       <PageCard
         title="Data Migration"
         label="Settings"

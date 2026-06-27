@@ -14,6 +14,7 @@ export const ROLE_PERMISSIONS = {
     messaging: { view: true, create: true, edit: false, delete: false },
     ai: { view: true, create: true },
     migration: { view: true, create: true, edit: true, delete: true },
+    board: { view: true, create: true, edit: true, delete: true },
   },
   Admin: {
     patients: { view: true, create: true, edit: true, delete: true },
@@ -27,6 +28,7 @@ export const ROLE_PERMISSIONS = {
     messaging: { view: true, create: true, edit: false, delete: false },
     ai: { view: true, create: true },
     migration: { view: false, create: false, edit: false, delete: false },
+    board: { view: true, create: true, edit: true, delete: true },
   },
   Provider: {
     patients: { view: true, create: true, edit: true, delete: false },
@@ -40,6 +42,7 @@ export const ROLE_PERMISSIONS = {
     messaging: { view: true, create: true, edit: false, delete: false },
     ai: { view: true, create: true },
     migration: { view: false, create: false, edit: false, delete: false },
+    board: { view: true, create: true, edit: true, delete: true },
   },
   FrontDesk: {
     patients: { view: true, create: true, edit: true, delete: false },
@@ -53,6 +56,7 @@ export const ROLE_PERMISSIONS = {
     messaging: { view: true, create: true, edit: false, delete: false },
     ai: { view: true, create: true },
     migration: { view: false, create: false, edit: false, delete: false },
+    board: { view: true, create: true, edit: true, delete: true },
   },
   Billing: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -66,6 +70,7 @@ export const ROLE_PERMISSIONS = {
     messaging: { view: false, create: false, edit: false, delete: false },
     ai: { view: true, create: true },
     migration: { view: false, create: false, edit: false, delete: false },
+    board: { view: true, create: false, edit: false, delete: false },
   },
   MedicalDirector: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -79,6 +84,7 @@ export const ROLE_PERMISSIONS = {
     messaging: { view: false, create: false, edit: false, delete: false },
     ai: { view: true, create: true },
     migration: { view: false, create: false, edit: false, delete: false },
+    board: { view: true, create: true, edit: true, delete: true },
   },
   ReadOnly: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -92,6 +98,7 @@ export const ROLE_PERMISSIONS = {
     messaging: { view: false, create: false, edit: false, delete: false },
     ai: { view: false, create: false },
     migration: { view: false, create: false, edit: false, delete: false },
+    board: { view: true, create: false, edit: false, delete: false },
   },
 } as const;
 

@@ -6,6 +6,7 @@ import { FileTextIcon, Loader2Icon } from "lucide-react";
 import { getTemplates } from "@/lib/actions/chart-templates";
 import { createChart } from "@/lib/actions/charts";
 import { PageCard } from "@/components/ui/page-card";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 type Template = {
   id: string;
@@ -91,8 +92,20 @@ export default function NewChartPage() {
     }
   };
 
+  const breadcrumbItems = preselectedPatientId && preselectedPatientName
+    ? buildBreadcrumbItems(
+        { label: "Patient Directory", href: "/patients" },
+        { label: preselectedPatientName, href: `/patients/${preselectedPatientId}` },
+        { label: "New Chart" }
+      )
+    : buildBreadcrumbItems(
+        { label: "Patient Directory", href: "/patients" },
+        { label: "New Chart" }
+      );
+
   return (
     <div className="p-6 max-w-3xl mx-auto">
+      <Breadcrumbs items={breadcrumbItems} />
       <PageCard title="New Chart">
         {error && (
           <div className="p-3 text-sm text-red-700 bg-red-50 rounded-lg mb-4">{error}</div>

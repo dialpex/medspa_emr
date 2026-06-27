@@ -1,6 +1,7 @@
 import { getMigrationStatus } from "@/lib/actions/migration";
 import { notFound } from "next/navigation";
 import { MigrationWizard } from "./migration-wizard";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 interface Props {
   params: Promise<{ jobId: string }>;
@@ -16,6 +17,11 @@ export default async function MigrationJobPage({ params }: Props) {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      <Breadcrumbs items={buildBreadcrumbItems(
+        { label: "System Config", href: "/settings" },
+        { label: "Migration", href: "/settings/migration" },
+        { label: job.source ?? "Job" }
+      )} />
       <MigrationWizard job={job} />
     </div>
   );

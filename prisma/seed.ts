@@ -11,6 +11,8 @@ async function main() {
 
   // ── Clean up existing data (delete in FK-safe order) ──
   console.log("Clearing existing data...");
+  // Board
+  await prisma.boardEntry.deleteMany();
   // Migration tables
   await prisma.canonicalStagingRecord.deleteMany();
   await prisma.migrationAuditEvent.deleteMany();
@@ -2402,6 +2404,79 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log(
     `Created ${notificationTemplates.length} notification templates`
   );
+
+  // ===========================================
+  // TEAM BOARD ENTRIES
+  // ===========================================
+  const boardEntries = await Promise.all([
+    prisma.boardEntry.create({
+      data: {
+        clinicId: clinic.id,
+        createdById: frontDesk.id,
+        content: "Restock exam room 2 supplies",
+        type: "task",
+        priority: "normal",
+        category: "admin",
+      },
+    }),
+    prisma.boardEntry.create({
+      data: {
+        clinicId: clinic.id,
+        createdById: provider1.id,
+        content: "Open lab results for @Sarah Kim",
+        type: "task",
+        priority: "urgent",
+        category: "clinical",
+        assignedToId: provider2.id,
+      },
+    }),
+    prisma.boardEntry.create({
+      data: {
+        clinicId: clinic.id,
+        createdById: provider2.id,
+        content: "Update consent forms for new Botox protocol",
+        type: "task",
+        priority: "normal",
+        category: "clinical",
+      },
+    }),
+    prisma.boardEntry.create({
+      data: {
+        clinicId: clinic.id,
+        createdById: frontDesk.id,
+        content: "Confirm all appointments for tomorrow",
+        type: "task",
+        priority: "normal",
+        category: "admin",
+        assignedToId: frontDesk.id,
+        isRecurring: true,
+        recurrenceRule: "weekdays",
+      },
+    }),
+    prisma.boardEntry.create({
+      data: {
+        clinicId: clinic.id,
+        createdById: owner.id,
+        content: "Reminder: Dr. Martinez out Friday — reschedule patients",
+        type: "reminder",
+        priority: "normal",
+        category: "general",
+      },
+    }),
+    prisma.boardEntry.create({
+      data: {
+        clinicId: clinic.id,
+        createdById: provider1.id,
+        content: "Check fridge temps and log",
+        type: "task",
+        priority: "normal",
+        category: "clinical",
+        isRecurring: true,
+        recurrenceRule: "daily",
+      },
+    }),
+  ]);
+  console.log(`Created ${boardEntries.length} board entries`);
 
   console.log("\nDatabase seeding completed successfully!");
   console.log(`\n=== Demo Data: ${dayMinus3.toLocaleDateString()} – ${dayPlus3.toLocaleDateString()} (centered on today: ${dayToday.toLocaleDateString()}) ===`);

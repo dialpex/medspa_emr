@@ -7,13 +7,17 @@ import { ChartSignButton, ProviderSignButton, CoSignButton } from "./chart-sign-
 import { AddendumSection } from "./addendum-section";
 import { PageCard } from "@/components/ui/page-card";
 import { prisma } from "@/lib/prisma";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 export default async function ChartDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const { from } = await searchParams;
   const user = await requirePermission("charts", "view");
   const chart = await getChartWithPhotos(id);
 
@@ -68,8 +72,21 @@ export default async function ChartDetailPage({
     }
   }
 
+  const patientName = chart.patient
+    ? `${chart.patient.firstName} ${chart.patient.lastName}`
+    : "Patient";
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
+      <Breadcrumbs items={buildBreadcrumbItems(
+        ...(from === "md-review"
+          ? [{ label: "MD Review", href: "/md-review" }]
+          : [
+              { label: "Patient Directory", href: "/patients" },
+              { label: patientName, href: chart.patientId ? `/patients/${chart.patientId}` : undefined },
+            ]),
+        { label: "Chart" }
+      )} />
       <PageCard title="Chart Details">
         <ChartDetail chart={chart} />
         <div className="mt-6 flex gap-3">

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getUsersForClinic } from "@/lib/actions/users";
 import { ToggleActiveButton } from "./toggle-active-button";
 import { PageCard } from "@/components/ui/page-card";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 const ROLE_COLORS: Record<string, string> = {
   Owner: "bg-purple-50 text-purple-700",
@@ -18,6 +19,10 @@ export default async function UsersPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
+      <Breadcrumbs items={buildBreadcrumbItems(
+        { label: "System Config", href: "/settings" },
+        { label: "Users" }
+      )} />
       <PageCard
         title="Users"
         headerAction={

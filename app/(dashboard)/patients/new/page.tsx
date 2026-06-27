@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createPatient } from "@/lib/actions/patients";
 import { Spinner } from "@/components/ui/spinner";
 import { PageCard } from "@/components/ui/page-card";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 type FormData = {
   firstName: string;
@@ -72,12 +73,10 @@ export default function NewPatientPage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <Link
-        href="/patients"
-        className="text-purple-600 hover:underline text-sm mb-4 inline-block"
-      >
-        ← Back to Patients
-      </Link>
+      <Breadcrumbs items={buildBreadcrumbItems(
+        { label: "Patient Directory", href: "/patients" },
+        { label: "New Patient" }
+      )} />
 
       <PageCard title="Add New Patient">
         {error && (

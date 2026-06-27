@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 import {
   getAccountProfile,
   updateAccountProfile,
@@ -88,6 +89,10 @@ export default function AccountSettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-8 py-8 px-4">
+      <Breadcrumbs items={buildBreadcrumbItems(
+        { label: "System Config", href: "/settings" },
+        { label: "Account" }
+      )} />
       <h1 className="text-2xl font-bold text-gray-900">Account Settings</h1>
 
       {/* Profile Section */}

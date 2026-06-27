@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/rbac";
 import { getTemplate } from "@/lib/actions/chart-templates";
 import { TemplateForm } from "../template-form";
 import { getLocationData } from "@/lib/actions/location";
+import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 
 export default async function EditTemplatePage({
   params,
@@ -20,6 +21,13 @@ export default async function EditTemplatePage({
 
   return (
     <div className="h-[calc(100vh-64px)]">
+      <div className="px-6 pt-4">
+        <Breadcrumbs items={buildBreadcrumbItems(
+          { label: "System Config", href: "/settings" },
+          { label: "Templates", href: "/settings/templates" },
+          { label: template.name }
+        )} />
+      </div>
       <TemplateForm template={template} clinicLogoUrl={clinicLogoUrl} />
     </div>
   );
