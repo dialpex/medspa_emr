@@ -125,7 +125,7 @@ async function TodayContent({
         {/* Right column: dashboard widgets */}
         <div className="hidden xl:flex flex-col gap-5">
           {/* Two widgets side by side */}
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
             <Suspense fallback={
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 min-h-[340px] flex flex-col">
                 <div className="mb-4">
