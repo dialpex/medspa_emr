@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useTransition, useCallback } from "react";
-import { X, Plus, Trash2, Eye } from "lucide-react";
+import { useState, useEffect, useTransition, useCallback, useMemo, useRef } from "react";
+import { X, Plus, Trash2, Eye, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   createInvoice,
@@ -18,10 +18,12 @@ import { payWithWallet, getWalletBalanceAction } from "@/lib/actions/wallet";
 import { InvoicePreview } from "./invoice-preview";
 
 type ServiceOption = { id: string; name: string; price: number };
+type ProductOption = { id: string; name: string; price: number };
 
 type Props = {
   invoice: InvoiceDetail | null;
   services: ServiceOption[];
+  products: ProductOption[];
   clinicInfo: ClinicInfo;
   onClose: () => void;
 };
@@ -31,13 +33,14 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   Sent: { bg: "bg-blue-100", text: "text-blue-700" },
   PartiallyPaid: { bg: "bg-yellow-100", text: "text-yellow-700" },
   Paid: { bg: "bg-green-100", text: "text-green-700" },
+  Overdue: { bg: "bg-red-100", text: "text-red-700" },
   Void: { bg: "bg-gray-100", text: "text-gray-400 line-through" },
   Refunded: { bg: "bg-red-100", text: "text-red-700" },
 };
 
 const PAYMENT_METHODS = ["Cash", "Credit Card", "Debit Card", "Check", "Bank Transfer", "Wallet", "Other"];
 
-export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) {
+export function InvoiceModal({ invoice, services, products, clinicInfo, onClose }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -64,10 +67,20 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
     invoice?.items.map((i) => ({
       key: crypto.randomUUID(),
       serviceId: i.serviceId || undefined,
+      productId: i.productId || undefined,
       description: i.description,
       quantity: i.quantity,
       unitPrice: i.unitPrice,
     })) ?? []
+  );
+
+  // Due date (default 30 days from now for new invoices)
+  const defaultDueDate = new Date();
+  defaultDueDate.setDate(defaultDueDate.getDate() + 30);
+  const [dueDate, setDueDate] = useState(
+    invoice?.dueDate
+      ? new Date(invoice.dueDate).toISOString().slice(0, 10)
+      : defaultDueDate.toISOString().slice(0, 10)
   );
 
   // Discount & Tax
@@ -97,6 +110,17 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
   const totalPaid = invoice?.payments.reduce((s, p) => s + p.amount, 0) ?? 0;
   const balance = Math.round((total - totalPaid) * 100) / 100;
 
+  // Close item dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (itemSearchRef.current && !itemSearchRef.current.parentElement?.parentElement?.contains(e.target as Node)) {
+        setShowItemDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
   // Patient search
   const doSearch = useCallback(async (q: string) => {
     if (q.length < 2) { setPatientResults([]); return; }
@@ -109,10 +133,33 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
     return () => clearTimeout(timer);
   }, [patientSearch, doSearch]);
 
-  function addServiceItem(serviceId: string) {
-    const svc = services.find((s) => s.id === serviceId);
-    if (!svc) return;
-    setItems((prev) => [...prev, { key: crypto.randomUUID(), serviceId, description: svc.name, quantity: 1, unitPrice: svc.price }]);
+  // Item search (services + products)
+  const [itemSearch, setItemSearch] = useState("");
+  const [showItemDropdown, setShowItemDropdown] = useState(false);
+  const itemSearchRef = useRef<HTMLInputElement>(null);
+
+  const catalogItems = useMemo(() => {
+    const all: { id: string; type: "service" | "product"; name: string; price: number }[] = [
+      ...services.map((s) => ({ id: s.id, type: "service" as const, name: s.name, price: s.price })),
+      ...products.map((p) => ({ id: p.id, type: "product" as const, name: p.name, price: p.price })),
+    ];
+    if (!itemSearch.trim()) return all;
+    const q = itemSearch.toLowerCase();
+    return all.filter((i) => i.name.toLowerCase().includes(q));
+  }, [services, products, itemSearch]);
+
+  function addCatalogItem(item: { id: string; type: "service" | "product"; name: string; price: number }) {
+    const newItem: InvoiceItemInput & { key: string } = {
+      key: crypto.randomUUID(),
+      description: item.name,
+      quantity: 1,
+      unitPrice: item.price,
+    };
+    if (item.type === "service") newItem.serviceId = item.id;
+    else newItem.productId = item.id;
+    setItems((prev) => [...prev, newItem]);
+    setItemSearch("");
+    setShowItemDropdown(false);
   }
 
   function addCustomItem() {
@@ -132,6 +179,7 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
     if (!patientId) { setError("Please select a patient"); return; }
     if (items.length === 0) { setError("Add at least one item"); return; }
     if (items.some((i) => !i.description.trim())) { setError("All items need a description"); return; }
+    if (!dueDate) { setError("Due date is required"); return; }
 
     const input = {
       patientId,
@@ -140,6 +188,7 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
       discountPercent: discountType === "%" ? discountValue : null,
       taxRate: taxEnabled ? taxRate : null,
       notes: invoice?.notes ?? undefined,
+      dueDate,
     };
 
     startTransition(async () => {
@@ -300,6 +349,17 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
             )}
           </div>
 
+          {/* Due Date */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+            />
+          </div>
+
           {/* Line Items */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Line Items</label>
@@ -357,20 +417,44 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
                 </tbody>
               </table>
             </div>
-            <div className="flex gap-2 mt-2">
-              {services.length > 0 && (
-                <select
-                  onChange={(e) => { if (e.target.value) { addServiceItem(e.target.value); e.target.value = ""; } }}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-                  defaultValue=""
-                >
-                  <option value="" disabled>Add Service...</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name} (${s.price.toFixed(2)})</option>
-                  ))}
-                </select>
-              )}
-              <button onClick={addCustomItem} className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-700">
+            <div className="flex gap-2 mt-2 items-start">
+              <div className="relative flex-1 max-w-xs">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                  <input
+                    ref={itemSearchRef}
+                    type="text"
+                    value={itemSearch}
+                    onChange={(e) => { setItemSearch(e.target.value); setShowItemDropdown(true); }}
+                    onFocus={() => setShowItemDropdown(true)}
+                    placeholder="Search services & products..."
+                    className="w-full rounded-lg border border-gray-300 pl-8 pr-3 py-1.5 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+                {showItemDropdown && (
+                  <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                    {catalogItems.length === 0 ? (
+                      <li className="px-3 py-2 text-sm text-gray-400">No results</li>
+                    ) : (
+                      catalogItems.map((item) => (
+                        <li key={`${item.type}-${item.id}`}>
+                          <button
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between"
+                            onClick={() => addCatalogItem(item)}
+                          >
+                            <span>
+                              {item.name}
+                              <span className="ml-2 text-xs text-gray-400 capitalize">{item.type}</span>
+                            </span>
+                            <span className="text-gray-500">${item.price.toFixed(2)}</span>
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                )}
+              </div>
+              <button onClick={addCustomItem} className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-700 whitespace-nowrap py-1.5">
                 <Plus className="size-4" /> Custom Item
               </button>
             </div>
@@ -553,12 +637,14 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
                 if (!patientId) { setError("Please select a patient"); return; }
                 if (items.length === 0) { setError("Add at least one item"); return; }
                 if (items.some((i) => !i.description.trim())) { setError("All items need a description"); return; }
+                if (!dueDate) { setError("Due date is required"); return; }
                 const input = {
                   patientId,
                   items: items.map(({ key, ...rest }) => rest),
                   discountAmount: discountType === "$" ? discountValue : 0,
                   discountPercent: discountType === "%" ? discountValue : null,
                   taxRate: taxEnabled ? taxRate : null,
+                  dueDate,
                   status: "Sent" as const,
                 };
                 startTransition(async () => {

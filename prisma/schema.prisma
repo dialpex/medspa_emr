@@ -644,6 +644,7 @@ enum InvoiceStatus {
   Sent
   PartiallyPaid
   Paid
+  Overdue
   Void
   Refunded
 }

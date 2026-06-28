@@ -52,6 +52,7 @@ export const appointmentSchema = z.object({
 
 export const invoiceItemSchema = z.object({
   serviceId: cuidString.optional(),
+  productId: cuidString.optional(),
   description: z.string().min(1, "Description is required").max(500),
   quantity: z.number().int().min(1).max(10000),
   unitPrice: z.number().min(0).max(1000000),
