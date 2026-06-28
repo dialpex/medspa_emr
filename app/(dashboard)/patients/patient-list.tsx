@@ -63,7 +63,11 @@ export function PatientList({ patients }: { patients: PatientListItem[] }) {
             >
               <td className="py-3 px-4">
                 <div className="flex items-center gap-3">
-                  <PatientAvatar firstName={patient.firstName} lastName={patient.lastName} />
+                  <PatientAvatar
+                    firstName={patient.firstName}
+                    lastName={patient.lastName}
+                    imageUrl={patient.avatarPhotoId ? `/api/photos/${patient.avatarPhotoId}` : undefined}
+                  />
                   <Link
                     href={`/patients/${patient.id}`}
                     className="text-blue-600 hover:underline font-medium"

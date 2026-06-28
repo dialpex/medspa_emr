@@ -2,12 +2,12 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   CheckCircleIcon, Loader2Icon,
-  ArrowLeftIcon, SaveIcon,
+  SaveIcon,
 } from "lucide-react";
 import { updateChart, providerSignChart } from "@/lib/actions/charts";
+import { PatientAvatar } from "@/components/patient-avatar";
 import { getEffectiveStatus } from "@/lib/encounter-utils";
 import { ChartFormFields } from "./chart-form-fields";
 import { PhotoAnnotator } from "@/components/photo-annotator";
@@ -47,6 +47,7 @@ type ChartData = {
     dateOfBirth: Date | null;
     tags: string | null;
     medicalNotes: string | null;
+    avatarPhotoId: string | null;
     appointments?: Array<{ startTime: Date }>;
   };
   encounter: { id: string; status: string } | null;
@@ -324,23 +325,12 @@ export function ChartEditor({
     ? new Date(chart.patient.dateOfBirth).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
   const lastVisit = chart.patient.appointments?.[0]?.startTime;
-  const initials = `${chart.patient.firstName.charAt(0)}${chart.patient.lastName.charAt(0)}`.toUpperCase();
 
   return (
-    <div className="flex flex-col h-screen">
-      {/* Top Editing Bar */}
-      <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-gray-200 flex-shrink-0">
-        <Link
-          href={`/patients/${chart.patientId}`}
-          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <ArrowLeftIcon className="size-5" />
-        </Link>
-        <span className="text-sm font-medium text-gray-700">
-          Editing Chart:{" "}
-          <span className="text-gray-900">{chart.patient.firstName} {chart.patient.lastName}</span>
-        </span>
-        <div className="flex items-center gap-2 ml-auto">
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Clinical Alert Bar */}
+      {(allergyList.length > 0 || isVip) && (
+        <div className="flex items-center gap-2 px-5 py-2 bg-white border-b border-gray-200 flex-shrink-0">
           {allergyList.map((allergy) => (
             <span
               key={allergy}
@@ -355,19 +345,22 @@ export function ChartEditor({
             </span>
           )}
         </div>
-      </div>
+      )}
 
       {/* Two-column container */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Column — Main Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-24">
+        <div className="flex-1 overflow-y-auto px-6 pt-1 pb-24 space-y-6">
           {/* Patient Header Card */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-start gap-4">
               {/* Avatar */}
-              <div className="size-12 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-lg font-bold flex-shrink-0">
-                {initials}
-              </div>
+              <PatientAvatar
+                firstName={chart.patient.firstName}
+                lastName={chart.patient.lastName}
+                size="lg"
+                imageUrl={chart.patient.avatarPhotoId ? `/api/photos/${chart.patient.avatarPhotoId}` : undefined}
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2.5">
                   <h1 className="text-xl font-bold text-gray-900">

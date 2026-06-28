@@ -90,7 +90,7 @@ export default async function PatientPage({
             icon: <FileText className="size-4" />,
             content: (
               <div className="rounded-xl border border-gray-200 bg-white p-6">
-                <PatientCharts charts={charts} />
+                <PatientCharts charts={charts} userId={user.id} canDeleteAny={hasPermission(user.role, "charts", "delete")} />
               </div>
             ),
           },
@@ -149,7 +149,7 @@ export default async function PatientPage({
   ];
 
   return (
-    <div className="px-4 py-6 space-y-4">
+    <div className="px-6 py-4 space-y-4">
       <Breadcrumbs items={buildBreadcrumbItems(
         { label: "Patient Directory", href: "/patients" },
         { label: `${patient.firstName} ${patient.lastName}` }

@@ -33,20 +33,19 @@ export default async function ChartEditPage({
     : "Patient";
 
   return (
-    <>
-    <div className="px-6 pt-4">
-      <Breadcrumbs items={buildBreadcrumbItems(
-        { label: "Patient Directory", href: "/patients" },
-        { label: patientName, href: chart.patientId ? `/patients/${chart.patientId}` : undefined },
-        { label: "Chart", href: `/charts/${id}` },
-        { label: "Edit" }
-      )} />
+    <div className="flex flex-col h-screen">
+      <div className="px-6 pt-4">
+        <Breadcrumbs items={buildBreadcrumbItems(
+          { label: "Patient Directory", href: "/patients" },
+          { label: patientName, href: chart.patientId ? `/patients/${chart.patientId}` : undefined },
+          { label: "Edit Chart" }
+        )} />
+      </div>
+      <ChartEditor
+        chart={chart as Parameters<typeof ChartEditor>[0]["chart"]}
+        currentUserRole={user.role}
+        previousTreatment={previousTreatment}
+      />
     </div>
-    <ChartEditor
-      chart={chart as Parameters<typeof ChartEditor>[0]["chart"]}
-      currentUserRole={user.role}
-      previousTreatment={previousTreatment}
-    />
-    </>
   );
 }
