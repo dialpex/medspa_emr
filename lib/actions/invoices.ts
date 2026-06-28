@@ -43,6 +43,7 @@ export type InvoiceDetail = {
   items: {
     id: string;
     serviceId: string | null;
+    productId: string | null;
     description: string;
     quantity: number;
     unitPrice: number;
@@ -68,6 +69,7 @@ export type InvoiceFilters = {
 
 export type InvoiceItemInput = {
   serviceId?: string;
+  productId?: string;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -124,8 +126,23 @@ function calculateTotals(items: InvoiceItemInput[], discountAmount: number, disc
   return { subtotal: Math.round(subtotal * 100) / 100, discountAmount: Math.round(discount * 100) / 100, taxAmount: Math.round(tax * 100) / 100, total: Math.round(total * 100) / 100 };
 }
 
+async function markOverdueInvoices(clinicId: string) {
+  await prisma.invoice.updateMany({
+    where: {
+      clinicId,
+      deletedAt: null,
+      status: { in: ["Sent", "PartiallyPaid"] },
+      dueDate: { lt: new Date() },
+    },
+    data: { status: "Overdue" },
+  });
+}
+
 export async function getInvoices(filters?: InvoiceFilters): Promise<InvoiceListItem[]> {
   const user = await requirePermission("invoices", "view");
+
+  // Auto-mark overdue invoices
+  await markOverdueInvoices(user.clinicId);
 
   const where: Record<string, unknown> = { clinicId: user.clinicId, deletedAt: null };
   if (filters?.status) where.status = filters.status;
@@ -172,7 +189,7 @@ export async function getInvoice(id: string): Promise<InvoiceDetail | null> {
     where: { id, clinicId: user.clinicId, deletedAt: null },
     include: {
       patient: { select: { id: true, firstName: true, lastName: true } },
-      items: { where: { deletedAt: null }, select: { id: true, serviceId: true, description: true, quantity: true, unitPrice: true, total: true } },
+      items: { where: { deletedAt: null }, select: { id: true, serviceId: true, productId: true, description: true, quantity: true, unitPrice: true, total: true } },
       payments: { where: { deletedAt: null }, select: { id: true, amount: true, paymentMethod: true, reference: true, notes: true, createdAt: true }, orderBy: { createdAt: "desc" } },
     },
   });
@@ -217,6 +234,7 @@ export async function createInvoice(input: InvoiceInput) {
             unitPrice: item.unitPrice,
             total: Math.round(item.quantity * item.unitPrice * 100) / 100,
             serviceId: item.serviceId || null,
+            productId: item.productId || null,
           })),
         },
       },
@@ -275,6 +293,7 @@ export async function updateInvoice(id: string, input: InvoiceInput) {
             unitPrice: item.unitPrice,
             total: Math.round(item.quantity * item.unitPrice * 100) / 100,
             serviceId: item.serviceId || null,
+            productId: item.productId || null,
           })),
         },
       },

@@ -44,6 +44,7 @@ export function InvoiceFilters({ onFilter }: Props) {
         <option value="Sent">Sent</option>
         <option value="PartiallyPaid">Partially Paid</option>
         <option value="Paid">Paid</option>
+        <option value="Overdue">Overdue</option>
         <option value="Void">Void</option>
         <option value="Refunded">Refunded</option>
       </select>

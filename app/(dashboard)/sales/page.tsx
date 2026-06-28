@@ -4,6 +4,7 @@ import { getInvoices, getClinicInfo } from "@/lib/actions/invoices";
 import { getPayments } from "@/lib/actions/payments";
 import { getMembershipPlans, getMembershipData, getPatientMemberships } from "@/lib/actions/memberships";
 import { getServicesForClinic } from "@/lib/actions/services";
+import { getProductsForClinic } from "@/lib/actions/products";
 import { getGiftCardsList, getGiftCardDenominationsAction, getGiftCardStats } from "@/lib/actions/gift-cards";
 import { SalesSidebar } from "./sales-sidebar";
 import { InvoiceListView } from "./invoice-list-view";
@@ -30,13 +31,15 @@ export default async function SalesPage({ searchParams }: Props) {
   let content: React.ReactNode = null;
 
   if (section === "invoices") {
-    const [invoices, services, clinicInfo] = await Promise.all([
+    const [invoices, services, products, clinicInfo] = await Promise.all([
       getInvoices(),
       getServicesForClinic(),
+      getProductsForClinic(),
       getClinicInfo(),
     ]);
     const serviceOptions = services.map((s) => ({ id: s.id, name: s.name, price: s.price }));
-    content = <InvoiceListView initialInvoices={invoices} services={serviceOptions} clinicInfo={clinicInfo} />;
+    const productOptions = products.filter((p) => p.isActive).map((p) => ({ id: p.id, name: p.name, price: p.retailPrice }));
+    content = <InvoiceListView initialInvoices={invoices} services={serviceOptions} products={productOptions} clinicInfo={clinicInfo} />;
   } else if (section === "payments") {
     const payments = await getPayments();
     content = <PaymentsView payments={payments} />;

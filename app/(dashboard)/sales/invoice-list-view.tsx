@@ -18,12 +18,14 @@ import {
 } from "@/lib/actions/invoices";
 
 type ServiceOption = { id: string; name: string; price: number };
+type ProductOption = { id: string; name: string; price: number };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   Draft: { bg: "bg-gray-100", text: "text-gray-700" },
   Sent: { bg: "bg-blue-100", text: "text-blue-700" },
   PartiallyPaid: { bg: "bg-yellow-100", text: "text-yellow-700" },
   Paid: { bg: "bg-green-100", text: "text-green-700" },
+  Overdue: { bg: "bg-red-100", text: "text-red-700" },
   Void: { bg: "bg-gray-100", text: "text-gray-400 line-through" },
   Refunded: { bg: "bg-red-100", text: "text-red-700" },
 };
@@ -31,10 +33,11 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 type Props = {
   initialInvoices: InvoiceListItem[];
   services: ServiceOption[];
+  products: ProductOption[];
   clinicInfo: ClinicInfo;
 };
 
-export function InvoiceListView({ initialInvoices, services, clinicInfo }: Props) {
+export function InvoiceListView({ initialInvoices, services, products, clinicInfo }: Props) {
   const [invoices, setInvoices] = useState(initialInvoices);
   const [modalInvoice, setModalInvoice] = useState<InvoiceDetail | null | "new">(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
@@ -122,6 +125,7 @@ export function InvoiceListView({ initialInvoices, services, clinicInfo }: Props
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Patient</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Invoice #</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Due Date</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Total</th>
                 <th className="w-10" />
@@ -138,6 +142,7 @@ export function InvoiceListView({ initialInvoices, services, clinicInfo }: Props
                   </td>
                   <td className="px-4 py-3 font-medium text-gray-900">{inv.invoiceNumber}</td>
                   <td className="px-4 py-3 text-gray-600">{new Date(inv.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-600">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : "—"}</td>
                   <td className="px-4 py-3">
                     <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[inv.status]?.bg, STATUS_COLORS[inv.status]?.text)}>
                       {inv.status === "PartiallyPaid" ? "Partially Paid" : inv.status}
@@ -180,6 +185,7 @@ export function InvoiceListView({ initialInvoices, services, clinicInfo }: Props
         <InvoiceModal
           invoice={modalInvoice === "new" ? null : modalInvoice}
           services={services}
+          products={products}
           clinicInfo={clinicInfo}
           onClose={handleCloseModal}
         />
