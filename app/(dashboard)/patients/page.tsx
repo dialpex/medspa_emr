@@ -19,12 +19,12 @@ export default async function PatientsPage({
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <PageCard
-        title="Patients"
+        title="Patient Directory"
         headerAction={
           canCreate && (
             <Link
               href="/patients/new"
-              className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+              className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition-colors"
             >
               Add Patient
             </Link>
