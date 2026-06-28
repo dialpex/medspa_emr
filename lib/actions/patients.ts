@@ -18,6 +18,7 @@ export type PatientListItem = {
   dateOfBirth: Date | null;
   tags: string | null;
   lastAppointment: Date | null;
+  avatarPhotoId: string | null;
 };
 
 export type PatientDetail = {
@@ -135,6 +136,7 @@ export async function getPatients(search?: string): Promise<PatientListItem[]> {
         phone: true,
         dateOfBirth: true,
         tags: true,
+        avatarPhotoId: true,
         appointments: {
           where: { deletedAt: null },
           orderBy: { startTime: "desc" },
@@ -156,6 +158,7 @@ export async function getPatients(search?: string): Promise<PatientListItem[]> {
         dateOfBirth: d.dateOfBirth,
         tags: d.tags,
         lastAppointment: p.appointments[0]?.startTime ?? null,
+        avatarPhotoId: p.avatarPhotoId,
       };
     });
   }
@@ -175,6 +178,7 @@ export async function getPatients(search?: string): Promise<PatientListItem[]> {
       phone: true,
       dateOfBirth: true,
       tags: true,
+      avatarPhotoId: true,
       appointments: {
         where: { deletedAt: null },
         orderBy: { startTime: "desc" },
@@ -211,6 +215,7 @@ export async function getPatients(search?: string): Promise<PatientListItem[]> {
         dateOfBirth: d.dateOfBirth as Date | null,
         tags: d.tags as string | null,
         lastAppointment: p.appointments[0]?.startTime ?? null,
+        avatarPhotoId: p.avatarPhotoId,
       });
     }
   }

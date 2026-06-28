@@ -776,6 +776,7 @@ enum AuditAction {
   ChartCreate
   ChartUpdate
   ChartSign
+  ChartDelete
   PhotoView
   PhotoUpload
   PhotoAnnotationUpdate

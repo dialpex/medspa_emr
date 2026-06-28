@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import {
   requirePermission,
+  hasPermission,
   enforceTenantIsolation,
   AuthorizationError,
   type AuthenticatedUser,
@@ -108,7 +109,16 @@ export async function getCharts(filters?: {
       ...(filters?.patientId && { patientId: filters.patientId }),
       ...(filters?.providerId && { createdById: filters.providerId }),
     },
-    include: {
+    select: {
+      id: true,
+      status: true,
+      chiefComplaint: true,
+      createdAt: true,
+      updatedAt: true,
+      createdById: true,
+      clinicId: true,
+      patientId: true,
+      appointmentId: true,
       patient: { select: { firstName: true, lastName: true } },
       createdBy: { select: { name: true } },
       encounter: { select: { id: true, status: true, provider: { select: { name: true } } } },
@@ -131,7 +141,7 @@ export async function getChartWithPhotos(chartId: string) {
       patient: {
         select: {
           id: true, firstName: true, lastName: true, allergies: true,
-          dateOfBirth: true, tags: true, medicalNotes: true,
+          dateOfBirth: true, tags: true, medicalNotes: true, avatarPhotoId: true,
           appointments: {
             where: { deletedAt: null },
             orderBy: { startTime: "desc" as const },
@@ -875,4 +885,52 @@ export async function getPreviousTreatment(
     chartId: chart.id,
     date: chart.updatedAt,
   };
+}
+
+export async function deleteChart(chartId: string): Promise<{ success: true } | { success: false; error: string }> {
+  const user = await requirePermission("charts", "view");
+
+  const chart = await prisma.chart.findFirst({
+    where: { id: chartId, clinicId: user.clinicId, deletedAt: null },
+    select: { id: true, status: true, createdById: true, clinicId: true, patientId: true },
+  });
+
+  if (!chart) {
+    return { success: false, error: "Chart not found" };
+  }
+
+  // Allow Owner/Admin (charts.delete) or the creator of the chart
+  const canDeleteAny = hasPermission(user.role, "charts", "delete");
+  if (!canDeleteAny && chart.createdById !== user.id) {
+    return { success: false, error: "You do not have permission to delete this chart" };
+  }
+
+  if (chart.status !== "Draft") {
+    return { success: false, error: "Only draft charts can be deleted" };
+  }
+
+  const now = new Date();
+
+  await prisma.$transaction([
+    prisma.chart.update({
+      where: { id: chartId },
+      data: { deletedAt: now },
+    }),
+    // Soft-delete associated photos
+    prisma.photo.updateMany({
+      where: { chartId, deletedAt: null },
+      data: { deletedAt: now },
+    }),
+  ]);
+
+  await createAuditLog({
+    clinicId: user.clinicId,
+    userId: user.id,
+    action: "ChartDelete",
+    entityType: "Chart",
+    entityId: chartId,
+  });
+
+  revalidatePath(`/patients/${chart.patientId}`);
+  return { success: true };
 }
