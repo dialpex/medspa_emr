@@ -36,7 +36,7 @@ export default async function InboxPage({
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
+    <div className="flex h-screen">
       <ConversationList
         conversations={conversations}
         activeId={params.conversationId}

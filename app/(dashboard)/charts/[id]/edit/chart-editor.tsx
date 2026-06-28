@@ -327,7 +327,7 @@ export function ChartEditor({
   const initials = `${chart.patient.firstName.charAt(0)}${chart.patient.lastName.charAt(0)}`.toUpperCase();
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)]">
+    <div className="flex flex-col h-screen">
       {/* Top Editing Bar */}
       <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-gray-200 flex-shrink-0">
         <Link

@@ -15,6 +15,7 @@ export const ROLE_PERMISSIONS = {
     ai: { view: true, create: true },
     migration: { view: true, create: true, edit: true, delete: true },
     board: { view: true, create: true, edit: true, delete: true },
+    giftCards: { view: true, create: true, edit: true, delete: true },
   },
   Admin: {
     patients: { view: true, create: true, edit: true, delete: true },
@@ -29,6 +30,7 @@ export const ROLE_PERMISSIONS = {
     ai: { view: true, create: true },
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: true, edit: true, delete: true },
+    giftCards: { view: true, create: true, edit: true, delete: true },
   },
   Provider: {
     patients: { view: true, create: true, edit: true, delete: false },
@@ -43,6 +45,7 @@ export const ROLE_PERMISSIONS = {
     ai: { view: true, create: true },
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: true, edit: true, delete: true },
+    giftCards: { view: true, create: true, edit: true, delete: false },
   },
   FrontDesk: {
     patients: { view: true, create: true, edit: true, delete: false },
@@ -57,6 +60,7 @@ export const ROLE_PERMISSIONS = {
     ai: { view: true, create: true },
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: true, edit: true, delete: true },
+    giftCards: { view: true, create: true, edit: true, delete: false },
   },
   Billing: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -71,6 +75,7 @@ export const ROLE_PERMISSIONS = {
     ai: { view: true, create: true },
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: false, edit: false, delete: false },
+    giftCards: { view: true, create: true, edit: true, delete: true },
   },
   MedicalDirector: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -85,6 +90,7 @@ export const ROLE_PERMISSIONS = {
     ai: { view: true, create: true },
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: true, edit: true, delete: true },
+    giftCards: { view: false, create: false, edit: false, delete: false },
   },
   ReadOnly: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -99,6 +105,7 @@ export const ROLE_PERMISSIONS = {
     ai: { view: false, create: false },
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: false, edit: false, delete: false },
+    giftCards: { view: false, create: false, edit: false, delete: false },
   },
 } as const;
 

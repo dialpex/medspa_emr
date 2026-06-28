@@ -7,6 +7,7 @@ import { validateInput } from "@/lib/validation/helpers";
 import { createPatientSchema, updatePatientSchema } from "@/lib/validation/schemas";
 import { revalidatePath } from "next/cache";
 import { encryptPatientData, decryptPatientData, decryptPatientList } from "@/lib/encryption/patient-encryption";
+import { linkGiftCardsByEmail } from "@/lib/services/gift-cards";
 
 export type PatientListItem = {
   id: string;
@@ -430,6 +431,11 @@ export async function createPatient(input: CreatePatientInput): Promise<PatientD
     entityType: "Patient",
     entityId: patient.id,
   });
+
+  // Auto-link gift cards by email
+  if (input.email) {
+    await linkGiftCardsByEmail(user.clinicId, patient.id, input.email);
+  }
 
   revalidatePath("/patients");
 

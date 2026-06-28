@@ -94,6 +94,33 @@ export const consentSchema = z.object({
   signatureData: z.string().min(1).optional(),
 });
 
+export const issueGiftCardSchema = z.object({
+  amount: z.number().positive("Amount must be positive").max(10000, "Maximum $10,000"),
+  isGift: z.boolean(),
+  buyerPatientId: z.string().optional(),
+  buyerName: z.string().max(200).optional(),
+  buyerEmail: z.string().email().optional().or(z.literal("")),
+  recipientName: z.string().max(200).optional(),
+  recipientEmail: z.string().email().optional().or(z.literal("")),
+  giftMessage: z.string().max(500).optional().or(z.literal("")),
+});
+
+export const redeemGiftCardSchema = z.object({
+  code: z.string().min(10, "Code too short").max(16, "Code too long"),
+  patientId: z.string().min(1, "Patient is required"),
+});
+
+export const walletPaymentSchema = z.object({
+  invoiceId: z.string().min(1, "Invoice is required"),
+  amount: z.number().positive("Amount must be positive"),
+});
+
+export const storeCreditSchema = z.object({
+  patientId: z.string().min(1, "Patient is required"),
+  amount: z.number().positive("Amount must be positive"),
+  description: z.string().min(1, "Description is required").max(500),
+});
+
 export const chatMessageSchema = z.object({
   messages: z.array(z.object({
     role: z.enum(["user", "assistant"]),

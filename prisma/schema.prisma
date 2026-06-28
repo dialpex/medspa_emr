@@ -69,6 +69,9 @@ model Clinic {
   migrationRuns             MigrationRun[]
   inventoryTransactions     InventoryTransaction[]
   boardEntries              BoardEntry[]
+  giftCards                 GiftCard[]
+  giftCardDenominations     GiftCardDenomination[]
+  walletEntries             WalletEntry[]
 }
 
 // ===========================================
@@ -132,6 +135,7 @@ model User {
   boardEntriesCreated   BoardEntry[]    @relation("BoardEntryCreatedBy")
   boardEntriesAssigned  BoardEntry[]    @relation("BoardEntryAssignedTo")
   boardEntriesCompleted BoardEntry[]    @relation("BoardEntryCompletedBy")
+  giftCardsIssued       GiftCard[]
 
   @@index([clinicId])
   @@index([email])
@@ -191,6 +195,9 @@ model Patient {
   documents        PatientDocument[]
   conversation     Conversation?
   messages         Message[]
+  walletEntries        WalletEntry[]
+  giftCardsPurchased   GiftCard[]    @relation("GiftCardBuyer")
+  giftCardsReceived    GiftCard[]    @relation("GiftCardRecipient")
 
   @@index([clinicId])
   @@index([emailHash])
@@ -818,6 +825,13 @@ enum AuditAction {
   DocumentView
   MigrationEntityImported
   SettingsUpdate
+  GiftCardCreate
+  GiftCardRedeem
+  GiftCardVoid
+  GiftCardView
+  WalletView
+  WalletDebit
+  WalletCredit
 }
 
 model AuditLog {
@@ -1303,6 +1317,106 @@ model CanonicalStagingRecord {
 
   @@unique([runId, entityType, canonicalId])
   @@index([runId, status])
+}
+
+// ===========================================
+// GIFT CARDS & WALLET
+// ===========================================
+
+enum GiftCardStatus {
+  Active
+  Redeemed
+  Expired
+  Voided
+}
+
+enum WalletEntrySource {
+  GiftCard
+  StoreCredit
+  Refund
+}
+
+model GiftCardDenomination {
+  id        String   @id @default(cuid())
+  clinicId  String
+  amount    Float
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clinic    Clinic   @relation(fields: [clinicId], references: [id])
+  @@unique([clinicId, amount])
+  @@index([clinicId])
+}
+
+model GiftCard {
+  id                 String         @id @default(cuid())
+  clinicId           String
+  code               String         @unique
+  originalAmount     Float
+  remainingBalance   Float
+  status             GiftCardStatus @default(Active)
+  expiresAt          DateTime
+  purchasedAt        DateTime       @default(now())
+  purchasedById      String?
+  buyerPatientId     String?
+  buyerName          String?
+  buyerEmail         String?
+  isGift             Boolean        @default(false)
+  recipientName      String?
+  recipientEmail     String?
+  giftMessage        String?
+  recipientPatientId String?
+  linkedAt           DateTime?
+  lastReminderSentAt DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  clinic             Clinic         @relation(fields: [clinicId], references: [id])
+  buyerPatient       Patient?       @relation("GiftCardBuyer", fields: [buyerPatientId], references: [id])
+  recipientPatient   Patient?       @relation("GiftCardRecipient", fields: [recipientPatientId], references: [id])
+  purchasedBy        User?          @relation(fields: [purchasedById], references: [id])
+  walletEntries      WalletEntry[]
+
+  @@index([clinicId, status])
+  @@index([recipientEmail])
+  @@index([buyerPatientId])
+  @@index([recipientPatientId])
+}
+
+model WalletEntry {
+  id               String            @id @default(cuid())
+  clinicId         String
+  patientId        String
+  source           WalletEntrySource
+  giftCardId       String?
+  description      String
+  originalAmount   Float
+  remainingBalance Float
+  expiresAt        DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  clinic           Clinic            @relation(fields: [clinicId], references: [id])
+  patient          Patient           @relation(fields: [patientId], references: [id])
+  giftCard         GiftCard?         @relation(fields: [giftCardId], references: [id])
+  transactions     WalletTransaction[]
+  @@index([patientId, remainingBalance])
+  @@index([clinicId])
+  @@index([expiresAt])
+}
+
+model WalletTransaction {
+  id            String      @id @default(cuid())
+  clinicId      String
+  walletEntryId String
+  paymentId     String?
+  amount        Float
+  balanceAfter  Float
+  description   String
+  createdAt     DateTime    @default(now())
+  walletEntry   WalletEntry @relation(fields: [walletEntryId], references: [id])
+  @@index([walletEntryId])
+  @@index([paymentId])
 }
 
 // ===========================================
