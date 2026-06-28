@@ -13,6 +13,11 @@ async function main() {
   console.log("Clearing existing data...");
   // Board
   await prisma.boardEntry.deleteMany();
+  // Gift Cards & Wallet
+  await prisma.walletTransaction.deleteMany();
+  await prisma.walletEntry.deleteMany();
+  await prisma.giftCard.deleteMany();
+  await prisma.giftCardDenomination.deleteMany();
   // Migration tables
   await prisma.canonicalStagingRecord.deleteMany();
   await prisma.migrationAuditEvent.deleteMany();
@@ -2478,6 +2483,130 @@ By signing below, I confirm my consent to proceed with treatment.`,
   ]);
   console.log(`Created ${boardEntries.length} board entries`);
 
+  // ===========================================
+  // GIFT CARDS & WALLET
+  // ===========================================
+
+  // Default denominations
+  await Promise.all([
+    prisma.giftCardDenomination.create({
+      data: { clinicId: clinic.id, amount: 50, sortOrder: 1 },
+    }),
+    prisma.giftCardDenomination.create({
+      data: { clinicId: clinic.id, amount: 100, sortOrder: 2 },
+    }),
+  ]);
+
+  const oneYearFromNow = new Date(now);
+  oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+
+  // Gift card 1: Active, self-purchased by Jennifer Williams (patients[0])
+  const gc1 = await prisma.giftCard.create({
+    data: {
+      clinicId: clinic.id,
+      code: "ABCD2345EFGH",
+      originalAmount: 100,
+      remainingBalance: 60,
+      status: "Active",
+      expiresAt: oneYearFromNow,
+      purchasedById: owner.id,
+      buyerPatientId: patients[0].id,
+      recipientPatientId: patients[0].id,
+      linkedAt: now,
+    },
+  });
+
+  // Wallet entry for Jennifer (from gc1)
+  const we1 = await prisma.walletEntry.create({
+    data: {
+      clinicId: clinic.id,
+      patientId: patients[0].id,
+      source: "GiftCard",
+      giftCardId: gc1.id,
+      description: "Gift card ABCD-2345-EFGH",
+      originalAmount: 100,
+      remainingBalance: 60,
+      expiresAt: oneYearFromNow,
+    },
+  });
+
+  // Transaction showing $40 was used
+  await prisma.walletTransaction.create({
+    data: {
+      clinicId: clinic.id,
+      walletEntryId: we1.id,
+      amount: 100,
+      balanceAfter: 100,
+      description: "Credit: Gift card ABCD-2345-EFGH",
+    },
+  });
+  await prisma.walletTransaction.create({
+    data: {
+      clinicId: clinic.id,
+      walletEntryId: we1.id,
+      amount: -40,
+      balanceAfter: 60,
+      description: "Payment for invoice INV-20260601-001",
+    },
+  });
+
+  // Gift card 2: Active, gifted to Lisa Chen (patients[2])
+  const gc2 = await prisma.giftCard.create({
+    data: {
+      clinicId: clinic.id,
+      code: "JKLM5678NPQR",
+      originalAmount: 50,
+      remainingBalance: 50,
+      status: "Active",
+      expiresAt: oneYearFromNow,
+      purchasedById: owner.id,
+      isGift: true,
+      buyerName: "Sarah Kim",
+      recipientName: "Lisa Chen",
+      recipientEmail: "lisa.chen@email.com",
+      recipientPatientId: patients[2].id,
+      linkedAt: now,
+    },
+  });
+
+  await prisma.walletEntry.create({
+    data: {
+      clinicId: clinic.id,
+      patientId: patients[2].id,
+      source: "GiftCard",
+      giftCardId: gc2.id,
+      description: "Gift card JKLM-5678-NPQR",
+      originalAmount: 50,
+      remainingBalance: 50,
+      expiresAt: oneYearFromNow,
+    },
+  });
+
+  // Gift card 3: Expired, from 13 months ago
+  const thirteenMonthsAgo = new Date(now);
+  thirteenMonthsAgo.setMonth(thirteenMonthsAgo.getMonth() - 13);
+  const oneMonthAgo = new Date(now);
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+  await prisma.giftCard.create({
+    data: {
+      clinicId: clinic.id,
+      code: "STUV9ABC3DEF",
+      originalAmount: 200,
+      remainingBalance: 0,
+      status: "Expired",
+      expiresAt: oneMonthAgo,
+      purchasedAt: thirteenMonthsAgo,
+      purchasedById: owner.id,
+      buyerName: "Robert Davis",
+      isGift: true,
+      recipientName: "Emily Nguyen",
+      recipientEmail: "emily.n@email.com",
+    },
+  });
+
+  console.log("Created 2 denominations, 3 gift cards, 2 wallet entries");
+
   console.log("\nDatabase seeding completed successfully!");
   console.log(`\n=== Demo Data: ${dayMinus3.toLocaleDateString()} – ${dayPlus3.toLocaleDateString()} (centered on today: ${dayToday.toLocaleDateString()}) ===`);
   console.log("\nSummary:");
@@ -2496,6 +2625,7 @@ By signing below, I confirm my consent to proceed with treatment.`,
   console.log("- 7 Audit log entries (provider signs, MD co-sign, views, login)");
   console.log("- 3 Communication Preferences, 3 Conversations, 5 Messages");
   console.log("- 4 Message Templates, 4 Notification Templates");
+  console.log("- 2 Gift Card Denominations ($50, $100), 3 Gift Cards (1 active w/ usage, 1 gifted, 1 expired), 2 Wallet Entries");
 }
 
 main()

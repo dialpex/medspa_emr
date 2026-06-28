@@ -4,6 +4,7 @@ import { getInvoices, getClinicInfo } from "@/lib/actions/invoices";
 import { getPayments } from "@/lib/actions/payments";
 import { getMembershipPlans, getMembershipData, getPatientMemberships } from "@/lib/actions/memberships";
 import { getServicesForClinic } from "@/lib/actions/services";
+import { getGiftCardsList, getGiftCardDenominationsAction, getGiftCardStats } from "@/lib/actions/gift-cards";
 import { SalesSidebar } from "./sales-sidebar";
 import { InvoiceListView } from "./invoice-list-view";
 import { PaymentsView } from "./payments-view";
@@ -47,11 +48,17 @@ export default async function SalesPage({ searchParams }: Props) {
     ]);
     content = <MembershipsView plans={plans} membershipData={data} patientMemberships={patientMemberships} />;
   } else if (section === "gift-cards") {
-    content = <GiftCardsView />;
+    const [giftCards, denominations, stats] = await Promise.all([
+      getGiftCardsList(),
+      getGiftCardDenominationsAction(),
+      getGiftCardStats(),
+    ]);
+    const denomOpts = denominations.map((d) => ({ id: d.id, amount: d.amount }));
+    content = <GiftCardsView giftCards={giftCards} denominations={denomOpts} stats={stats} />;
   }
 
   return (
-    <div className="flex h-[calc(100vh-64px)]">
+    <div className="flex h-screen">
       <SalesSidebar />
       <div className="flex-1 overflow-y-auto p-6">
         {content}

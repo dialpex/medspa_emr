@@ -43,7 +43,7 @@ export default async function NewTemplatePage({
   const clinicLogoUrl = locationData.logoUrl || undefined;
 
   return (
-    <div className="h-[calc(100vh-64px)]">
+    <div className="h-screen">
       <div className="px-6 pt-4">
         <Breadcrumbs items={buildBreadcrumbItems(
           { label: "System Config", href: "/settings" },

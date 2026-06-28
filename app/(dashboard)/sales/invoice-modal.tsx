@@ -14,6 +14,7 @@ import {
   type PaymentInput,
   type ClinicInfo,
 } from "@/lib/actions/invoices";
+import { payWithWallet, getWalletBalanceAction } from "@/lib/actions/wallet";
 import { InvoicePreview } from "./invoice-preview";
 
 type ServiceOption = { id: string; name: string; price: number };
@@ -34,7 +35,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   Refunded: { bg: "bg-red-100", text: "text-red-700" },
 };
 
-const PAYMENT_METHODS = ["Cash", "Credit Card", "Debit Card", "Check", "Bank Transfer", "Other"];
+const PAYMENT_METHODS = ["Cash", "Credit Card", "Debit Card", "Check", "Bank Transfer", "Wallet", "Other"];
 
 export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) {
   const [isPending, startTransition] = useTransition();
@@ -82,6 +83,7 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
   const [payAmount, setPayAmount] = useState(0);
   const [payMethod, setPayMethod] = useState("Cash");
   const [payReference, setPayReference] = useState("");
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   // Status
   const status = invoice?.status ?? "Draft";
@@ -153,13 +155,18 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
     if (payAmount <= 0 || !invoice) return;
     setError(null);
     startTransition(async () => {
-      const result = await recordPayment({
-        invoiceId: invoice.id,
-        amount: payAmount,
-        paymentMethod: payMethod,
-        reference: payReference || undefined,
-      });
-      if (!result.success) { setError(result.error); return; }
+      if (payMethod === "Wallet") {
+        const result = await payWithWallet(invoice.id, payAmount);
+        if (!result.success) { setError(result.error); return; }
+      } else {
+        const result = await recordPayment({
+          invoiceId: invoice.id,
+          amount: payAmount,
+          paymentMethod: payMethod,
+          reference: payReference || undefined,
+        });
+        if (!result.success) { setError(result.error); return; }
+      }
       onClose();
     });
   }
@@ -486,9 +493,17 @@ export function InvoiceModal({ invoice, services, clinicInfo, onClose }: Props) 
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Method</label>
-                    <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                    <select value={payMethod} onChange={(e) => {
+                      setPayMethod(e.target.value);
+                      if (e.target.value === "Wallet" && invoice?.patientId && walletBalance === null) {
+                        getWalletBalanceAction(invoice.patientId).then(setWalletBalance);
+                      }
+                    }} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
                       {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
+                    {payMethod === "Wallet" && walletBalance !== null && (
+                      <div className="text-xs text-gray-500 mt-1">Balance: ${walletBalance.toFixed(2)}</div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Reference</label>

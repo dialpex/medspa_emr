@@ -7,6 +7,7 @@ import {
   ClipboardList,
   FolderOpen,
   Receipt,
+  Wallet,
 } from "lucide-react";
 import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 import { getPatient, getPatientTimeline } from "@/lib/actions/patients";
@@ -20,7 +21,9 @@ import { PatientPhotos } from "./patient-photos";
 import { PatientForms } from "./patient-forms";
 import { PatientDocuments } from "./patient-documents";
 import { PatientInvoices } from "./patient-invoices";
+import { PatientWallet } from "./patient-wallet";
 import { PatientTabs } from "./patient-tabs";
+import { getPatientWallet } from "@/lib/actions/wallet";
 
 export default async function PatientPage({
   params,
@@ -32,10 +35,11 @@ export default async function PatientPage({
 
   const canViewCharts = hasPermission(user.role, "charts", "view");
 
-  const [patient, timeline, charts] = await Promise.all([
+  const [patient, timeline, charts, wallet] = await Promise.all([
     getPatient(id),
     getPatientTimeline(id),
     canViewCharts ? getCharts({ patientId: id }) : Promise.resolve([]),
+    getPatientWallet(id),
   ]);
 
   if (!patient) {
@@ -92,6 +96,16 @@ export default async function PatientPage({
           },
         ]
       : []),
+    {
+      value: "wallet",
+      label: "Wallet",
+      icon: <Wallet className="size-4" />,
+      content: (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <PatientWallet patientId={patient.id} wallet={wallet} canManage={canEdit} />
+        </div>
+      ),
+    },
     {
       value: "photos",
       label: "Photos",
