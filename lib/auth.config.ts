@@ -89,10 +89,13 @@ export const authConfig: NextAuthConfig = {
       return token;
     },
     async session({ session, token }) {
-      if (token) {
+      if (token?.id && token.role && token.clinicId) {
         session.user.id = token.id;
         session.user.role = token.role;
         session.user.clinicId = token.clinicId;
+      } else {
+        // Token expired or incomplete — mark session as invalid
+        session.user = undefined as any;
       }
       return session;
     },

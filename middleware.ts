@@ -48,7 +48,8 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  if (!req.auth) {
+  const sessionUser = req.auth?.user as Record<string, unknown> | undefined;
+  if (!req.auth || !sessionUser?.id || !sessionUser?.role || !sessionUser?.clinicId) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
