@@ -824,6 +824,7 @@ enum AuditAction {
   MigrationFailed
   DocumentUpload
   DocumentView
+  DocumentDelete
   MigrationEntityImported
   SettingsUpdate
   GiftCardCreate

@@ -99,6 +99,7 @@ export type PatientTimeline = {
   documents: {
     id: string;
     filename: string;
+    sizeBytes: number;
     category: string | null;
     notes: string | null;
     createdAt: Date;
@@ -360,6 +361,7 @@ export async function getPatientTimeline(patientId: string): Promise<PatientTime
       select: {
         id: true,
         filename: true,
+        sizeBytes: true,
         category: true,
         notes: true,
         createdAt: true,

@@ -51,22 +51,21 @@ function groupByVisit(photos: Photo[]): VisitGroup[] {
       }
       groups.get(key)!.photos.push(photo);
     } else {
-      const key = "standalone";
-      if (!groups.has(key)) {
-        groups.set(key, {
-          key,
-          label: "Other Photos",
-          date: null,
+      const photoDate = new Date(photo.createdAt);
+      const dateKey = `date-${photoDate.getFullYear()}-${String(photoDate.getMonth() + 1).padStart(2, "0")}-${String(photoDate.getDate()).padStart(2, "0")}`;
+      if (!groups.has(dateKey)) {
+        groups.set(dateKey, {
+          key: dateKey,
+          label: formatHeadingDate(photoDate),
+          date: photoDate,
           photos: [],
         });
       }
-      groups.get(key)!.photos.push(photo);
+      groups.get(dateKey)!.photos.push(photo);
     }
   }
 
   const sorted = Array.from(groups.values()).sort((a, b) => {
-    if (a.key === "standalone") return 1;
-    if (b.key === "standalone") return -1;
     return (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0);
   });
 

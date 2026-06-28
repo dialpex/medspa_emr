@@ -59,6 +59,11 @@ export default async function PatientPage({
     user.role !== "ReadOnly" &&
     user.role !== "Billing";
 
+  const canDeleteDocs =
+    user.role === "Owner" ||
+    user.role === "Admin" ||
+    user.role === "Provider";
+
   const tabs = [
     {
       value: "details",
@@ -132,7 +137,7 @@ export default async function PatientPage({
       icon: <FolderOpen className="size-4" />,
       content: (
         <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <PatientDocuments documents={timeline.documents} />
+          <PatientDocuments patientId={patient.id} documents={timeline.documents} canUpload={canEdit} canDelete={canDeleteDocs} />
         </div>
       ),
     },
