@@ -72,9 +72,14 @@ export class AnthropicProvider implements LLMProvider {
 
     const handlerMap = new Map(toolHandlers.map((t) => [t.name, t.handler]));
 
-    const messages: MessageParam[] = [
-      { role: "user", content: userMessage },
-    ];
+    // Build initial messages: optional history + current user message
+    const messages: MessageParam[] = [];
+    if (options?.messageHistory) {
+      for (const msg of options.messageHistory) {
+        messages.push({ role: msg.role, content: msg.content });
+      }
+    }
+    messages.push({ role: "user", content: userMessage });
 
     let totalInputTokens = 0;
     let totalOutputTokens = 0;

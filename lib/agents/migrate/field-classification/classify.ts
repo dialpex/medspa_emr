@@ -3,7 +3,8 @@
 
 import type { FormFieldContent } from "@/lib/migration/providers/types";
 import type { VendorKnowledge } from "../vendor-knowledge";
-import { getLLMProvider } from "@/lib/agents/_shared/llm";
+import { getLLMProviderForTier } from "@/lib/agents/_shared/llm";
+import type { LLMProvider } from "@/lib/agents/_shared/llm";
 import { completionWithRetry } from "@/lib/agents/_shared/llm/self-healing";
 import {
   FIELD_CLASSIFICATION_SYSTEM_PROMPT,
@@ -171,7 +172,7 @@ async function classifyBatch(
   templateName: string,
   batchFields: [string, FormFieldContent][],
   system: string,
-  provider: ReturnType<typeof getLLMProvider>,
+  provider: LLMProvider,
   batchIndex: number,
   totalBatches: number
 ): Promise<Map<string, FieldSemanticEntry> | null> {
@@ -222,7 +223,7 @@ export async function classifyFieldSemantics(
 
   if (fields.size === 0) return result;
 
-  const provider = getLLMProvider();
+  const provider = getLLMProviderForTier("triage");
 
   // If no real LLM available, use pure heuristic fallback
   if (provider.name === "mock" || !provider.isAvailable()) {

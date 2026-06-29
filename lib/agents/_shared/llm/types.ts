@@ -1,5 +1,7 @@
 // LLMProvider — Vendor-agnostic interface for LLM completions and tool loops.
 
+import type { ModelTier } from "./tiers";
+
 export interface ToolHandler {
   name: string;
   description: string;
@@ -13,10 +15,19 @@ export interface CompletionOptions {
   temperature?: number;
   /** OpenAI structured outputs schema; ignored by Anthropic/Bedrock */
   responseSchema?: Record<string, unknown>;
+  /** Model tier for observability/logging */
+  tier?: ModelTier;
+}
+
+export interface ToolLoopMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 export interface ToolLoopOptions extends CompletionOptions {
   maxIterations?: number;
+  /** Prior conversation messages to prepend before the current user message */
+  messageHistory?: ToolLoopMessage[];
 }
 
 export interface CompletionResult {

@@ -1,31 +1,29 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, RotateCcw } from "lucide-react";
 import { ChatInput } from "./chat-input";
 import { MessageBubble } from "./message-bubble";
 import { Persona, type PersonaState } from "@/components/ai/persona";
-import type { AIResponse, PlanStep, ChatMessage } from "@/lib/agents/insights/types";
 
 interface UIMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  response?: AIResponse;
   isPending?: boolean;
-  isExecuting?: boolean;
   startedAt?: number;
 }
 
 const EXAMPLE_PROMPTS = [
-  "Schedule an appointment for tomorrow",
-  "Show me revenue for this month",
-  "Update my inventory with this manifest",
-  "What appointments do I have today?",
+  "Look up Botox service",
+  "Show me today's appointments",
+  "Find patient Smith",
+  "What's our revenue this month?",
 ];
 
 export default function AiChatClient() {
   const [messages, setMessages] = useState<UIMessage[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -39,87 +37,10 @@ export default function AiChatClient() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  const executePlan = useCallback(
-    async (steps: PlanStep[]) => {
-      if (isLoading) return;
-
-      const userMsg: UIMessage = {
-        id: crypto.randomUUID(),
-        role: "user",
-        content: "Confirm",
-      };
-      const pendingMsg: UIMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: "",
-        isPending: true,
-        isExecuting: true,
-        startedAt: Date.now(),
-      };
-
-      setMessages((prev) => [...prev, userMsg, pendingMsg]);
-      setIsLoading(true);
-
-      try {
-        const res = await fetch("/api/ai/chat/execute", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ steps }),
-        });
-
-        if (!res.ok) {
-          throw new Error("Failed to execute plan");
-        }
-
-        const { results } = await res.json();
-        const allSucceeded = results.every(
-          (r: { success: boolean }) => r.success
-        );
-
-        const summary = allSucceeded
-          ? `Successfully completed ${results.length} step${results.length > 1 ? "s" : ""}.`
-          : `Completed ${results.filter((r: { success: boolean }) => r.success).length} of ${results.length} steps. Some steps failed.`;
-
-        const details: Record<string, unknown> = {};
-        for (const r of results) {
-          if (r.data) {
-            Object.assign(details, r.data);
-          }
-          if (r.error) {
-            details[`error_${r.step_id}`] = r.error;
-          }
-        }
-
-        const response: AIResponse = {
-          type: "result",
-          domain: "general",
-          rationale_muted: `Executed plan: ${steps.map((s) => s.tool_name).join(" → ")}`,
-          clarification: null,
-          plan: null,
-          result: { summary, details },
-          permission_check: { allowed: true, reason_if_denied: null },
-        };
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === pendingMsg.id
-              ? { ...m, isPending: false, isExecuting: false, response, content: response.rationale_muted }
-              : m
-          )
-        );
-      } catch {
-        // Fallback: send "Confirm" as regular message to AI
-        setMessages((prev) => prev.filter((m) => m.id !== pendingMsg.id && m.id !== userMsg.id));
-        setIsLoading(false);
-        sendMessage("Confirm");
-        return;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLoading]
-  );
+  const startNewConversation = useCallback(() => {
+    setMessages([]);
+    setSessionId(null);
+  }, []);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -142,36 +63,27 @@ export default function AiChatClient() {
       setIsLoading(true);
 
       try {
-        // Build conversation history for the API
-        const history: ChatMessage[] = [
-          ...messages
-            .filter((m) => !m.isPending)
-            .map((m) => ({
-              role: m.role,
-              content:
-                m.role === "assistant" && m.response
-                  ? JSON.stringify(m.response)
-                  : m.content,
-            })),
-          { role: "user" as const, content: text },
-        ];
-
         const res = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: history }),
+          body: JSON.stringify({ message: text, sessionId }),
         });
 
         if (!res.ok) {
           throw new Error("Failed to get AI response");
         }
 
-        const response: AIResponse = await res.json();
+        const data = await res.json();
+
+        // Store session ID for subsequent messages
+        if (data.sessionId) {
+          setSessionId(data.sessionId);
+        }
 
         setMessages((prev) =>
           prev.map((m) =>
             m.id === pendingMsg.id
-              ? { ...m, isPending: false, response, content: response.rationale_muted }
+              ? { ...m, isPending: false, content: data.response }
               : m
           )
         );
@@ -182,18 +94,7 @@ export default function AiChatClient() {
               ? {
                   ...m,
                   isPending: false,
-                  response: {
-                    type: "refuse" as const,
-                    domain: "general",
-                    rationale_muted: "Something went wrong. Please try again.",
-                    clarification: null,
-                    plan: null,
-                    result: null,
-                    permission_check: {
-                      allowed: false,
-                      reason_if_denied: "Something went wrong. Please try again.",
-                    },
-                  },
+                  content: "Something went wrong. Please try again.",
                 }
               : m
           )
@@ -202,7 +103,7 @@ export default function AiChatClient() {
         setIsLoading(false);
       }
     },
-    [isLoading, messages]
+    [isLoading, sessionId]
   );
 
   const personaState: PersonaState = isLoading ? "thinking" : "idle";
@@ -211,16 +112,27 @@ export default function AiChatClient() {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="border-b border-gray-200 bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 text-white">
-            <Sparkles className="size-5" />
+        <div className="mx-auto flex max-w-3xl items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 text-white">
+              <Sparkles className="size-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-gray-900">Neuvvia Insights</h1>
+              <p className="text-xs text-gray-500">
+                Intelligence that works while you care
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">Neuvvia Insights</h1>
-            <p className="text-xs text-gray-500">
-              Intelligence that works while you care
-            </p>
-          </div>
+          {messages.length > 0 && (
+            <button
+              onClick={startNewConversation}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              <RotateCcw className="size-3.5" />
+              New conversation
+            </button>
+          )}
         </div>
       </div>
 
@@ -251,14 +163,8 @@ export default function AiChatClient() {
               </div>
             </div>
           ) : (
-            messages.map((msg, i) => (
-              <MessageBubble
-                key={msg.id}
-                message={msg}
-                onSend={sendMessage}
-                onExecutePlan={executePlan}
-                isLast={i === messages.length - 1}
-              />
+            messages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} />
             ))
           )}
         </div>

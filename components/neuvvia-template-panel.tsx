@@ -14,7 +14,7 @@ interface CopilotMessage {
   isComplete?: boolean;
 }
 
-interface AiCopilotPanelProps {
+interface NeuvviaTemplatePanelProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
@@ -27,13 +27,13 @@ interface AiCopilotPanelProps {
   apiEndpoint?: string;
 }
 
-export function AiCopilotPanel({
+export function NeuvviaTemplatePanel({
   isOpen,
   onClose,
   title = "AI Template Assistant",
   onApplyResult,
   apiEndpoint = "/api/ai/templates",
-}: AiCopilotPanelProps) {
+}: NeuvviaTemplatePanelProps) {
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);

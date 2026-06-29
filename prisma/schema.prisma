@@ -72,6 +72,7 @@ model Clinic {
   giftCards                 GiftCard[]
   giftCardDenominations     GiftCardDenomination[]
   walletEntries             WalletEntry[]
+  agentSessions             AgentSession[]
 }
 
 // ===========================================
@@ -136,6 +137,7 @@ model User {
   boardEntriesAssigned  BoardEntry[]    @relation("BoardEntryAssignedTo")
   boardEntriesCompleted BoardEntry[]    @relation("BoardEntryCompletedBy")
   giftCardsIssued       GiftCard[]
+  agentSessions         AgentSession[]
 
   @@index([clinicId])
   @@index([email])
@@ -1420,6 +1422,28 @@ model WalletTransaction {
   walletEntry   WalletEntry @relation(fields: [walletEntryId], references: [id])
   @@index([walletEntryId])
   @@index([paymentId])
+}
+
+// ===========================================
+// AI AGENT SESSIONS
+// ===========================================
+
+model AgentSession {
+  id          String   @id @default(cuid())
+  clinicId    String
+  userId      String
+  agentType   String   // "insights" | "copilot" | "migrate"
+  messages    String   @default("[]") // JSON array of {role, content}
+  metadata    String?  // JSON — agent-specific state
+  status      String   @default("active") // "active" | "completed" | "failed"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clinic      Clinic   @relation(fields: [clinicId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([clinicId, userId, agentType])
+  @@index([status, updatedAt])
 }
 
 // ===========================================

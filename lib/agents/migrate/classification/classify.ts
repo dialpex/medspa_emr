@@ -12,7 +12,7 @@ import {
   lookupFormArchetype,
   type ClassificationKnowledge,
 } from "../knowledge/retrieval";
-import { getLLMProvider } from "@/lib/agents/_shared/llm";
+import { getLLMProviderForTier } from "@/lib/agents/_shared/llm";
 import { completionWithRetry } from "@/lib/agents/_shared/llm/self-healing";
 import {
   HIGH_CONFIDENCE_PATTERNS,
@@ -279,7 +279,7 @@ export async function classifyForms(
     return { classifications: [...knowledgeResolved, ...preFiltered] };
   }
 
-  const provider = getLLMProvider();
+  const provider = getLLMProviderForTier("triage");
 
   // If no real LLM available (mock provider or unavailable), use heuristic fallback for remaining
   if (provider.name === "mock" || !provider.isAvailable()) {

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { bulkArchiveTemplates, bulkDeleteTemplates } from "@/lib/actions/chart-templates";
 import type { TemplateStatus } from "@/lib/types/charts";
-import { AiCopilotPanel } from "@/components/ai-copilot-panel";
+import { NeuvviaTemplatePanel } from "@/components/neuvvia-template-panel";
 import { useRouter } from "next/navigation";
 
 interface TemplateData {
@@ -57,7 +57,7 @@ export function TemplatesList({ templates, canManage }: TemplatesListProps) {
   const [page, setPage] = useState(1);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
 
 
   // Derive categories and counts
@@ -491,7 +491,7 @@ export function TemplatesList({ templates, canManage }: TemplatesListProps) {
             Describe your workflow and let AI create a complete template for you.
           </p>
           <button
-            onClick={() => setCopilotOpen(true)}
+            onClick={() => setTemplatePanelOpen(true)}
             className="text-sm font-medium text-purple-600 hover:text-purple-700"
           >
             Try AI Assist &gt;
@@ -544,10 +544,10 @@ export function TemplatesList({ templates, canManage }: TemplatesListProps) {
         Coming Soon — Patient Portals are under development.
       </div>
 
-      {/* AI Copilot panel */}
-      <AiCopilotPanel
-        isOpen={copilotOpen}
-        onClose={() => setCopilotOpen(false)}
+      {/* AI Template panel */}
+      <NeuvviaTemplatePanel
+        isOpen={templatePanelOpen}
+        onClose={() => setTemplatePanelOpen(false)}
         onApplyResult={(data) => {
           const encoded = Buffer.from(
             JSON.stringify({

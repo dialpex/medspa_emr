@@ -3,7 +3,8 @@
 import type { FieldType } from "@/lib/types/charts";
 import type { FormFieldContent } from "@/lib/migration/providers/types";
 import type { VendorKnowledge } from "../vendor-knowledge";
-import { getLLMProvider } from "@/lib/agents/_shared/llm";
+import { getLLMProviderForTier } from "@/lib/agents/_shared/llm";
+import type { LLMProvider } from "@/lib/agents/_shared/llm";
 import { completionWithRetry } from "@/lib/agents/_shared/llm/self-healing";
 import { FIELD_INFERENCE_SYSTEM_PROMPT, buildVendorContext } from "./prompts";
 import { validateFieldInference, type FieldInferenceResult } from "./schema";
@@ -78,7 +79,7 @@ async function inferBatch(
   templateName: string,
   batchFields: [string, FormFieldContent][],
   system: string,
-  provider: ReturnType<typeof getLLMProvider>,
+  provider: LLMProvider,
   batchIndex: number,
   totalBatches: number
 ): Promise<Map<string, FieldType> | null> {
@@ -130,7 +131,7 @@ export async function inferFieldTypes(
 
   if (fields.size === 0) return result;
 
-  const provider = getLLMProvider();
+  const provider = getLLMProviderForTier("triage");
 
   // If no real LLM available (mock provider or unavailable), use pure heuristic fallback
   if (provider.name === "mock" || !provider.isAvailable()) {
