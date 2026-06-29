@@ -20,7 +20,7 @@ interface UIMessage {
 const EXAMPLE_PROMPTS = [
   "Schedule an appointment for tomorrow",
   "Show me revenue for this month",
-  "Look up a patient",
+  "Update my inventory with this manifest",
   "What appointments do I have today?",
 ];
 
@@ -216,9 +216,9 @@ export default function AiChatClient() {
             <Sparkles className="size-5" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-gray-900">AI Assist</h1>
+            <h1 className="text-lg font-semibold text-gray-900">Neuvvia Insights</h1>
             <p className="text-xs text-gray-500">
-              Your EMR operating system
+              Intelligence that works while you care
             </p>
           </div>
         </div>

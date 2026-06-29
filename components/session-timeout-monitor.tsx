@@ -26,10 +26,11 @@ export function SessionTimeoutMonitor() {
       timeout = setTimeout(handleActivity, 1000);
     };
 
-    window.addEventListener("mousemove", debouncedHandler);
-    window.addEventListener("keydown", debouncedHandler);
-    window.addEventListener("click", debouncedHandler);
-    window.addEventListener("scroll", debouncedHandler);
+    const opts: AddEventListenerOptions = { passive: true };
+    window.addEventListener("mousemove", debouncedHandler, opts);
+    window.addEventListener("keydown", debouncedHandler, opts);
+    window.addEventListener("click", debouncedHandler, opts);
+    window.addEventListener("scroll", debouncedHandler, opts);
 
     return () => {
       clearTimeout(timeout);

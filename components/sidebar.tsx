@@ -39,7 +39,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { label: "Smart Assist", href: "/ai-assist", icon: <Sparkles className="size-5" />, roles: ["Owner", "Admin", "Provider", "FrontDesk", "Billing", "MedicalDirector"], feature: "ai_chat" },
+  { label: "Neuvvia Insights", href: "/ai-assist", icon: <Sparkles className="size-5" />, roles: ["Owner", "Admin", "Provider", "FrontDesk", "Billing", "MedicalDirector"], feature: "ai_chat" },
   { label: "Daily Dashboard", href: "/today", icon: <ClipboardList className="size-5" />, sectionBefore: "Practice" },
   { label: "Scheduler", href: "/calendar", icon: <Calendar className="size-5" /> },
   { label: "Communications", href: "/inbox", icon: <Bell className="size-5" />, roles: ["Owner", "Admin", "FrontDesk", "Provider"], feature: "sms_messaging" },
