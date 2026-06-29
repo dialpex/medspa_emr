@@ -183,7 +183,7 @@ function SmartSuggestions({ patientId }: { patientId: string }) {
     <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-200 p-4">
       <div className="flex items-center gap-2 mb-3">
         <Sparkles className="size-4 text-purple-600" />
-        <h3 className="text-sm font-semibold text-gray-900">Neuvvia Insights</h3>
+        <h3 className="text-sm font-semibold text-gray-900">Neuvvia Recommend</h3>
       </div>
       {loading ? (
         <div className="space-y-3">
