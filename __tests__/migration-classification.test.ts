@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   HIGH_CONFIDENCE_PATTERNS,
   CLINICAL_FIELD_INDICATORS,
-} from "@/lib/agents/migration/classification/prompts";
-import { getVendorKnowledge, BOULEVARD_KNOWLEDGE } from "@/lib/agents/migration/vendor-knowledge";
+} from "@/lib/agents/migrate/classification/prompts";
+import { getVendorKnowledge, BOULEVARD_KNOWLEDGE } from "@/lib/agents/migrate/vendor-knowledge";
 
 describe("HIGH_CONFIDENCE_PATTERNS", () => {
   it("matches HIPAA forms as consent", () => {

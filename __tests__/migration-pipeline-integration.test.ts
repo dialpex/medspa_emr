@@ -12,7 +12,7 @@ import {
   writeMappingMemory,
   readMemoryForAgent,
   type MappingMemoryEntry,
-} from "../lib/agents/migration/mapping-memory";
+} from "../lib/agents/migrate/mapping-memory";
 import {
   readVendorDiscoveryMemory,
   writeVendorDiscoveryMemory,
@@ -22,9 +22,9 @@ import {
   addCrossVendorPattern,
   readDiscoveryMemoryForAgent,
   type VendorDiscoveryMemory,
-} from "../lib/agents/migration/discovery-memory";
-import { parseGraphQLError } from "../lib/agents/migration/tools";
-import { buildMappingSystemPrompt } from "../lib/agents/migration/prompts";
+} from "../lib/agents/migrate/discovery-memory";
+import { parseGraphQLError } from "../lib/agents/migrate/tools";
+import { buildMappingSystemPrompt } from "../lib/agents/migrate/prompts";
 import { rm } from "fs/promises";
 import path from "path";
 

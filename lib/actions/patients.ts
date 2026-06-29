@@ -614,7 +614,7 @@ export async function getPatientSuggestions(
     orderBy: { startTime: "desc" },
   });
 
-  const { getSuggestions } = await import("@/lib/agents/upsell");
+  const { getSuggestions } = await import("@/lib/agents/recommend");
   return getSuggestions(patientId, appointments);
 }
 

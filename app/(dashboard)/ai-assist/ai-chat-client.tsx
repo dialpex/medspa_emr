@@ -5,7 +5,7 @@ import { Sparkles } from "lucide-react";
 import { ChatInput } from "./chat-input";
 import { MessageBubble } from "./message-bubble";
 import { Persona, type PersonaState } from "@/components/ai/persona";
-import type { AIResponse, PlanStep, ChatMessage } from "@/lib/agents/chat/types";
+import type { AIResponse, PlanStep, ChatMessage } from "@/lib/agents/insights/types";
 
 interface UIMessage {
   id: string;

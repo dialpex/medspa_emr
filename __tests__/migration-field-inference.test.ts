@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { heuristicFieldType } from "@/lib/agents/migration/field-inference/infer";
-import { validateFieldInference, FIELD_TYPE_VALUES } from "@/lib/agents/migration/field-inference/schema";
+import { heuristicFieldType } from "@/lib/agents/migrate/field-inference/infer";
+import { validateFieldInference, FIELD_TYPE_VALUES } from "@/lib/agents/migrate/field-inference/schema";
 import type { FormFieldContent } from "@/lib/migration/providers/types";
 
 function makeField(overrides: Partial<FormFieldContent> & { fieldId: string; label: string; type: string }): FormFieldContent {

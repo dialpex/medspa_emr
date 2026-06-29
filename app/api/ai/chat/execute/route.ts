@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac";
 import { requireFeature } from "@/lib/feature-flags";
 import { FeatureNotAvailableError } from "@/lib/feature-flags-core";
-import { executePlanStep } from "@/lib/agents/chat/tools";
+import { executePlanStep } from "@/lib/agents/insights/tools";
 import { prisma } from "@/lib/prisma";
-import type { PlanStep } from "@/lib/agents/chat/types";
-import type { ToolResult } from "@/lib/agents/chat/tools";
+import type { PlanStep } from "@/lib/agents/insights/types";
+import type { ToolResult } from "@/lib/agents/insights/tools";
 
 export async function POST(request: NextRequest) {
   try {
