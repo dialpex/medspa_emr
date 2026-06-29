@@ -13,7 +13,7 @@ import {
   lookupFieldSemantic,
   type FieldSemanticKnowledge,
 } from "./knowledge/retrieval";
-import { getLLMProvider } from "@/lib/agents/_shared/llm";
+import { getLLMProviderForTier } from "@/lib/agents/_shared/llm";
 import { completionWithRetry } from "@/lib/agents/_shared/llm/self-healing";
 import { heuristicFieldType } from "./field-inference";
 import { heuristicClassifyField } from "./field-classification";
@@ -196,7 +196,7 @@ async function analyzeBatch(
   templateName: string,
   batchFields: [string, FormFieldContent][],
   system: string,
-  provider: ReturnType<typeof getLLMProvider>,
+  provider: ReturnType<typeof getLLMProviderForTier>,
   batchIndex: number,
   totalBatches: number
 ): Promise<Map<string, CombinedFieldAnalysis> | null> {
@@ -314,7 +314,7 @@ export async function analyzeFields(
     }
   }
 
-  const provider = getLLMProvider();
+  const provider = getLLMProviderForTier("triage");
 
   // If no real LLM available, use pure heuristic fallback for remaining
   if (provider.name === "mock" || !provider.isAvailable()) {

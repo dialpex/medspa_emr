@@ -115,7 +115,7 @@ async function inferBatch(
 /**
  * Infer field types for all fields in a template using AI with heuristic fallback.
  *
- * - Uses getLLMProvider() — mock provider triggers immediate heuristic fallback
+ * - Uses getLLMProviderForTier("triage") — mock provider triggers immediate heuristic fallback
  * - Injects vendor knowledge into prompt when available
  * - Uses completionWithRetry() with field type validation
  * - Per-field heuristic fallback for any fields AI misses or returns invalid types

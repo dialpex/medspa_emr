@@ -6,7 +6,7 @@ import type { SourceProfile } from "../../adapters/types";
 import type { MappingSpec } from "../../canonical/mapping-spec";
 import { validateMappingSpec } from "../../canonical/mapping-spec";
 import { SafeContextBuilder } from "@/lib/agents/_shared/phi/safe-context";
-import { AnthropicProvider } from "@/lib/agents/_shared/llm/anthropic";
+import { getLLMProviderForTier } from "@/lib/agents/_shared/llm";
 import { extractJSON } from "@/lib/agents/_shared/llm/utils";
 import { MappingProposer } from "@/lib/agents/migrate/mapping-proposer";
 import {
@@ -87,31 +87,30 @@ export async function executeDraftMapping(
 
   let mappingSpec: MappingSpec;
 
-  const anthropic = new AnthropicProvider();
-  if (anthropic.isAvailable()) {
-    // Use Anthropic SDK directly
-    console.log(`[draft-mapping] Using Anthropic SDK (runId=${input.runId})`);
+  const provider = getLLMProviderForTier("triage");
+  if (provider.isAvailable()) {
+    console.log(`[draft-mapping] Using ${provider.name} provider (runId=${input.runId})`);
     const startTime = Date.now();
 
     const systemPrompt = buildMappingSystemPrompt(memoryContext, knowledgeContext);
     const userMessage = `Analyze this source data profile and propose field mappings to the canonical schema.\n\n${JSON.stringify(safeContext, null, 2)}`;
 
-    const result = await anthropic.complete(systemPrompt, userMessage, { maxTokens: 8192 });
+    const result = await provider.complete(systemPrompt, userMessage, { maxTokens: 8192 });
     mappingSpec = extractJSON<MappingSpec>(result.text);
 
     const latencyMs = Date.now() - startTime;
-    console.log(`[draft-mapping] Anthropic response in ${latencyMs}ms`);
+    console.log(`[draft-mapping] LLM response in ${latencyMs}ms`);
 
     // Validate
     const validation = validateMappingSpec(mappingSpec);
     if (!validation.valid) {
       throw new Error(
-        `Invalid MappingSpec from Anthropic: ${validation.errors.map((e) => e.message).join(", ")}`
+        `Invalid MappingSpec: ${validation.errors.map((e) => e.message).join(", ")}`
       );
     }
   } else {
-    // Fall back to Bedrock/mock via MappingProposer
-    console.log(`[draft-mapping] ANTHROPIC_API_KEY not set, falling back to Bedrock/mock`);
+    // Fall back to heuristic mapping via MappingProposer
+    console.log(`[draft-mapping] LLM not available, falling back to heuristic mapping`);
     const proposer = new MappingProposer();
     mappingSpec = await proposer.proposeMappingSpec(safeContext, input.runId);
   }
@@ -147,9 +146,9 @@ export async function executeMappingCorrection(
   feedback: MappingFeedback,
   profile: SourceProfile
 ): Promise<MappingSpec | null> {
-  const anthropic = new AnthropicProvider();
-  if (!anthropic.isAvailable()) {
-    console.log(`[draft-mapping] AI unavailable for correction, skipping`);
+  const provider = getLLMProviderForTier("triage");
+  if (!provider.isAvailable()) {
+    console.log(`[draft-mapping] LLM unavailable for correction, skipping`);
     return null;
   }
 
@@ -174,7 +173,7 @@ Entities: ${profile.entities.map((e) => `${e.type} (${e.recordCount} records, fi
 Return the corrected MappingSpec as JSON.`;
 
   try {
-    const result = await anthropic.complete(MAPPING_CORRECTION_PROMPT, userMessage, { maxTokens: 8192 });
+    const result = await provider.complete(MAPPING_CORRECTION_PROMPT, userMessage, { maxTokens: 8192 });
     const correctedSpec = extractJSON<MappingSpec>(result.text);
 
     const latencyMs = Date.now() - startTime;

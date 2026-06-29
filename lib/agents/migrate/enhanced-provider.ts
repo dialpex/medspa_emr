@@ -18,7 +18,7 @@ import type {
   SourceChart,
   FormFieldContent,
 } from "@/lib/migration/providers/types";
-import { AnthropicProvider } from "@/lib/agents/_shared/llm/anthropic";
+import { getLLMProviderForTier } from "@/lib/agents/_shared/llm";
 import { discoverAndBuildQueries, type SeedQuery } from "./schema-discovery";
 import type { GraphQLExecutor } from "./tools";
 import type { CachedQueryPattern } from "./schema-cache";
@@ -57,9 +57,9 @@ export class AgentEnhancedProvider implements MigrationProvider {
   async initialize(credentials: MigrationCredentials): Promise<void> {
     if (this.initialized) return;
 
-    const provider = new AnthropicProvider();
+    const provider = getLLMProviderForTier("executor");
     if (!provider.isAvailable()) {
-      console.log("[enhanced-provider] ANTHROPIC_API_KEY not set, using base provider only");
+      console.log("[enhanced-provider] LLM not available, using base provider only");
       this.initialized = true;
       return;
     }
