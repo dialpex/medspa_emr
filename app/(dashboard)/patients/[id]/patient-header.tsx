@@ -454,15 +454,6 @@ export function PatientHeader({
 
         {/* Right: action buttons */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {patient.phone && (
-            <a
-              href={`tel:${patient.phone}`}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-            >
-              <Phone className="size-4" />
-              Call
-            </a>
-          )}
           {patient.email && (
             <a
               href={`mailto:${patient.email}`}
