@@ -4,7 +4,7 @@
 
 import type { LLMProvider } from "@/lib/agents/_shared/llm/types";
 import { extractJSON } from "@/lib/agents/_shared/llm/utils";
-import { getLLMProvider } from "@/lib/agents/_shared/llm";
+import { getLLMProviderForTier } from "@/lib/agents/_shared/llm";
 import type { SafeContext } from "@/lib/agents/_shared/phi/safe-context";
 import type { MappingSpec } from "@/lib/migration/canonical/mapping-spec";
 import { validateMappingSpec } from "@/lib/migration/canonical/mapping-spec";
@@ -15,7 +15,7 @@ export class MappingProposer {
   private provider: LLMProvider;
 
   constructor(provider?: LLMProvider) {
-    this.provider = provider || getLLMProvider({ provider: "bedrock" });
+    this.provider = provider || getLLMProviderForTier("triage");
   }
 
   async proposeMappingSpec(safeContext: SafeContext, runId?: string): Promise<MappingSpec> {

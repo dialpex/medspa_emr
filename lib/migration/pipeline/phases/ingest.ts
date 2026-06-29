@@ -7,7 +7,7 @@ import type { MigrationProvider, MigrationCredentials } from "../../providers/ty
 import type { IngestStrategy, RawRecord } from "../../ingest/types";
 import { resolveStrategy } from "../../ingest/strategy-resolver";
 import { StagehandBrowserAgent } from "../../ingest/browser-agent";
-import { AnthropicProvider } from "@/lib/agents/_shared/llm/anthropic";
+import { getLLMProviderForTier } from "@/lib/agents/_shared/llm";
 import { AgentEnhancedProvider } from "@/lib/agents/migrate/enhanced-provider";
 import { BoulevardProvider } from "../../providers/boulevard";
 
@@ -96,7 +96,7 @@ async function executeApiIngest(
 
   // Wrap with agent-enhanced provider if available
   let provider = baseProvider;
-  if (new AnthropicProvider().isAvailable() && baseProvider instanceof BoulevardProvider) {
+  if (getLLMProviderForTier("executor").isAvailable() && baseProvider instanceof BoulevardProvider) {
     console.log(`  [ingest] Wrapping ${baseProvider.source} with AgentEnhancedProvider`);
     const enhanced = new AgentEnhancedProvider({
       baseProvider,

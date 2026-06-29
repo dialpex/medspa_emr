@@ -6,6 +6,10 @@ export async function generateLLMSuggestions(
 ): Promise<UpsellSuggestion[]> {
   const provider = getLLMProviderForTier("triage");
 
+  if (!provider.isAvailable()) {
+    throw new Error("LLM provider not available — no API key configured");
+  }
+
   const system = `You are a medical aesthetics practice advisor. Given a patient's anonymized service history profile, suggest 2-3 actionable recommendations for the practice to offer this patient. Focus on timing, complementary treatments, and patient retention. Return ONLY a JSON object: { "suggestions": [{ "title": string, "reason": string, "urgency": "high"|"medium"|"low" }] }`;
 
   const userMessage = `Patient service profile (anonymized — no patient identifiers):

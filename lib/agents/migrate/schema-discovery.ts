@@ -2,7 +2,7 @@
 // build queries, test them, fix errors, and cache results.
 // PHI boundary: raw patient data NEVER goes to Claude.
 
-import { AnthropicProvider } from "@/lib/agents/_shared/llm/anthropic";
+import { getLLMProviderForTier } from "@/lib/agents/_shared/llm";
 import { buildDiscoveryTools, type GraphQLExecutor } from "./tools";
 import type { MigrationCredentials } from "@/lib/migration/providers/types";
 import type { CachedTypeInfo, CachedQueryPattern } from "./schema-cache";
@@ -70,8 +70,12 @@ export async function discoverAndBuildQueries(
     }
   }
 
-  // Run the discovery agent
-  const provider = new AnthropicProvider();
+  // Run the discovery agent — executor tier for multi-step tool loop
+  const provider = getLLMProviderForTier("executor");
+
+  if (!provider.isAvailable()) {
+    throw new Error("[schema-discovery] LLM provider not available — no API key configured for schema discovery");
+  }
 
   const discoveredTypes: Record<string, CachedTypeInfo> = cachedSchema?.types || {};
   const discoveredQueries: Record<string, CachedQueryPattern> = cachedQueries?.patterns || {};
