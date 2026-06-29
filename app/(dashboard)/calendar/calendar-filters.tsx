@@ -121,7 +121,7 @@ export function CalendarFilters({
 
   return (
     <div className="mb-4 relative">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-3">
       {/* Date Navigation */}
       <div className="flex items-center gap-2">
         <button
@@ -149,15 +149,15 @@ export function CalendarFilters({
 
         <button
           onClick={() => setShowMiniCal(!showMiniCal)}
-          className="flex items-center gap-1 ml-2"
+          className="flex items-center gap-1 ml-1"
         >
-          <h2 className="text-lg font-semibold">{formatDateHeader()}</h2>
-          <ChevronDown className={`size-4 text-gray-400 transition-transform ${showMiniCal ? "rotate-180" : ""}`} />
+          <h2 className="text-lg font-semibold whitespace-nowrap">{formatDateHeader()}</h2>
+          <ChevronDown className={`size-4 text-gray-400 transition-transform flex-shrink-0 ${showMiniCal ? "rotate-180" : ""}`} />
         </button>
       </div>
 
       {/* View Toggle & Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 ml-auto">
         {/* View Toggle */}
         <div className="flex rounded-lg border border-gray-200 overflow-hidden">
           <button
