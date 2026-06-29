@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac";
 import OpenAI from "openai";
-import { TEMPLATE_IMPORT_SYSTEM_PROMPT } from "@/lib/agents/templates/import-prompt";
-import { TEMPLATE_IMPORT_SCHEMA } from "@/lib/agents/templates/import-schema";
+import { TEMPLATE_IMPORT_SYSTEM_PROMPT } from "@/lib/agents/copilot/import-prompt";
+import { TEMPLATE_IMPORT_SCHEMA } from "@/lib/agents/copilot/import-schema";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 

@@ -12,12 +12,12 @@ import type {
   CanonicalChartTemplateField,
 } from "../../canonical/schema";
 import type { FormFieldContent } from "../../providers/types";
-import type { FieldSemanticEntry } from "@/lib/agents/migration/field-classification";
+import type { FieldSemanticEntry } from "@/lib/agents/migrate/field-classification";
 import { createAdapter } from "../../adapters";
-import { classifyForms } from "@/lib/agents/migration/classification";
-import { analyzeFields } from "@/lib/agents/migration/field-analysis";
-import { getVendorKnowledge } from "@/lib/agents/migration/vendor-knowledge";
-import type { KnowledgeStore } from "@/lib/agents/migration/knowledge/store";
+import { classifyForms } from "@/lib/agents/migrate/classification";
+import { analyzeFields } from "@/lib/agents/migrate/field-analysis";
+import { getVendorKnowledge } from "@/lib/agents/migrate/vendor-knowledge";
+import type { KnowledgeStore } from "@/lib/agents/migrate/knowledge/store";
 
 export interface TransformInput {
   runId: string;

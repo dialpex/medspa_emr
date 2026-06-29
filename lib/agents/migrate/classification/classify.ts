@@ -4,7 +4,7 @@
 // 3. AI classification — only for genuinely unknown forms
 
 import type { SourceForm, FormFieldContent } from "@/lib/migration/providers/types";
-import type { FormClassificationResponse } from "@/lib/agents/migration/types";
+import type { FormClassificationResponse } from "@/lib/agents/migrate/types";
 import type { VendorKnowledge } from "../vendor-knowledge";
 import type { KnowledgeStore } from "../knowledge/store";
 import {

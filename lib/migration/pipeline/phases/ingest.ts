@@ -8,7 +8,7 @@ import type { IngestStrategy, RawRecord } from "../../ingest/types";
 import { resolveStrategy } from "../../ingest/strategy-resolver";
 import { StagehandBrowserAgent } from "../../ingest/browser-agent";
 import { AnthropicProvider } from "@/lib/agents/_shared/llm/anthropic";
-import { AgentEnhancedProvider } from "@/lib/agents/migration/enhanced-provider";
+import { AgentEnhancedProvider } from "@/lib/agents/migrate/enhanced-provider";
 import { BoulevardProvider } from "../../providers/boulevard";
 
 export interface IngestInput {

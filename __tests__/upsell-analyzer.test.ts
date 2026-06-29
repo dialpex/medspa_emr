@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { analyzeServiceHistory, profileToSuggestions } from "../lib/agents/upsell/analyzer";
+import { analyzeServiceHistory, profileToSuggestions } from "../lib/agents/recommend/analyzer";
 
 describe("upsell analyzer", () => {
   const now = new Date();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { diffMappingSpecs, correctionsToOutcome } from "@/lib/agents/migration/knowledge/diff";
+import { diffMappingSpecs, correctionsToOutcome } from "@/lib/agents/migrate/knowledge/diff";
 
 describe("diffMappingSpecs", () => {
   const baseDraft = {

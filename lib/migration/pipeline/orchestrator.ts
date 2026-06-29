@@ -23,14 +23,14 @@ import {
 } from "./phases/validate";
 import { executeLoad, executePromote } from "./phases/load";
 import { executeReconcile } from "./phases/reconcile";
-import { writeMappingMemory, type MappingMemoryEntry } from "@/lib/agents/migration/mapping-memory";
+import { writeMappingMemory, type MappingMemoryEntry } from "@/lib/agents/migrate/mapping-memory";
 import {
   KnowledgeStore,
   distill,
   getIntelligenceSummary,
   type RunOutcome,
-} from "@/lib/agents/migration/knowledge";
-import { diffMappingSpecs, correctionsToOutcome } from "@/lib/agents/migration/knowledge/diff";
+} from "@/lib/agents/migrate/knowledge";
+import { diffMappingSpecs, correctionsToOutcome } from "@/lib/agents/migrate/knowledge/diff";
 
 export type MigrationPhase =
   | "ingest"

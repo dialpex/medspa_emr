@@ -8,14 +8,14 @@ import { validateMappingSpec } from "../../canonical/mapping-spec";
 import { SafeContextBuilder } from "@/lib/agents/_shared/phi/safe-context";
 import { AnthropicProvider } from "@/lib/agents/_shared/llm/anthropic";
 import { extractJSON } from "@/lib/agents/_shared/llm/utils";
-import { MappingProposer } from "@/lib/agents/migration/mapping-proposer";
+import { MappingProposer } from "@/lib/agents/migrate/mapping-proposer";
 import {
   MAPPING_CORRECTION_PROMPT,
   buildMappingSystemPrompt,
-} from "@/lib/agents/migration/prompts";
-import { readMemoryForAgent } from "@/lib/agents/migration/mapping-memory";
-import type { KnowledgeStore } from "@/lib/agents/migration/knowledge/store";
-import { getMappingKnowledge } from "@/lib/agents/migration/knowledge/retrieval";
+} from "@/lib/agents/migrate/prompts";
+import { readMemoryForAgent } from "@/lib/agents/migrate/mapping-memory";
+import type { KnowledgeStore } from "@/lib/agents/migrate/knowledge/store";
+import { getMappingKnowledge } from "@/lib/agents/migrate/knowledge/retrieval";
 import type { MappingFeedback } from "./validate";
 import type { ArtifactStore, ArtifactRef } from "../../storage/types";
 import type { CanonicalEntityType, CanonicalRecord } from "../../canonical/schema";

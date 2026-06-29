@@ -20,9 +20,9 @@
 import * as readline from "readline";
 import { BoulevardProvider } from "../lib/migration/providers/boulevard";
 import type { MigrationCredentials, SourceForm, FormFieldContent } from "../lib/migration/providers/types";
-import { inferFieldTypes, heuristicFieldType } from "../lib/agents/migration/field-inference";
-import { classifyForms } from "../lib/agents/migration/classification";
-import { getVendorKnowledge } from "../lib/agents/migration/vendor-knowledge";
+import { inferFieldTypes, heuristicFieldType } from "../lib/agents/migrate/field-inference";
+import { classifyForms } from "../lib/agents/migrate/classification";
+import { getVendorKnowledge } from "../lib/agents/migrate/vendor-knowledge";
 import { mapFieldType as mapBoulevardFieldType } from "../lib/migration/pipeline/phases/transform";
 
 function prompt(question: string, hidden = false): Promise<string> {

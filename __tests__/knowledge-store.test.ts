@@ -8,16 +8,16 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { rm } from "fs/promises";
 import { join } from "path";
-import { KnowledgeStore } from "../lib/agents/migration/knowledge/store";
-import { distill } from "../lib/agents/migration/knowledge/distiller";
+import { KnowledgeStore } from "../lib/agents/migrate/knowledge/store";
+import { distill } from "../lib/agents/migrate/knowledge/distiller";
 import type {
   MappingPatternValue,
   FormArchetypeValue,
   FieldSemanticValue,
   RunOutcome,
   ConfirmationSource,
-} from "../lib/agents/migration/knowledge/types";
-import { Conviction, DETERMINISTIC_THRESHOLD } from "../lib/agents/migration/knowledge/types";
+} from "../lib/agents/migrate/knowledge/types";
+import { Conviction, DETERMINISTIC_THRESHOLD } from "../lib/agents/migrate/knowledge/types";
 import { CACHE_BASE } from "../lib/agents/_shared/memory/base";
 
 const KNOWLEDGE_DIR = join(CACHE_BASE, "_knowledge");

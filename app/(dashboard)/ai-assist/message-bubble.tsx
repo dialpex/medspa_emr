@@ -2,7 +2,7 @@
 
 import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Reasoning } from "@/components/ai/reasoning";
-import type { AIResponse, PlanStep } from "@/lib/agents/chat/types";
+import type { AIResponse, PlanStep } from "@/lib/agents/insights/types";
 
 interface Message {
   id: string;

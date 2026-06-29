@@ -13,7 +13,7 @@ import {
   discoverSourceData as agentDiscover,
   proposeServiceMappings as agentProposeMappings,
   generateVerificationReport as agentVerify,
-} from "@/lib/agents/migration/discovery";
+} from "@/lib/agents/migrate/discovery";
 import { MigrationOrchestrator } from "@/lib/migration/pipeline/orchestrator";
 import { LocalArtifactStore } from "@/lib/migration/storage/local-store";
 
