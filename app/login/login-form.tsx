@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 export function LoginForm() {
@@ -17,6 +17,10 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
+      // Clear any stale session/CSRF state from expired sessions
+      // signOut clears the expired JWT cookie so signIn starts fresh
+      await signOut({ redirect: false }).catch(() => {});
+
       const result = await signIn("credentials", {
         email,
         password,

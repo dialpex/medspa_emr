@@ -403,6 +403,11 @@ function CalendarInner({
       ...(permissions.canEdit ? [createDragAndDropPlugin(), createResizePlugin()] : []),
     ],
     callbacks: {
+      // Prevent schedule-x from auto-switching to day view on narrow screens
+      // (default breakpoint is 700px). We handle responsiveness via CSS min-width
+      // and horizontal scroll instead.
+      isCalendarSmall: () => false,
+
       // Click on event - open slide-out panel
       onEventClick: (calendarEvent) => {
         setPanelAppointmentId(calendarEvent.id as string);
@@ -649,7 +654,12 @@ function CalendarInner({
       <style jsx global>{`
         .sx-react-calendar-wrapper {
           height: 800px;
-          overflow-y: auto;
+          overflow: auto;
+          min-width: 0;
+        }
+        /* Prevent week view from collapsing columns at narrow widths */
+        .sx-react-calendar-wrapper .sx__week-wrapper {
+          min-width: 700px;
         }
         .sx-react-calendar-wrapper .sx-calendar {
           border-radius: 0.5rem;
