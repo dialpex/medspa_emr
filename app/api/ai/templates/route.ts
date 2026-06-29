@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac";
-import OpenAI from "openai";
-import { TEMPLATE_GENERATOR_SYSTEM_PROMPT } from "@/lib/agents/copilot/generator-prompt";
-import { TEMPLATE_COPILOT_SCHEMA } from "@/lib/agents/copilot/copilot-schema";
+import { getLLMProviderForTier, completionWithRetry } from "@/lib/agents/_shared/llm";
+import { TEMPLATE_GENERATOR_SYSTEM_PROMPT } from "@/lib/agents/insights/template-generator-prompt";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -20,34 +19,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "messages array is required" }, { status: 400 });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
+    const provider = getLLMProviderForTier("triage");
+
+    if (!provider.isAvailable()) {
       return NextResponse.json({ error: "AI service not configured" }, { status: 503 });
     }
 
-    const openai = new OpenAI({ apiKey });
+    // Build conversation into a single user message for completionWithRetry
+    const conversationText = messages
+      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+      .join("\n\n");
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: TEMPLATE_COPILOT_SCHEMA,
-      messages: [
-        { role: "system", content: TEMPLATE_GENERATOR_SYSTEM_PROMPT },
-        ...messages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })),
-      ],
-      temperature: 0.4,
-      max_tokens: 4096,
-    });
+    const { result } = await completionWithRetry<Record<string, unknown>>(
+      provider,
+      TEMPLATE_GENERATOR_SYSTEM_PROMPT,
+      conversationText,
+      { temperature: 0.4, maxTokens: 4096 },
+      (parsed) => {
+        if (!parsed || typeof parsed !== "object") {
+          return { valid: false, error: "Response must be a JSON object" };
+        }
+        return { valid: true };
+      }
+    );
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      return NextResponse.json({ error: "Empty AI response" }, { status: 500 });
-    }
-
-    const parsed = JSON.parse(content);
-    return NextResponse.json(parsed);
+    return NextResponse.json(result);
   } catch (error) {
     console.error("[AI Templates] Error:", error);
     const message = error instanceof Error ? error.message : "AI chat failed";

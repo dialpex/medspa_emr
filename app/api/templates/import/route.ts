@@ -1,10 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac";
-import OpenAI from "openai";
-import { TEMPLATE_IMPORT_SYSTEM_PROMPT } from "@/lib/agents/copilot/import-prompt";
-import { TEMPLATE_IMPORT_SCHEMA } from "@/lib/agents/copilot/import-schema";
+import { getLLMProviderForTier, completionWithRetry } from "@/lib/agents/_shared/llm";
+import { TEMPLATE_IMPORT_SYSTEM_PROMPT } from "@/lib/agents/insights/template-import-prompt";
+import Anthropic from "@anthropic-ai/sdk";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+const VALID_FIELD_TYPES = new Set([
+  "text", "textarea", "select", "multiselect", "number",
+  "date", "checklist", "signature", "photo-single",
+  "heading", "first-name", "last-name",
+]);
+
+interface ImportField {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  options?: string[] | null;
+  placeholder?: string | null;
+}
+
+interface ImportResult {
+  suggestedName: string;
+  suggestedType: string;
+  suggestedCategory: string;
+  fields: ImportField[];
+}
 
 async function extractText(file: File): Promise<{ text?: string; imageBase64?: string; mimeType?: string }> {
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -45,6 +67,26 @@ async function extractText(file: File): Promise<{ text?: string; imageBase64?: s
   throw new Error("Unsupported file type");
 }
 
+function validateImportResult(parsed: ImportResult): { valid: boolean; error?: string } {
+  if (!parsed.suggestedName || typeof parsed.suggestedName !== "string") {
+    return { valid: false, error: "Missing suggestedName" };
+  }
+  if (!["chart", "form"].includes(parsed.suggestedType)) {
+    return { valid: false, error: 'suggestedType must be "chart" or "form"' };
+  }
+  if (!Array.isArray(parsed.fields) || parsed.fields.length === 0) {
+    return { valid: false, error: "fields must be a non-empty array" };
+  }
+  const invalidFields = parsed.fields.filter((f) => !VALID_FIELD_TYPES.has(f.type));
+  if (invalidFields.length > 0) {
+    return {
+      valid: false,
+      error: `Invalid field types: ${invalidFields.map((f) => `"${f.type}" on "${f.label}"`).join(", ")}. Valid: ${[...VALID_FIELD_TYPES].join(", ")}`,
+    };
+  }
+  return { valid: true };
+}
+
 export async function POST(request: NextRequest) {
   try {
     await requirePermission("charts", "create");
@@ -60,53 +102,86 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File exceeds 10MB limit" }, { status: 400 });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: "AI service not configured" }, { status: 503 });
-    }
-
     const { text, imageBase64, mimeType } = await extractText(file);
 
-    const openai = new OpenAI({ apiKey });
+    // Text-based documents — use shared LLM provider with retry
+    if (text && !imageBase64) {
+      const provider = getLLMProviderForTier("triage");
+      if (!provider.isAvailable()) {
+        return NextResponse.json({ error: "AI service not configured" }, { status: 503 });
+      }
 
-    type MessageContent = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
-    const userContent: MessageContent[] = [];
+      const userMessage = `Analyze this document and extract the template structure. Return ONLY a JSON object with keys: suggestedName, suggestedType ("chart" or "form"), suggestedCategory, fields (array of {key, label, type, required, options, placeholder}).\n\n${text.slice(0, 15000)}`;
 
-    if (text) {
-      userContent.push({
-        type: "text",
-        text: `Analyze this document and extract the template structure:\n\n${text.slice(0, 15000)}`,
-      });
+      const { result } = await completionWithRetry<ImportResult>(
+        provider,
+        TEMPLATE_IMPORT_SYSTEM_PROMPT,
+        userMessage,
+        { temperature: 0.2, maxTokens: 4096 },
+        validateImportResult
+      );
+
+      return NextResponse.json(result);
     }
 
-    if (imageBase64 && mimeType) {
-      userContent.push({
-        type: "text",
-        text: "Analyze this document image and extract the template structure:",
-      });
-      userContent.push({
-        type: "image_url",
-        image_url: { url: `data:${mimeType};base64,${imageBase64}` },
-      });
+    // Image/scanned PDF — needs vision, use Anthropic directly
+    if (!imageBase64 || !mimeType) {
+      return NextResponse.json({ error: "Could not extract content from file" }, { status: 400 });
     }
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: TEMPLATE_IMPORT_SCHEMA,
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json({ error: "AI vision service not configured (ANTHROPIC_API_KEY)" }, { status: 503 });
+    }
+
+    const anthropic = new Anthropic();
+    const isPdf = mimeType === "application/pdf";
+
+    const fileBlock = isPdf
+      ? {
+          type: "document" as const,
+          source: {
+            type: "base64" as const,
+            media_type: "application/pdf" as const,
+            data: imageBase64,
+          },
+        }
+      : {
+          type: "image" as const,
+          source: {
+            type: "base64" as const,
+            media_type: mimeType as "image/png" | "image/jpeg" | "image/gif" | "image/webp",
+            data: imageBase64,
+          },
+        };
+
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4096,
+      system: TEMPLATE_IMPORT_SYSTEM_PROMPT,
       messages: [
-        { role: "system", content: TEMPLATE_IMPORT_SYSTEM_PROMPT },
-        { role: "user", content: userContent },
+        {
+          role: "user",
+          content: [
+            fileBlock,
+            {
+              type: "text",
+              text: 'Analyze this document image and extract the template structure. Return ONLY a JSON object with keys: suggestedName, suggestedType ("chart" or "form"), suggestedCategory, fields (array of {key, label, type, required, options, placeholder}).',
+            },
+          ],
+        },
       ],
       temperature: 0.2,
-      max_tokens: 4096,
     });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
+    const responseText = response.content[0]?.type === "text" ? response.content[0].text : null;
+    if (!responseText) {
       return NextResponse.json({ error: "Empty AI response" }, { status: 500 });
     }
 
-    const parsed = JSON.parse(content);
+    // Extract JSON from response (may have markdown fences)
+    const { extractJSON } = await import("@/lib/agents/_shared/llm/utils");
+    const parsed = extractJSON<ImportResult>(responseText);
+
     return NextResponse.json(parsed);
   } catch (error) {
     console.error("[Template Import] Error:", error);
