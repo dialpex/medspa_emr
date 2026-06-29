@@ -328,25 +328,6 @@ export function ChartEditor({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Clinical Alert Bar */}
-      {(allergyList.length > 0 || isVip) && (
-        <div className="flex items-center gap-2 px-5 py-2 bg-white border-b border-gray-200 flex-shrink-0">
-          {allergyList.map((allergy) => (
-            <span
-              key={allergy}
-              className="px-2 py-0.5 text-[10px] font-bold uppercase bg-red-100 text-red-700 rounded"
-            >
-              Allergy: {allergy}
-            </span>
-          ))}
-          {isVip && (
-            <span className="px-2 py-0.5 text-[10px] font-bold uppercase bg-purple-100 text-purple-700 rounded">
-              VIP Client
-            </span>
-          )}
-        </div>
-      )}
-
       {/* Two-column container */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Column — Main Content */}
