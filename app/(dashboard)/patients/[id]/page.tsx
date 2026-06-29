@@ -4,7 +4,6 @@ import {
   Clock,
   FileText,
   Camera,
-  ClipboardList,
   FolderOpen,
   Receipt,
   Wallet,
@@ -18,7 +17,6 @@ import { PatientDetailsTab } from "./patient-details-tab";
 import { PatientCharts } from "./patient-charts";
 import { PatientHistory } from "./patient-history";
 import { PatientPhotos } from "./patient-photos";
-import { PatientForms } from "./patient-forms";
 import { PatientDocuments } from "./patient-documents";
 import { PatientInvoices } from "./patient-invoices";
 import { PatientWallet } from "./patient-wallet";
@@ -91,11 +89,16 @@ export default async function PatientPage({
       ? [
           {
             value: "charts",
-            label: "Charts",
+            label: "Charts & Forms",
             icon: <FileText className="size-4" />,
             content: (
               <div className="rounded-xl border border-gray-200 bg-white p-6">
-                <PatientCharts charts={charts} userId={user.id} canDeleteAny={hasPermission(user.role, "charts", "delete")} />
+                <PatientCharts
+                  charts={charts}
+                  consents={timeline.consents}
+                  userId={user.id}
+                  canDeleteAny={hasPermission(user.role, "charts", "delete")}
+                />
               </div>
             ),
           },
@@ -118,16 +121,6 @@ export default async function PatientPage({
       content: (
         <div className="rounded-xl border border-gray-200 bg-white p-6">
           <PatientPhotos photos={timeline.photos} />
-        </div>
-      ),
-    },
-    {
-      value: "forms",
-      label: "Forms",
-      icon: <ClipboardList className="size-4" />,
-      content: (
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <PatientForms consents={timeline.consents} />
         </div>
       ),
     },
