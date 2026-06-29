@@ -1,161 +1,17 @@
 "use client";
 
-import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Reasoning } from "@/components/ai/reasoning";
-import type { AIResponse, PlanStep } from "@/lib/agents/insights/types";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  response?: AIResponse;
   isPending?: boolean;
-  isExecuting?: boolean;
   startedAt?: number;
 }
 
-function ClarifyView({
-  response,
-  onChoiceSelect,
-}: {
-  response: AIResponse & { type: "clarify" };
-  onChoiceSelect: (label: string) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-gray-800">
-        {response.clarification.question}
-      </p>
-      <div className="flex flex-col gap-2">
-        {response.clarification.choices.map((choice) => (
-          <button
-            key={choice.id}
-            onClick={() => onChoiceSelect(choice.label)}
-            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-left text-sm font-medium text-gray-700 transition-colors hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700"
-          >
-            {choice.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PlanView({
-  response,
-  onConfirm,
-  onCancel,
-  showActions,
-}: {
-  response: AIResponse & { type: "plan" };
-  onConfirm: () => void;
-  onCancel: () => void;
-  showActions: boolean;
-}) {
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-gray-800">{response.plan.confirm_prompt}</p>
-      <div className="rounded-lg bg-gray-50 p-3">
-        <ol className="space-y-2">
-          {response.plan.steps.map((step, i) => (
-            <li key={step.step_id} className="flex gap-2 text-sm text-gray-700">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-medium text-purple-700">
-                {i + 1}
-              </span>
-              <span>{step.preview}</span>
-            </li>
-          ))}
-        </ol>
-      </div>
-      {showActions && (
-        <div className="flex gap-2">
-          <button
-            onClick={onConfirm}
-            className="rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-          >
-            Confirm
-          </button>
-          <button
-            onClick={onCancel}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ResultView({
-  response,
-}: {
-  response: AIResponse & { type: "result" };
-}) {
-  const details = response.result.details;
-  const examples = details?.examples as string[] | undefined;
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-start gap-2">
-        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-500" />
-        <p className="text-sm text-gray-800">{response.result.summary}</p>
-      </div>
-      {details && Object.keys(details).length > 0 && !examples && (
-        <div className="rounded-lg bg-gray-50 p-3">
-          <dl className="space-y-1">
-            {Object.entries(details).map(([key, value]) => (
-              <div key={key} className="flex justify-between text-sm">
-                <dt className="text-gray-500">
-                  {key.replace(/_/g, " ")}
-                </dt>
-                <dd className="font-medium text-gray-800">
-                  {typeof value === "object" ? JSON.stringify(value) : String(value)}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-      {examples && (
-        <div className="space-y-1 pl-6">
-          {examples.map((ex) => (
-            <p key={ex} className="text-sm text-gray-500 italic">
-              &ldquo;{ex}&rdquo;
-            </p>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RefuseView({
-  response,
-}: {
-  response: AIResponse & { type: "refuse" };
-}) {
-  return (
-    <div className="flex items-start gap-2">
-      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
-      <p className="text-sm text-gray-800">
-        {response.permission_check.reason_if_denied || response.rationale_muted}
-      </p>
-    </div>
-  );
-}
-
-export function MessageBubble({
-  message,
-  onSend,
-  onExecutePlan,
-  isLast,
-}: {
-  message: Message;
-  onSend: (text: string) => void;
-  onExecutePlan?: (steps: PlanStep[]) => void;
-  isLast?: boolean;
-}) {
+export function MessageBubble({ message }: { message: Message }) {
   // User message
   if (message.role === "user") {
     return (
@@ -175,60 +31,81 @@ export function MessageBubble({
           <Reasoning isStreaming={true} />
           <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
             <Loader2 className="size-4 animate-spin" />
-            {message.isExecuting ? "Executing plan..." : "Thinking..."}
+            Thinking...
           </div>
         </div>
       </div>
     );
   }
 
-  // Assistant response
-  const response = message.response;
-  if (!response) return null;
-
+  // Assistant response — render as markdown-like text
   return (
     <div className="flex justify-start">
       <div className="max-w-[85%] rounded-2xl border border-gray-200 bg-white px-4 py-3">
-        {response.rationale_muted && (
-          <div className="mb-2">
-            <Reasoning
-              isStreaming={false}
-              rationale={response.rationale_muted}
-            />
-          </div>
-        )}
-        {response.type === "clarify" && (
-          <ClarifyView
-            response={response as AIResponse & { type: "clarify" }}
-            onChoiceSelect={(label) => onSend(label)}
-          />
-        )}
-        {response.type === "plan" && (
-          <PlanView
-            response={response as AIResponse & { type: "plan" }}
-            showActions={!!isLast}
-            onConfirm={() => {
-              const plan = (response as AIResponse & { type: "plan" }).plan;
-              if (onExecutePlan && plan.steps.length > 0) {
-                onExecutePlan(plan.steps);
-              } else {
-                onSend("Confirm");
-              }
-            }}
-            onCancel={() => onSend("Cancel")}
-          />
-        )}
-        {response.type === "result" && (
-          <ResultView
-            response={response as AIResponse & { type: "result" }}
-          />
-        )}
-        {response.type === "refuse" && (
-          <RefuseView
-            response={response as AIResponse & { type: "refuse" }}
-          />
-        )}
+        <div className="prose prose-sm prose-gray max-w-none text-sm text-gray-800 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5">
+          <AssistantContent content={message.content} />
+        </div>
       </div>
     </div>
+  );
+}
+
+/** Simple markdown-like rendering for assistant responses. */
+function AssistantContent({ content }: { content: string }) {
+  if (!content) return <p className="text-gray-500 italic">No response</p>;
+
+  // Split into paragraphs and render with basic formatting
+  const paragraphs = content.split("\n\n");
+
+  return (
+    <>
+      {paragraphs.map((para, i) => {
+        // Check if this is a list block
+        const lines = para.split("\n");
+        const isList = lines.every(
+          (l) => l.trim().startsWith("- ") || l.trim().startsWith("* ") || /^\d+\.\s/.test(l.trim()) || l.trim() === ""
+        );
+
+        if (isList) {
+          const isOrdered = lines.some((l) => /^\d+\.\s/.test(l.trim()));
+          const Tag = isOrdered ? "ol" : "ul";
+          return (
+            <Tag key={i}>
+              {lines
+                .filter((l) => l.trim())
+                .map((line, j) => (
+                  <li key={j}>
+                    <InlineFormatted
+                      text={line.replace(/^[\s]*[-*]\s|^\d+\.\s/, "")}
+                    />
+                  </li>
+                ))}
+            </Tag>
+          );
+        }
+
+        return (
+          <p key={i}>
+            <InlineFormatted text={para.replace(/\n/g, " ")} />
+          </p>
+        );
+      })}
+    </>
+  );
+}
+
+/** Render inline bold/italic formatting. */
+function InlineFormatted({ text }: { text: string }) {
+  // Split on **bold** patterns
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={i}>{part.slice(2, -2)}</strong>;
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
   );
 }

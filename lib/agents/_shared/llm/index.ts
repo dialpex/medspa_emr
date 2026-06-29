@@ -1,10 +1,26 @@
 // LLM Provider factory — returns the appropriate LLMProvider based on config/env.
 
 import type { LLMProvider, LLMProviderConfig } from "./types";
+import type { ModelTier } from "./tiers";
+import { getModelForTier } from "./tiers";
 import { AnthropicProvider } from "./anthropic";
 import { OpenAIProvider } from "./openai";
 import { BedrockProvider } from "./bedrock";
 import { MockLLMProvider } from "./mock";
+
+/** Get an LLMProvider configured for a specific tier's model. */
+export function getLLMProviderForTier(tier: ModelTier): LLMProvider {
+  const model = getModelForTier(tier);
+  // Auto-detect provider from env, but override the default model
+  if (process.env.ANTHROPIC_API_KEY) {
+    return new AnthropicProvider(model);
+  }
+  if (process.env.OPENAI_API_KEY) {
+    return new OpenAIProvider(model);
+  }
+  console.warn("[LLM] No API keys set — using MockLLMProvider (dev only)");
+  return new MockLLMProvider();
+}
 
 export function getLLMProvider(config?: LLMProviderConfig): LLMProvider {
   if (config?.provider) {
@@ -41,7 +57,10 @@ export type {
   CompletionResult,
   ToolLoopOptions,
   ToolLoopResult,
+  ToolLoopMessage,
 } from "./types";
+export type { ModelTier } from "./tiers";
+export { getModelForTier } from "./tiers";
 export { AnthropicProvider } from "./anthropic";
 export { OpenAIProvider } from "./openai";
 export { BedrockProvider } from "./bedrock";

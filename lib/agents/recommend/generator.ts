@@ -1,10 +1,10 @@
-import { getLLMProvider, completionWithRetry } from "@/lib/agents/_shared/llm";
+import { getLLMProviderForTier, completionWithRetry } from "@/lib/agents/_shared/llm";
 import type { PatientServiceProfile, UpsellSuggestion } from "./types";
 
 export async function generateLLMSuggestions(
   profile: PatientServiceProfile
 ): Promise<UpsellSuggestion[]> {
-  const provider = getLLMProvider();
+  const provider = getLLMProviderForTier("triage");
 
   const system = `You are a medical aesthetics practice advisor. Given a patient's anonymized service history profile, suggest 2-3 actionable recommendations for the practice to offer this patient. Focus on timing, complementary treatments, and patient retention. Return ONLY a JSON object: { "suggestions": [{ "title": string, "reason": string, "urgency": "high"|"medium"|"low" }] }`;
 

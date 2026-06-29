@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac";
 import { requireFeature } from "@/lib/feature-flags";
 import { FeatureNotAvailableError } from "@/lib/feature-flags-core";
-import { getAiProvider } from "@/lib/agents/insights";
-import type { ChatMessage } from "@/lib/agents/insights/types";
+import { runInsightsAgent } from "@/lib/agents/insights";
 import { createAuditLogFromRequest } from "@/lib/audit";
 import { redactTextPHI } from "@/lib/agents/_shared/phi/text-redactor";
-import { validateInput } from "@/lib/validation/helpers";
-import { chatMessageSchema } from "@/lib/validation/schemas";
+import { z } from "zod";
+
+const chatSchema = z.object({
+  message: z.string().min(1).max(5000),
+  sessionId: z.string().optional(),
+});
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,51 +18,54 @@ export async function POST(request: NextRequest) {
     const user = await requirePermission("ai", "create");
 
     const body = await request.json();
-    const validated = validateInput(chatMessageSchema, body);
-    const messages: ChatMessage[] = validated.messages;
+    const { message, sessionId } = chatSchema.parse(body);
 
-    // Redact PHI from user messages before sending to LLM
-    const redactedMessages: ChatMessage[] = await Promise.all(
-      messages.map(async (msg) => {
-        if (msg.role === "user") {
-          return { ...msg, content: await redactTextPHI(msg.content, user.clinicId) };
-        }
-        return msg;
-      })
-    );
+    // Redact PHI from user message before sending to LLM
+    const redactedMessage = await redactTextPHI(message, user.clinicId);
 
-    const provider = getAiProvider();
-    const response = await provider.chat({
-      messages: redactedMessages,
-      context: {
+    const result = await runInsightsAgent(
+      sessionId ?? null,
+      redactedMessage,
+      {
         userRole: user.role,
         clinicId: user.clinicId,
         userName: user.name,
-      },
-    });
+        userId: user.id,
+      }
+    );
 
-    // Audit log (non-blocking — don't fail the response if logging fails)
-    const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+    // Audit log (non-blocking)
     createAuditLogFromRequest(
       {
         clinicId: user.clinicId,
         userId: user.id,
         action: "AiChat",
         entityType: "AiChat",
-        entityId: user.id,
+        entityId: result.sessionId,
         details: JSON.stringify({
-          query: lastUserMessage?.content.slice(0, 200),
-          responseType: response.type,
-          domain: response.domain,
+          query: message.slice(0, 200),
+          toolCallCount: result.toolCallCount,
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
         }),
       },
       request
     ).catch((err: unknown) => console.error("[AI Chat] Audit log failed:", err));
 
-    return NextResponse.json(response);
+    return NextResponse.json({
+      sessionId: result.sessionId,
+      response: result.response,
+      tokenUsage: {
+        input: result.inputTokens,
+        output: result.outputTokens,
+      },
+    });
   } catch (error) {
     if (error instanceof FeatureNotAvailableError) {
       return NextResponse.json({ error: "feature_not_available", feature: error.feature }, { status: 403 });
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: "Invalid input", details: error.issues }, { status: 400 });
     }
     console.error("[AI Chat] Error:", error);
     const message = error instanceof Error ? error.message : "AI chat failed";
