@@ -73,6 +73,9 @@ model Clinic {
   giftCardDenominations     GiftCardDenomination[]
   walletEntries             WalletEntry[]
   agentSessions             AgentSession[]
+  packages                  ServicePackage[]
+  patientPackages           PatientPackage[]
+  packageRedemptions        PackageRedemption[]
 }
 
 // ===========================================
@@ -138,6 +141,7 @@ model User {
   boardEntriesCompleted BoardEntry[]    @relation("BoardEntryCompletedBy")
   giftCardsIssued       GiftCard[]
   agentSessions         AgentSession[]
+  packageRedemptions    PackageRedemption[] @relation("PackageRedemptionUser")
 
   @@index([clinicId])
   @@index([email])
@@ -200,6 +204,7 @@ model Patient {
   walletEntries        WalletEntry[]
   giftCardsPurchased   GiftCard[]    @relation("GiftCardBuyer")
   giftCardsReceived    GiftCard[]    @relation("GiftCardRecipient")
+  patientPackages      PatientPackage[]
 
   @@index([clinicId])
   @@index([emailHash])
@@ -297,6 +302,7 @@ model Appointment {
   chart     Chart?
   encounter Encounter?
   invoice   Invoice?
+  packageRedemptions PackageRedemption[]
 
   @@index([clinicId])
   @@index([patientId])
@@ -326,6 +332,8 @@ model Service {
   appointments        Appointment[]
   invoiceItems        InvoiceItem[]
   serviceTemplates    ServiceTemplate[]
+  packageItems        PackageItem[]
+  packageRedemptions  PackageRedemption[]
 
   @@index([clinicId])
 }
@@ -1481,4 +1489,85 @@ model BoardEntry {
   deletedAt     DateTime?
 
   @@index([clinicId, isCompleted, deletedAt])
+}
+
+// ===========================================
+// PACKAGES
+// ===========================================
+
+model ServicePackage {
+  id            String   @id @default(cuid())
+  clinicId      String
+  name          String
+  description   String?
+  packagePrice  Float
+  validityDays  Int?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  clinic           Clinic            @relation(fields: [clinicId], references: [id])
+  items            PackageItem[]
+  patientPackages  PatientPackage[]
+
+  @@map("Package")
+  @@index([clinicId])
+}
+
+model PackageItem {
+  id         String  @id @default(cuid())
+  packageId  String
+  serviceId  String
+  quantity   Int     @default(1)
+
+  package  ServicePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  service  Service @relation(fields: [serviceId], references: [id])
+
+  @@unique([packageId, serviceId])
+  @@index([packageId])
+}
+
+model PatientPackage {
+  id            String    @id @default(cuid())
+  clinicId      String
+  patientId     String
+  packageId     String
+  status        String    @default("Active")
+  purchasePrice Float
+  purchasedAt   DateTime  @default(now())
+  expiresAt     DateTime?
+  notes         String?
+  cancelledAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  clinic      Clinic              @relation(fields: [clinicId], references: [id])
+  patient     Patient             @relation(fields: [patientId], references: [id])
+  package     ServicePackage      @relation(fields: [packageId], references: [id])
+  redemptions PackageRedemption[]
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([status])
+}
+
+model PackageRedemption {
+  id               String   @id @default(cuid())
+  clinicId         String
+  patientPackageId String
+  serviceId        String
+  appointmentId    String?
+  quantity         Int      @default(1)
+  redeemedAt       DateTime @default(now())
+  redeemedById     String
+  notes            String?
+
+  clinic         Clinic         @relation(fields: [clinicId], references: [id])
+  patientPackage PatientPackage @relation(fields: [patientPackageId], references: [id])
+  service        Service        @relation(fields: [serviceId], references: [id])
+  appointment    Appointment?   @relation(fields: [appointmentId], references: [id])
+  redeemedBy     User           @relation("PackageRedemptionUser", fields: [redeemedById], references: [id])
+
+  @@index([patientPackageId])
+  @@index([appointmentId])
 }

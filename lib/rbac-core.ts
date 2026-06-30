@@ -16,6 +16,7 @@ export const ROLE_PERMISSIONS = {
     migration: { view: true, create: true, edit: true, delete: true },
     board: { view: true, create: true, edit: true, delete: true },
     giftCards: { view: true, create: true, edit: true, delete: true },
+    packages: { view: true, create: true, edit: true, delete: true },
   },
   Admin: {
     patients: { view: true, create: true, edit: true, delete: true },
@@ -31,6 +32,7 @@ export const ROLE_PERMISSIONS = {
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: true, edit: true, delete: true },
     giftCards: { view: true, create: true, edit: true, delete: true },
+    packages: { view: true, create: true, edit: true, delete: true },
   },
   Provider: {
     patients: { view: true, create: true, edit: true, delete: false },
@@ -46,6 +48,7 @@ export const ROLE_PERMISSIONS = {
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: true, edit: true, delete: true },
     giftCards: { view: true, create: true, edit: true, delete: false },
+    packages: { view: true, create: true, edit: true, delete: false },
   },
   FrontDesk: {
     patients: { view: true, create: true, edit: true, delete: false },
@@ -61,6 +64,7 @@ export const ROLE_PERMISSIONS = {
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: true, edit: true, delete: true },
     giftCards: { view: true, create: true, edit: true, delete: false },
+    packages: { view: true, create: true, edit: true, delete: false },
   },
   Billing: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -76,6 +80,7 @@ export const ROLE_PERMISSIONS = {
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: false, edit: false, delete: false },
     giftCards: { view: true, create: true, edit: true, delete: true },
+    packages: { view: true, create: true, edit: true, delete: true },
   },
   MedicalDirector: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -91,6 +96,7 @@ export const ROLE_PERMISSIONS = {
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: true, edit: true, delete: true },
     giftCards: { view: false, create: false, edit: false, delete: false },
+    packages: { view: true, create: false, edit: false, delete: false },
   },
   ReadOnly: {
     patients: { view: true, create: false, edit: false, delete: false },
@@ -106,6 +112,7 @@ export const ROLE_PERMISSIONS = {
     migration: { view: false, create: false, edit: false, delete: false },
     board: { view: true, create: false, edit: false, delete: false },
     giftCards: { view: false, create: false, edit: false, delete: false },
+    packages: { view: true, create: false, edit: false, delete: false },
   },
 } as const;
 

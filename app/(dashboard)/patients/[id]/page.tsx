@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Receipt,
   Wallet,
+  PackageIcon,
 } from "lucide-react";
 import { Breadcrumbs, buildBreadcrumbItems } from "@/components/ui/breadcrumbs";
 import { getPatient, getPatientTimeline } from "@/lib/actions/patients";
@@ -20,8 +21,10 @@ import { PatientPhotos } from "./patient-photos";
 import { PatientDocuments } from "./patient-documents";
 import { PatientInvoices } from "./patient-invoices";
 import { PatientWallet } from "./patient-wallet";
+import { PatientPackages } from "./patient-packages";
 import { PatientTabs } from "./patient-tabs";
 import { getPatientWallet } from "@/lib/actions/wallet";
+import { getPatientPackageData } from "@/lib/actions/packages";
 
 export default async function PatientPage({
   params,
@@ -33,11 +36,14 @@ export default async function PatientPage({
 
   const canViewCharts = hasPermission(user.role, "charts", "view");
 
-  const [patient, timeline, charts, wallet] = await Promise.all([
+  const canViewPackages = hasPermission(user.role, "packages", "view");
+
+  const [patient, timeline, charts, wallet, packageData] = await Promise.all([
     getPatient(id),
     getPatientTimeline(id),
     canViewCharts ? getCharts({ patientId: id }) : Promise.resolve([]),
     getPatientWallet(id),
+    canViewPackages ? getPatientPackageData(id) : Promise.resolve(null),
   ]);
 
   if (!patient) {
@@ -114,6 +120,25 @@ export default async function PatientPage({
         </div>
       ),
     },
+    ...(canViewPackages && packageData
+      ? [
+          {
+            value: "packages",
+            label: "Packages",
+            icon: <PackageIcon className="size-4" />,
+            content: (
+              <div className="rounded-xl border border-gray-200 bg-white p-6">
+                <PatientPackages
+                  patientId={patient.id}
+                  packages={packageData.packages}
+                  availablePackages={packageData.availablePackages}
+                  canManage={canEdit}
+                />
+              </div>
+            ),
+          },
+        ]
+      : []),
     {
       value: "photos",
       label: "Photos",
