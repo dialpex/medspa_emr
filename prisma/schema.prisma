@@ -36,6 +36,21 @@ model Clinic {
   socialAccounts   String?  // JSON: { yelp, facebook, instagram, ... }
   calendarSettings String?  // JSON: { timeInterval, startTime, endTime, colorUsage, firstDayOfWeek }
   defaultTaxRate   Float?   // Default tax rate percentage for invoices
+
+  // Stripe Connect
+  stripeAccountId           String?
+  stripeOnboardingComplete  Boolean  @default(false)
+  stripeChargesEnabled      Boolean  @default(false)
+  stripePayoutsEnabled      Boolean  @default(false)
+  stripeDetailsSubmitted    Boolean  @default(false)
+  stripeDefaultCurrency     String?  @default("usd")
+  platformFeePercent        Float?   // null = use PLATFORM_FEE_PERCENT env
+
+  // Deposits
+  depositEnabled        Boolean  @default(false)
+  defaultDepositAmount  Float?
+  depositPolicy         String?  // "refundable" | "non_refundable" | "partial_refund"
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -74,6 +89,7 @@ model Clinic {
   walletEntries             WalletEntry[]
   agentSessions             AgentSession[]
   packages                  ServicePackage[]
+  stripePaymentMethods      StripePaymentMethod[]
   patientPackages           PatientPackage[]
   packageRedemptions        PackageRedemption[]
 }
@@ -184,6 +200,9 @@ model Patient {
   emailHash     String?
   phoneHash     String?
 
+  // Stripe
+  stripeCustomerId  String?   // On the clinic's connected account
+
   // Avatar
   avatarPhotoId    String? @unique
 
@@ -205,6 +224,7 @@ model Patient {
   giftCardsPurchased   GiftCard[]    @relation("GiftCardBuyer")
   giftCardsReceived    GiftCard[]    @relation("GiftCardRecipient")
   patientPackages      PatientPackage[]
+  stripePaymentMethods StripePaymentMethod[]
 
   @@index([clinicId])
   @@index([emailHash])
@@ -302,6 +322,7 @@ model Appointment {
   chart     Chart?
   encounter Encounter?
   invoice   Invoice?
+  deposits  Payment[]
   packageRedemptions PackageRedemption[]
 
   @@index([clinicId])
@@ -716,20 +737,34 @@ model InvoiceItem {
 model Payment {
   id            String   @id @default(cuid())
   clinicId      String
-  invoiceId     String
+  invoiceId     String?
   amount        Float
-  paymentMethod String   // cash, credit, debit, etc.
+  paymentMethod String   // cash, credit, debit, stripe, etc.
   reference     String?  // External reference number
   notes         String?
   createdAt     DateTime @default(now())
   deletedAt     DateTime?
 
+  // Stripe fields
+  stripePaymentIntentId  String?
+  stripeChargeId         String?
+  stripeRefundId         String?
+  stripeStatus           String?    // succeeded, requires_action, failed, canceled, refunded, partially_refunded
+  receiptUrl             String?
+  failureReason          String?
+
+  // Deposit fields
+  appointmentId  String?
+  paymentType    String   @default("payment") // "payment" | "deposit" | "deposit_application"
+
   // Relations
-  clinic  Clinic  @relation(fields: [clinicId], references: [id])
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  clinic      Clinic       @relation(fields: [clinicId], references: [id])
+  invoice     Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
 
   @@index([clinicId])
   @@index([invoiceId])
+  @@index([appointmentId])
 }
 
 // ===========================================
@@ -845,6 +880,16 @@ enum AuditAction {
   WalletView
   WalletDebit
   WalletCredit
+  StripeAccountConnect
+  StripePaymentCreate
+  StripePaymentSucceeded
+  StripePaymentFailed
+  StripeRefundCreate
+  StripeSetupIntentCreate
+  StripeDepositCreate
+  StripeDepositApply
+  StripeDepositRefund
+  StripeDepositForfeit
 }
 
 model AuditLog {
@@ -1570,4 +1615,37 @@ model PackageRedemption {
 
   @@index([patientPackageId])
   @@index([appointmentId])
+}
+
+// ===========================================
+// STRIPE PAYMENT PROCESSING
+// ===========================================
+
+model StripePaymentMethod {
+  id                    String    @id @default(cuid())
+  clinicId              String
+  patientId             String
+  stripePaymentMethodId String    @unique
+  type                  String    @default("card")
+  cardBrand             String?
+  cardLast4             String?
+  cardExpMonth          Int?
+  cardExpYear           Int?
+  isDefault             Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  deletedAt             DateTime?
+
+  clinic  Clinic  @relation(fields: [clinicId], references: [id])
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([clinicId, patientId])
+}
+
+model StripeWebhookEvent {
+  id             String   @id @default(cuid())
+  stripeEventId  String   @unique
+  eventType      String
+  processedAt    DateTime @default(now())
+  payload        String?
+  error          String?
 }

@@ -56,6 +56,9 @@ export type InvoiceDetail = {
     reference: string | null;
     notes: string | null;
     createdAt: Date;
+    stripePaymentIntentId: string | null;
+    stripeStatus: string | null;
+    receiptUrl: string | null;
   }[];
 };
 
@@ -190,7 +193,7 @@ export async function getInvoice(id: string): Promise<InvoiceDetail | null> {
     include: {
       patient: { select: { id: true, firstName: true, lastName: true } },
       items: { where: { deletedAt: null }, select: { id: true, serviceId: true, productId: true, description: true, quantity: true, unitPrice: true, total: true } },
-      payments: { where: { deletedAt: null }, select: { id: true, amount: true, paymentMethod: true, reference: true, notes: true, createdAt: true }, orderBy: { createdAt: "desc" } },
+      payments: { where: { deletedAt: null }, select: { id: true, amount: true, paymentMethod: true, reference: true, notes: true, createdAt: true, stripePaymentIntentId: true, stripeStatus: true, receiptUrl: true }, orderBy: { createdAt: "desc" } },
     },
   });
 
@@ -357,7 +360,7 @@ export async function deleteInvoice(id: string) {
     if (!existing) return { success: false as const, error: "Invoice not found" };
 
     const now = new Date();
-    await prisma.$transaction([
+    const txOps = [
       prisma.invoice.update({
         where: { id },
         data: { deletedAt: now },
@@ -366,11 +369,15 @@ export async function deleteInvoice(id: string) {
         where: { invoiceId: id },
         data: { deletedAt: now },
       }),
+    ];
+    // Only soft-delete payments tied to this invoice (invoiceId is now optional)
+    txOps.push(
       prisma.payment.updateMany({
         where: { invoiceId: id },
         data: { deletedAt: now },
-      }),
-    ]);
+      })
+    );
+    await prisma.$transaction(txOps);
 
     await createAuditLog({
       clinicId: user.clinicId,

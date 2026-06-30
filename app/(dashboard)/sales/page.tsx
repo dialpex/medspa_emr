@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getInvoices, getClinicInfo } from "@/lib/actions/invoices";
+import { prisma } from "@/lib/prisma";
 import { getPayments } from "@/lib/actions/payments";
 import { getMembershipPlans, getMembershipData, getPatientMemberships } from "@/lib/actions/memberships";
 import { getServicesForClinic } from "@/lib/actions/services";
@@ -31,15 +32,22 @@ export default async function SalesPage({ searchParams }: Props) {
   let content: React.ReactNode = null;
 
   if (section === "invoices") {
-    const [invoices, services, products, clinicInfo] = await Promise.all([
+    const clinicId = (session.user as { clinicId: string }).clinicId;
+    const [invoices, services, products, clinicInfo, clinic] = await Promise.all([
       getInvoices(),
       getServicesForClinic(),
       getProductsForClinic(),
       getClinicInfo(),
+      prisma.clinic.findUnique({
+        where: { id: clinicId },
+        select: { stripeAccountId: true, stripeChargesEnabled: true },
+      }),
     ]);
     const serviceOptions = services.map((s) => ({ id: s.id, name: s.name, price: s.price }));
     const productOptions = products.filter((p) => p.isActive).map((p) => ({ id: p.id, name: p.name, price: p.retailPrice }));
-    content = <InvoiceListView initialInvoices={invoices} services={serviceOptions} products={productOptions} clinicInfo={clinicInfo} />;
+    const stripeConnected = !!(clinic?.stripeAccountId && clinic?.stripeChargesEnabled);
+    const stripeAccountId = clinic?.stripeAccountId ?? null;
+    content = <InvoiceListView initialInvoices={invoices} services={serviceOptions} products={productOptions} clinicInfo={clinicInfo} stripeConnected={stripeConnected} stripeAccountId={stripeAccountId} />;
   } else if (section === "payments") {
     const payments = await getPayments();
     content = <PaymentsView payments={payments} />;

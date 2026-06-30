@@ -35,9 +35,11 @@ type Props = {
   services: ServiceOption[];
   products: ProductOption[];
   clinicInfo: ClinicInfo;
+  stripeConnected?: boolean;
+  stripeAccountId?: string | null;
 };
 
-export function InvoiceListView({ initialInvoices, services, products, clinicInfo }: Props) {
+export function InvoiceListView({ initialInvoices, services, products, clinicInfo, stripeConnected, stripeAccountId }: Props) {
   const [invoices, setInvoices] = useState(initialInvoices);
   const [modalInvoice, setModalInvoice] = useState<InvoiceDetail | null | "new">(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
@@ -188,6 +190,8 @@ export function InvoiceListView({ initialInvoices, services, products, clinicInf
           products={products}
           clinicInfo={clinicInfo}
           onClose={handleCloseModal}
+          stripeConnected={stripeConnected}
+          stripeAccountId={stripeAccountId}
         />
       )}
 
