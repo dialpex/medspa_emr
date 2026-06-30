@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon, BoxIcon, BellIcon, ArrowRightLeftIcon } from "lucide-react";
+import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon, BoxIcon, BellIcon, ArrowRightLeftIcon, PackageIcon } from "lucide-react";
 import { PageCard } from "@/components/ui/page-card";
 import { auth } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
@@ -25,6 +25,12 @@ const settingsItems: Array<{
     description: "Manage treatments, pricing, and service catalog",
     href: "/settings/services",
     icon: SparklesIcon,
+  },
+  {
+    label: "Packages",
+    description: "Bundle services into packages with special pricing",
+    href: "/settings/packages",
+    icon: PackageIcon,
   },
   {
     label: "Products",
