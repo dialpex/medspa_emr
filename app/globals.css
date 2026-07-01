@@ -124,6 +124,24 @@
   animation: shimmer 2s ease-in-out infinite;
 }
 
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@utility animate-slide-in-right {
+  animation: slide-in-right 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes scale-in {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@utility animate-scale-in {
+  animation: scale-in 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

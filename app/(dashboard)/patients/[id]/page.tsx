@@ -25,6 +25,8 @@ import { PatientPackages } from "./patient-packages";
 import { PatientTabs } from "./patient-tabs";
 import { getPatientWallet } from "@/lib/actions/wallet";
 import { getPatientPackageData } from "@/lib/actions/packages";
+import { prisma } from "@/lib/prisma";
+import { PatientSavedCards } from "./patient-saved-cards";
 
 export default async function PatientPage({
   params,
@@ -38,13 +40,19 @@ export default async function PatientPage({
 
   const canViewPackages = hasPermission(user.role, "packages", "view");
 
-  const [patient, timeline, charts, wallet, packageData] = await Promise.all([
+  const [patient, timeline, charts, wallet, packageData, clinic] = await Promise.all([
     getPatient(id),
     getPatientTimeline(id),
     canViewCharts ? getCharts({ patientId: id }) : Promise.resolve([]),
     getPatientWallet(id),
     canViewPackages ? getPatientPackageData(id) : Promise.resolve(null),
+    prisma.clinic.findUnique({
+      where: { id: user.clinicId },
+      select: { stripeAccountId: true, stripeChargesEnabled: true },
+    }),
   ]);
+
+  const stripeActive = !!(clinic?.stripeAccountId && clinic?.stripeChargesEnabled);
 
   if (!patient) {
     notFound();
@@ -115,8 +123,15 @@ export default async function PatientPage({
       label: "Wallet",
       icon: <Wallet className="size-4" />,
       content: (
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <PatientWallet patientId={patient.id} wallet={wallet} canManage={canEdit} />
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-6">
+            <PatientWallet patientId={patient.id} wallet={wallet} canManage={canEdit} />
+          </div>
+          {stripeActive && clinic?.stripeAccountId && (
+            <div className="rounded-xl border border-gray-200 bg-white p-6">
+              <PatientSavedCards patientId={patient.id} stripeAccountId={clinic.stripeAccountId} />
+            </div>
+          )}
         </div>
       ),
     },

@@ -8,6 +8,7 @@ const { auth } = NextAuth(authConfig);
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth",
+  "/api/billing/stripe/webhook",
 ];
 
 function isPublicPath(pathname: string): boolean {

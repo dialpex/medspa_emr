@@ -7,6 +7,8 @@ import {
   EditIcon,
   Loader2Icon,
   FileTextIcon,
+  CreditCardIcon,
+  CalendarPlusIcon,
 } from "lucide-react";
 import type { AppointmentStatus } from "@prisma/client";
 import {
@@ -23,18 +25,15 @@ import {
   type ResourceOption,
   type Service,
 } from "@/lib/actions/appointments";
+import { beginService } from "@/lib/actions/today";
 import { createChart, getCharts } from "@/lib/actions/charts";
+import { createInvoiceFromAppointmentAction, getCheckoutDataAction } from "@/lib/actions/checkout";
 import { AppointmentPanelContent } from "@/components/appointment-panel-content";
+import { CheckoutDrawer } from "@/app/(dashboard)/checkout/checkout-drawer";
+import { CheckoutContent } from "@/app/(dashboard)/checkout/checkout-content";
+import type { CheckoutData } from "@/lib/services/checkout-shared";
 import { AppointmentForm } from "./appointment-form";
 import { cn } from "@/lib/utils";
-
-// Next logical status transitions
-const NEXT_STATUS: Partial<Record<AppointmentStatus, { status: AppointmentStatus; label: string }>> = {
-  Scheduled: { status: "Confirmed", label: "Mark as Confirmed" },
-  Confirmed: { status: "CheckedIn", label: "Check In" },
-  CheckedIn: { status: "InProgress", label: "Start" },
-  InProgress: { status: "Completed", label: "Complete" },
-};
 
 export type AppointmentPanelProps = {
   appointmentId: string | null;
@@ -47,6 +46,7 @@ export type AppointmentPanelProps = {
     canCreate: boolean;
     canEdit: boolean;
     canDelete: boolean;
+    isProvider: boolean;
   };
 };
 
@@ -66,6 +66,7 @@ export function AppointmentPanel({
   const [isPending, startTransition] = useTransition();
   const [editFormOpen, setEditFormOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<null | "prompt" | "scope">(null);
+  const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
 
   const isOpen = !!appointmentId;
 
@@ -121,6 +122,61 @@ export function AppointmentPanel({
     [detail, onClose, router]
   );
 
+  /** Move to Completed then open checkout drawer */
+  const handleCheckOut = useCallback(
+    (apptId: string) => {
+      startTransition(async () => {
+        // Ensure status is Completed first
+        await updateAppointmentStatus(apptId, "Completed");
+        const invoiceResult = await createInvoiceFromAppointmentAction(apptId);
+        if (!invoiceResult.success) return;
+        const data = await getCheckoutDataAction(invoiceResult.invoiceId);
+        setCheckoutData(data);
+        // Refresh detail to show Completed status
+        const updated = await getAppointmentWithPatient(apptId);
+        setDetail(updated);
+        router.refresh();
+      });
+    },
+    [router]
+  );
+
+  const handleCloseCheckout = useCallback(() => {
+    setCheckoutData(null);
+    if (appointmentId) {
+      getAppointmentWithPatient(appointmentId).then(setDetail);
+    }
+    router.refresh();
+  }, [appointmentId, router]);
+
+  /** Navigate to chart — find existing or create new */
+  const handleOpenChart = useCallback(async () => {
+    if (!detail) return;
+    const existing = await getCharts({ patientId: detail.patientId ?? undefined });
+    const existingChart = existing.find((c) => c.appointmentId === detail.id);
+    if (existingChart) {
+      router.push(
+        existingChart.status === "Draft"
+          ? `/charts/${existingChart.id}/edit`
+          : `/charts/${existingChart.id}`
+      );
+      return;
+    }
+    // Navigate to new chart page with patient pre-selected
+    router.push(`/charts/new?patientId=${detail.patientId}&appointmentId=${detail.id}`);
+  }, [detail, router]);
+
+  /** Reschedule — navigate to calendar with patient pre-filled */
+  const handleReschedule = useCallback(() => {
+    if (!detail) return;
+    router.push(
+      `/calendar?reschedulePatientId=${detail.patientId}&reschedulePatientName=${encodeURIComponent(
+        `${detail.patientFirstName} ${detail.patientLastName}`
+      )}&rescheduleProviderId=${detail.providerId || ""}`
+    );
+    onClose();
+  }, [detail, router, onClose]);
+
   const calendarAppointment: CalendarAppointment | undefined = detail
     ? {
         id: detail.id,
@@ -143,8 +199,6 @@ export function AppointmentPanel({
         blockTitle: detail.blockTitle,
       }
     : undefined;
-
-  const nextStatus = detail ? NEXT_STATUS[detail.status] : undefined;
 
   return (
     <>
@@ -195,7 +249,7 @@ export function AppointmentPanel({
             {detail && (
               <div className="border-t bg-gray-50/50 p-4 space-y-2">
                 {detail.isBlock ? (
-                  /* Block time: only Edit and Delete */
+                  /* Block time: Edit and Delete */
                   <div className="space-y-2">
                     <div className="flex gap-2">
                       {permissions.canEdit && (
@@ -224,7 +278,6 @@ export function AppointmentPanel({
                       )}
                     </div>
 
-                    {/* Delete confirmation */}
                     {deleteConfirm === "prompt" && (
                       <div className="p-3 bg-red-50 rounded-lg border border-red-200 space-y-2">
                         <p className="text-sm text-red-700 font-medium">Delete this block?</p>
@@ -246,118 +299,169 @@ export function AppointmentPanel({
                       </div>
                     )}
 
-                    {/* Recurring scope picker */}
                     {deleteConfirm === "scope" && (
                       <div className="p-3 bg-red-50 rounded-lg border border-red-200 space-y-2">
                         <p className="text-sm text-red-700 font-medium">Delete recurring block</p>
                         <div className="space-y-1.5">
-                          <button
-                            onClick={() => handleDelete("this")}
-                            disabled={isPending}
-                            className="w-full py-1.5 text-sm font-medium text-red-700 bg-white rounded-lg border border-red-200 hover:bg-red-100 disabled:opacity-50 text-left px-3"
-                          >
-                            This event only
-                          </button>
-                          <button
-                            onClick={() => handleDelete("thisAndFuture")}
-                            disabled={isPending}
-                            className="w-full py-1.5 text-sm font-medium text-red-700 bg-white rounded-lg border border-red-200 hover:bg-red-100 disabled:opacity-50 text-left px-3"
-                          >
-                            This and future events
-                          </button>
-                          <button
-                            onClick={() => handleDelete("all")}
-                            disabled={isPending}
-                            className="w-full py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 text-left px-3"
-                          >
-                            All events in series
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm(null)}
-                            className="w-full py-1.5 text-sm font-medium text-gray-600 text-left px-3 hover:text-gray-900"
-                          >
-                            Cancel
-                          </button>
+                          <button onClick={() => handleDelete("this")} disabled={isPending} className="w-full py-1.5 text-sm font-medium text-red-700 bg-white rounded-lg border border-red-200 hover:bg-red-100 disabled:opacity-50 text-left px-3">This event only</button>
+                          <button onClick={() => handleDelete("thisAndFuture")} disabled={isPending} className="w-full py-1.5 text-sm font-medium text-red-700 bg-white rounded-lg border border-red-200 hover:bg-red-100 disabled:opacity-50 text-left px-3">This and future events</button>
+                          <button onClick={() => handleDelete("all")} disabled={isPending} className="w-full py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 text-left px-3">All events in series</button>
+                          <button onClick={() => setDeleteConfirm(null)} className="w-full py-1.5 text-sm font-medium text-gray-600 text-left px-3 hover:text-gray-900">Cancel</button>
                         </div>
                       </div>
                     )}
                   </div>
                 ) : (
-                  /* Regular appointment: full actions */
+                  /* Regular appointment — lifecycle actions */
                   <>
-                    {/* Status transition */}
-                    {nextStatus && permissions.canEdit && (
+                    {/* Scheduled: Confirm, Check In, Cancel */}
+                    {detail.status === "Scheduled" && permissions.canEdit && (
+                      <>
+                        <button
+                          onClick={() => handleStatusChange("Confirmed")}
+                          disabled={isPending}
+                          className="w-full py-2.5 px-4 text-sm font-medium text-gray-700 bg-white rounded-lg hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2 border border-gray-200 shadow-sm"
+                        >
+                          {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
+                          Confirm
+                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleStatusChange("CheckedIn")}
+                            disabled={isPending}
+                            className="flex-1 py-2.5 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
+                            Check In
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange("Cancelled")}
+                            disabled={isPending}
+                            className="py-2.5 px-4 text-sm font-medium text-red-600 bg-white rounded-lg hover:bg-red-50 disabled:opacity-50 border border-red-200 shadow-sm"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Confirmed: Check In, No Show, Cancel */}
+                    {detail.status === "Confirmed" && permissions.canEdit && (
+                      <>
+                        <button
+                          onClick={() => handleStatusChange("CheckedIn")}
+                          disabled={isPending}
+                          className="w-full py-2.5 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                        >
+                          {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
+                          Check In
+                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleStatusChange("NoShow")}
+                            disabled={isPending}
+                            className="flex-1 py-2.5 px-4 text-sm font-medium text-orange-600 bg-white rounded-lg hover:bg-orange-50 disabled:opacity-50 border border-orange-200 shadow-sm"
+                          >
+                            No Show
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange("Cancelled")}
+                            disabled={isPending}
+                            className="py-2.5 px-4 text-sm font-medium text-red-600 bg-white rounded-lg hover:bg-red-50 disabled:opacity-50 border border-red-200 shadow-sm"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* CheckedIn: Begin Service (provider only), Check Out (all) */}
+                    {detail.status === "CheckedIn" && permissions.canEdit && (
+                      <>
+                        {permissions.isProvider && (
+                          <button
+                            onClick={() => {
+                              startTransition(async () => {
+                                const result = await beginService(detail.id);
+                                if (result.success && result.data) {
+                                  router.push(`/charts/${result.data.chartId}/edit`);
+                                } else {
+                                  const updated = await getAppointmentWithPatient(detail.id);
+                                  setDetail(updated);
+                                  router.refresh();
+                                }
+                              });
+                            }}
+                            disabled={isPending}
+                            className="w-full py-2.5 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
+                            Begin Service
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleCheckOut(detail.id)}
+                          disabled={isPending}
+                          className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                        >
+                          {isPending ? (
+                            <Loader2Icon className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CreditCardIcon className="h-4 w-4" />
+                          )}
+                          Check Out
+                        </button>
+                      </>
+                    )}
+
+                    {/* InProgress: Chart (provider only), Check Out (all) */}
+                    {detail.status === "InProgress" && permissions.canEdit && (
+                      <>
+                        {permissions.isProvider && (
+                          <button
+                            onClick={handleOpenChart}
+                            className="w-full py-2.5 px-4 text-sm font-medium text-purple-700 bg-white rounded-lg hover:bg-purple-50 flex items-center justify-center gap-2 border border-purple-200 shadow-sm"
+                          >
+                            <FileTextIcon className="h-4 w-4" />
+                            Chart
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleCheckOut(detail.id)}
+                          disabled={isPending}
+                          className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                        >
+                          {isPending ? (
+                            <Loader2Icon className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CreditCardIcon className="h-4 w-4" />
+                          )}
+                          Check Out
+                        </button>
+                      </>
+                    )}
+
+                    {/* Completed: Open Chart (provider only) */}
+                    {detail.status === "Completed" && permissions.isProvider && (
                       <button
-                        onClick={() => handleStatusChange(nextStatus.status)}
-                        disabled={isPending}
-                        className="w-full py-2.5 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                        onClick={handleOpenChart}
+                        className="w-full py-2.5 px-4 text-sm font-medium text-purple-700 bg-white rounded-lg hover:bg-purple-50 flex items-center justify-center gap-2 border border-purple-200 shadow-sm"
                       >
-                        {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
-                        {nextStatus.label}
+                        <FileTextIcon className="h-4 w-4" />
+                        Open Chart
                       </button>
                     )}
 
-                    {/* Start Chart button */}
-                    {permissions.canEdit &&
-                      (detail.status === "InProgress" || detail.status === "Completed") && (
-                        <button
-                          onClick={async () => {
-                            const existing = await getCharts({ patientId: detail.patientId ?? undefined });
-                            const existingChart = existing.find(
-                              (c) => c.appointmentId === detail.id
-                            );
-                            if (existingChart) {
-                              router.push(
-                                existingChart.status === "Draft"
-                                  ? `/charts/${existingChart.id}/edit`
-                                  : `/charts/${existingChart.id}`
-                              );
-                              return;
-                            }
-                            const result = await createChart({
-                              patientId: detail.patientId!,
-                              appointmentId: detail.id,
-                            });
-                            if (result.success && result.data) {
-                              router.push(`/charts/${result.data.id}/edit`);
-                            }
-                          }}
-                          className="w-full py-2.5 px-4 text-sm font-medium text-purple-700 bg-white rounded-lg hover:bg-purple-50 flex items-center justify-center gap-2 border border-purple-200 shadow-sm"
-                        >
-                          <FileTextIcon className="h-4 w-4" />
-                          Start Chart
-                        </button>
-                      )}
-
-                    <div className="flex gap-2">
-                      {permissions.canEdit && (
-                        <button
-                          onClick={() => setEditFormOpen(true)}
-                          className="flex-1 py-2.5 px-4 text-sm font-medium text-gray-700 bg-white rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 border border-gray-200 shadow-sm"
-                        >
-                          <EditIcon className="h-4 w-4" />
-                          Edit
-                        </button>
-                      )}
-                      {permissions.canEdit && detail.status !== "Cancelled" && (
-                        <button
-                          onClick={() => handleStatusChange("Cancelled")}
-                          disabled={isPending}
-                          className="py-2.5 px-4 text-sm font-medium text-red-600 bg-white rounded-lg hover:bg-red-50 disabled:opacity-50 border border-red-200 shadow-sm"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                      {permissions.canEdit && detail.status !== "NoShow" && (
-                        <button
-                          onClick={() => handleStatusChange("NoShow")}
-                          disabled={isPending}
-                          className="py-2.5 px-4 text-sm font-medium text-orange-600 bg-white rounded-lg hover:bg-orange-50 disabled:opacity-50 border border-orange-200 shadow-sm"
-                        >
-                          No Show
-                        </button>
-                      )}
-                    </div>
+                    {/* Cancelled / NoShow: Reschedule */}
+                    {(detail.status === "Cancelled" || detail.status === "NoShow") && (
+                      <button
+                        onClick={handleReschedule}
+                        className="w-full py-2.5 px-4 text-sm font-medium text-gray-700 bg-white rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 border border-gray-200 shadow-sm"
+                      >
+                        <CalendarPlusIcon className="h-4 w-4" />
+                        Reschedule
+                      </button>
+                    )}
                   </>
                 )}
               </div>
@@ -385,6 +489,13 @@ export function AppointmentPanel({
           appointment={calendarAppointment}
         />
       )}
+
+      {/* Checkout Drawer */}
+      <CheckoutDrawer open={!!checkoutData} onClose={handleCloseCheckout}>
+        {checkoutData && (
+          <CheckoutContent initialData={checkoutData} onClose={handleCloseCheckout} />
+        )}
+      </CheckoutDrawer>
     </>
   );
 }

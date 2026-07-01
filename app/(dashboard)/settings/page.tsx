@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon, BoxIcon, BellIcon, ArrowRightLeftIcon, PackageIcon } from "lucide-react";
+import { FileTextIcon, SparklesIcon, TagIcon, HomeIcon, UsersIcon, BoxIcon, BellIcon, ArrowRightLeftIcon, PackageIcon, CreditCardIcon } from "lucide-react";
 import { PageCard } from "@/components/ui/page-card";
 import { auth } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
@@ -37,6 +37,12 @@ const settingsItems: Array<{
     description: "Manage retail products, inventory, and pricing",
     href: "/settings/products",
     icon: TagIcon,
+  },
+  {
+    label: "Billing & Payments",
+    description: "Card payment processing and configuration",
+    href: "/settings/billing",
+    icon: CreditCardIcon,
   },
   {
     label: "Resources",

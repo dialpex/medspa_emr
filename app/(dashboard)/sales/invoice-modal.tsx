@@ -1,20 +1,17 @@
 "use client";
 
 import { useState, useEffect, useTransition, useCallback, useMemo, useRef } from "react";
-import { X, Plus, Trash2, Eye, Search } from "lucide-react";
+import { X, Plus, Trash2, Eye, Search, CreditCard, Loader2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   createInvoice,
   updateInvoice,
-  recordPayment,
   searchPatients,
   quickCreatePatient,
   type InvoiceDetail,
   type InvoiceItemInput,
-  type PaymentInput,
   type ClinicInfo,
 } from "@/lib/actions/invoices";
-import { payWithWallet, getWalletBalanceAction } from "@/lib/actions/wallet";
 import { InvoicePreview } from "./invoice-preview";
 
 type ServiceOption = { id: string; name: string; price: number };
@@ -26,6 +23,9 @@ type Props = {
   products: ProductOption[];
   clinicInfo: ClinicInfo;
   onClose: () => void;
+  stripeConnected?: boolean;
+  stripeAccountId?: string | null;
+  onCollectPayment?: (invoiceId: string) => void;
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -38,9 +38,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   Refunded: { bg: "bg-red-100", text: "text-red-700" },
 };
 
-const PAYMENT_METHODS = ["Cash", "Credit Card", "Debit Card", "Check", "Bank Transfer", "Wallet", "Other"];
-
-export function InvoiceModal({ invoice, services, products, clinicInfo, onClose }: Props) {
+export function InvoiceModal({ invoice, services, products, clinicInfo, onClose, stripeConnected, stripeAccountId, onCollectPayment }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -92,11 +90,8 @@ export function InvoiceModal({ invoice, services, products, clinicInfo, onClose 
   const [taxEnabled, setTaxEnabled] = useState((invoice?.taxRate ?? clinicTaxRate) > 0);
   const [taxRate, setTaxRate] = useState(invoice?.taxRate ?? clinicTaxRate);
 
-  // Payment recording
-  const [payAmount, setPayAmount] = useState(0);
-  const [payMethod, setPayMethod] = useState("Cash");
-  const [payReference, setPayReference] = useState("");
-  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  // Refund (still needed for payment history in modal)
+  const [refundingPaymentId, setRefundingPaymentId] = useState<string | null>(null);
 
   // Status
   const status = invoice?.status ?? "Draft";
@@ -200,24 +195,23 @@ export function InvoiceModal({ invoice, services, products, clinicInfo, onClose 
     });
   }
 
-  function handleRecordPayment() {
-    if (payAmount <= 0 || !invoice) return;
+  async function handleRefund(paymentId: string) {
+    setRefundingPaymentId(paymentId);
     setError(null);
-    startTransition(async () => {
-      if (payMethod === "Wallet") {
-        const result = await payWithWallet(invoice.id, payAmount);
-        if (!result.success) { setError(result.error); return; }
-      } else {
-        const result = await recordPayment({
-          invoiceId: invoice.id,
-          amount: payAmount,
-          paymentMethod: payMethod,
-          reference: payReference || undefined,
-        });
-        if (!result.success) { setError(result.error); return; }
-      }
+    try {
+      const res = await fetch("/api/billing/stripe/refund", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to process refund");
       onClose();
-    });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to process refund");
+    } finally {
+      setRefundingPaymentId(null);
+    }
   }
 
   return (
@@ -522,10 +516,16 @@ export function InvoiceModal({ invoice, services, products, clinicInfo, onClose 
             </div>
           </div>
 
-          {/* Payment Section (only for existing invoices) */}
+          {/* Payment Summary (read-only for existing invoices) */}
           {invoice && (
             <div className="border-t pt-4 space-y-3">
-              <h3 className="text-sm font-medium text-gray-700">Payments</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-gray-700">Payments</h3>
+                <div className="flex justify-between text-sm font-medium">
+                  <span className="mr-2">Balance Due:</span>
+                  <span className={balance <= 0 ? "text-green-600" : "text-red-600"}>${balance.toFixed(2)}</span>
+                </div>
+              </div>
               {invoice.payments.length > 0 && (
                 <table className="w-full text-sm border rounded-lg overflow-hidden">
                   <thead className="bg-gray-50 border-b">
@@ -534,79 +534,51 @@ export function InvoiceModal({ invoice, services, products, clinicInfo, onClose 
                       <th className="text-left px-3 py-2 font-medium text-gray-500">Method</th>
                       <th className="text-left px-3 py-2 font-medium text-gray-500">Reference</th>
                       <th className="text-right px-3 py-2 font-medium text-gray-500">Amount</th>
+                      {stripeConnected && <th className="w-20" />}
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {invoice.payments.map((p) => (
                       <tr key={p.id}>
                         <td className="px-3 py-2">{new Date(p.createdAt).toLocaleDateString()}</td>
-                        <td className="px-3 py-2">{p.paymentMethod}</td>
+                        <td className="px-3 py-2">{p.paymentMethod === "Stripe" ? "Card" : p.paymentMethod === "Stripe Refund" ? "Card Refund" : p.paymentMethod}</td>
                         <td className="px-3 py-2 text-gray-500">{p.reference || "—"}</td>
                         <td className="px-3 py-2 text-right">${p.amount.toFixed(2)}</td>
+                        {stripeConnected && (
+                          <td className="px-2 py-2">
+                            {p.paymentMethod === "Stripe" && p.amount > 0 && (
+                              <button
+                                onClick={() => handleRefund(p.id)}
+                                disabled={refundingPaymentId === p.id}
+                                className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50"
+                              >
+                                {refundingPaymentId === p.id ? (
+                                  <Loader2 className="size-3 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="size-3" />
+                                )}
+                                Refund
+                              </button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
-              <div className="flex justify-between text-sm font-medium">
-                <span>Balance Due</span>
-                <span className={balance <= 0 ? "text-green-600" : "text-red-600"}>${balance.toFixed(2)}</span>
-              </div>
               {balance > 0 && (
-                <div className="flex items-end gap-3 pt-2">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Amount</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={0.01}
-                        step={0.01}
-                        max={balance}
-                        value={payAmount}
-                        onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
-                        className="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setPayAmount(balance)}
-                        className="rounded-lg border border-purple-300 bg-purple-50 px-3 py-2 text-xs font-medium text-purple-700 hover:bg-purple-100 whitespace-nowrap"
-                      >
-                        Pay in Full
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Method</label>
-                    <select value={payMethod} onChange={(e) => {
-                      setPayMethod(e.target.value);
-                      if (e.target.value === "Wallet" && invoice?.patientId && walletBalance === null) {
-                        getWalletBalanceAction(invoice.patientId).then(setWalletBalance);
-                      }
-                    }} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
-                      {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                    {payMethod === "Wallet" && walletBalance !== null && (
-                      <div className="text-xs text-gray-500 mt-1">Balance: ${walletBalance.toFixed(2)}</div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Reference</label>
-                    <input
-                      type="text"
-                      value={payReference}
-                      onChange={(e) => setPayReference(e.target.value)}
-                      placeholder="Optional"
-                      className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <button
-                    onClick={handleRecordPayment}
-                    disabled={isPending || payAmount <= 0}
-                    className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                  >
-                    Record Payment
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onCollectPayment?.(invoice.id);
+                  }}
+                  className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-700 transition-colors"
+                >
+                  <CreditCard className="size-4" />
+                  Collect Payment
+                </button>
               )}
             </div>
           )}

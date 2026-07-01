@@ -10,10 +10,15 @@ export type PaymentListItem = {
   reference: string | null;
   notes: string | null;
   createdAt: Date;
+  stripeStatus: string | null;
+  receiptUrl: string | null;
+  stripePaymentIntentId: string | null;
+  paymentType: string;
+  appointmentId: string | null;
   invoice: {
     invoiceNumber: string;
     patient: { id: string; firstName: string; lastName: string };
-  };
+  } | null;
 };
 
 export type PaymentFilters = {
@@ -26,7 +31,7 @@ export type PaymentFilters = {
 export async function getPayments(filters?: PaymentFilters): Promise<PaymentListItem[]> {
   const user = await requirePermission("invoices", "view");
 
-  const where: Record<string, unknown> = { clinicId: user.clinicId, deletedAt: null, invoice: { deletedAt: null } };
+  const where: Record<string, unknown> = { clinicId: user.clinicId, deletedAt: null };
 
   if (filters?.method) where.paymentMethod = filters.method;
   if (filters?.dateFrom || filters?.dateTo) {

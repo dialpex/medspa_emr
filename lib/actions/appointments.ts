@@ -344,6 +344,7 @@ export type AppointmentDetail = {
   hasEncounter: boolean;
   encounterId: string | null;
   encounterStatus: string | null;
+  providerId: string;
   recurrenceGroupId: string | null;
   isBlock: boolean;
   blockTitle: string | null;
@@ -426,6 +427,7 @@ export async function getAppointmentWithPatient(
     hasEncounter: !!apt.encounter,
     encounterId: apt.encounter?.id ?? null,
     encounterStatus: apt.encounter?.status ?? null,
+    providerId: apt.providerId,
     recurrenceGroupId: apt.recurrenceGroupId,
     isBlock: apt.isBlock,
     blockTitle: apt.blockTitle,
@@ -1038,6 +1040,7 @@ export async function getAppointmentPermissions(): Promise<{
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  isProvider: boolean;
 }> {
   const user = await requirePermission("appointments", "view");
 
@@ -1046,6 +1049,7 @@ export async function getAppointmentPermissions(): Promise<{
     canCreate: hasPermission(user.role, "appointments", "create"),
     canEdit: hasPermission(user.role, "appointments", "edit"),
     canDelete: hasPermission(user.role, "appointments", "delete"),
+    isProvider: ["Provider", "Admin", "Owner", "MedicalDirector"].includes(user.role),
   };
 }
 

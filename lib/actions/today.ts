@@ -55,6 +55,7 @@ export type TodayPermissions = {
   canCheckOut: boolean;
   canOpenChart: boolean;
   canEdit: boolean;
+  isProvider: boolean;
 };
 
 // ===========================================
@@ -204,9 +205,10 @@ export async function getTodayPermissions(): Promise<TodayPermissions> {
     canStartSession: isProviderPlus,
     canBeginService,
     canCompleteSession: isProviderPlus,
-    canCheckOut: isFrontDeskPlus,
+    canCheckOut: isFrontDeskPlus || isProviderPlus,
     canOpenChart: hasPermission(role, "charts", "view"),
     canEdit: hasPermission(role, "appointments", "edit"),
+    isProvider: isProviderPlus,
   };
 }
 

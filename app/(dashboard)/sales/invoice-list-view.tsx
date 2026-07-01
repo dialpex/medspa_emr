@@ -1,12 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, MoreVertical, FileText } from "lucide-react";
+import { Plus, MoreVertical, FileText, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PatientAvatar } from "@/components/patient-avatar";
 import { PageCard } from "@/components/ui/page-card";
 import { InvoiceFilters } from "./invoice-filters";
 import { InvoiceModal } from "./invoice-modal";
+import { CheckoutDrawer } from "@/app/(dashboard)/checkout/checkout-drawer";
+import { CheckoutContent } from "@/app/(dashboard)/checkout/checkout-content";
+import { getCheckoutDataAction } from "@/lib/actions/checkout";
+import type { CheckoutData } from "@/lib/services/checkout-shared";
 import {
   getInvoices,
   getInvoice,
@@ -35,14 +39,17 @@ type Props = {
   services: ServiceOption[];
   products: ProductOption[];
   clinicInfo: ClinicInfo;
+  stripeConnected?: boolean;
+  stripeAccountId?: string | null;
 };
 
-export function InvoiceListView({ initialInvoices, services, products, clinicInfo }: Props) {
+export function InvoiceListView({ initialInvoices, services, products, clinicInfo, stripeConnected, stripeAccountId }: Props) {
   const [invoices, setInvoices] = useState(initialInvoices);
   const [modalInvoice, setModalInvoice] = useState<InvoiceDetail | null | "new">(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
 
   function handleFilter(filters: { status: string; search: string; invoiceNumber: string; dateFrom: string; dateTo: string }) {
     startTransition(async () => {
@@ -77,6 +84,23 @@ export function InvoiceListView({ initialInvoices, services, products, clinicInf
     setMenuOpen(null);
     startTransition(async () => {
       await updateInvoiceStatus(id, status);
+      const result = await getInvoices();
+      setInvoices(result);
+    });
+  }
+
+  function openCheckout(invoiceId: string) {
+    setMenuOpen(null);
+    startTransition(async () => {
+      const data = await getCheckoutDataAction(invoiceId);
+      setCheckoutData(data);
+    });
+  }
+
+  function handleCloseCheckout() {
+    setCheckoutData(null);
+    // Refresh list
+    startTransition(async () => {
       const result = await getInvoices();
       setInvoices(result);
     });
@@ -164,6 +188,11 @@ export function InvoiceListView({ initialInvoices, services, products, clinicInf
                           }
                         }
                       }}>
+                        {inv.status !== "Void" && inv.status !== "Refunded" && inv.status !== "Paid" && (
+                          <button onClick={() => openCheckout(inv.id)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 text-purple-600 font-medium">
+                            <CreditCard className="size-3.5" /> Collect Payment
+                          </button>
+                        )}
                         {inv.status === "Draft" && (
                           <button onClick={() => handleStatusChange(inv.id, "Sent")} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">Send Now</button>
                         )}
@@ -188,8 +217,17 @@ export function InvoiceListView({ initialInvoices, services, products, clinicInf
           products={products}
           clinicInfo={clinicInfo}
           onClose={handleCloseModal}
+          stripeConnected={stripeConnected}
+          stripeAccountId={stripeAccountId}
+          onCollectPayment={openCheckout}
         />
       )}
+
+      <CheckoutDrawer open={!!checkoutData} onClose={handleCloseCheckout}>
+        {checkoutData && (
+          <CheckoutContent initialData={checkoutData} onClose={handleCloseCheckout} />
+        )}
+      </CheckoutDrawer>
 
       {confirmDeleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">

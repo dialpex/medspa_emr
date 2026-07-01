@@ -145,6 +145,7 @@ export type CalendarViewProps = {
     canCreate: boolean;
     canEdit: boolean;
     canDelete: boolean;
+    isProvider: boolean;
   };
 };
 

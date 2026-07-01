@@ -33,6 +33,8 @@
     "@schedule-x/react": "^3.7.0",
     "@schedule-x/resize": "^3.7.3",
     "@schedule-x/theme-default": "^3.7.3",
+    "@stripe/react-stripe-js": "^6.6.0",
+    "@stripe/stripe-js": "^9.8.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tiptap/extension-link": "^3.18.0",
     "@tiptap/extension-text-align": "^3.18.0",
@@ -58,6 +60,7 @@
     "react-dom": "19.2.3",
     "react-zoom-pan-pinch": "^3.7.0",
     "sharp": "^0.34.5",
+    "stripe": "^22.3.0",
     "tailwind-merge": "^3.4.0",
     "zod": "^4.3.6"
   },
