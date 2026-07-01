@@ -8,9 +8,10 @@ type Props = {
   onSuccess?: () => void;
   onError?: (message: string) => void;
   returnUrl?: string;
+  amount?: number;
 };
 
-export function CheckoutForm({ onSuccess, onError, returnUrl }: Props) {
+export function CheckoutForm({ onSuccess, onError, returnUrl, amount }: Props) {
   const stripe = useStripe();
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -71,7 +72,7 @@ export function CheckoutForm({ onSuccess, onError, returnUrl }: Props) {
             <Loader2 className="size-4 animate-spin" /> Processing...
           </>
         ) : (
-          "Pay Now"
+          amount ? `Pay $${amount.toFixed(2)}` : "Pay Now"
         )}
       </button>
     </form>

@@ -6,39 +6,16 @@ import { cn } from "@/lib/utils";
 import {
   createInvoice,
   updateInvoice,
-  recordPayment,
   searchPatients,
   quickCreatePatient,
   type InvoiceDetail,
   type InvoiceItemInput,
-  type PaymentInput,
   type ClinicInfo,
 } from "@/lib/actions/invoices";
-import { payWithWallet, getWalletBalanceAction } from "@/lib/actions/wallet";
 import { InvoicePreview } from "./invoice-preview";
-import { StripeProvider } from "@/components/stripe/stripe-provider";
-import { CheckoutForm } from "@/components/stripe/checkout-form";
-
-function StripeInlineCheckout({ clientSecret, stripeAccountId, onSuccess, onError }: { clientSecret: string; stripeAccountId: string; onSuccess: () => void; onError: (msg: string) => void }) {
-  return (
-    <StripeProvider clientSecret={clientSecret} stripeAccountId={stripeAccountId}>
-      <CheckoutForm onSuccess={onSuccess} onError={onError} />
-    </StripeProvider>
-  );
-}
 
 type ServiceOption = { id: string; name: string; price: number };
 type ProductOption = { id: string; name: string; price: number };
-
-type SavedCard = {
-  id: string;
-  stripePaymentMethodId: string;
-  cardBrand: string | null;
-  cardLast4: string | null;
-  cardExpMonth: number | null;
-  cardExpYear: number | null;
-  isDefault: boolean;
-};
 
 type Props = {
   invoice: InvoiceDetail | null;
@@ -48,6 +25,7 @@ type Props = {
   onClose: () => void;
   stripeConnected?: boolean;
   stripeAccountId?: string | null;
+  onCollectPayment?: (invoiceId: string) => void;
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -60,12 +38,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   Refunded: { bg: "bg-red-100", text: "text-red-700" },
 };
 
-const PAYMENT_METHODS_BASE = ["Cash", "Credit Card", "Debit Card", "Check", "Bank Transfer", "Wallet", "Other"];
-
-export function InvoiceModal({ invoice, services, products, clinicInfo, onClose, stripeConnected, stripeAccountId }: Props) {
-  const PAYMENT_METHODS = stripeConnected
-    ? [{ value: "Stripe", label: "Card" }, ...PAYMENT_METHODS_BASE.map((m) => ({ value: m, label: m }))]
-    : PAYMENT_METHODS_BASE.map((m) => ({ value: m, label: m }));
+export function InvoiceModal({ invoice, services, products, clinicInfo, onClose, stripeConnected, stripeAccountId, onCollectPayment }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -117,17 +90,7 @@ export function InvoiceModal({ invoice, services, products, clinicInfo, onClose,
   const [taxEnabled, setTaxEnabled] = useState((invoice?.taxRate ?? clinicTaxRate) > 0);
   const [taxRate, setTaxRate] = useState(invoice?.taxRate ?? clinicTaxRate);
 
-  // Payment recording
-  const [payAmount, setPayAmount] = useState(0);
-  const [payMethod, setPayMethod] = useState<string>(stripeConnected ? "Stripe" : "Cash");
-  const [payReference, setPayReference] = useState("");
-  const [walletBalance, setWalletBalance] = useState<number | null>(null);
-
-  // Stripe payment
-  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
-  const [selectedCardId, setSelectedCardId] = useState<string | "new">("new");
-  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
-  const [stripeLoading, setStripeLoading] = useState(false);
+  // Refund (still needed for payment history in modal)
   const [refundingPaymentId, setRefundingPaymentId] = useState<string | null>(null);
 
   // Status
@@ -152,20 +115,6 @@ export function InvoiceModal({ invoice, services, products, clinicInfo, onClose,
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
-
-  // Fetch saved cards when Stripe is selected and patient is set
-  useEffect(() => {
-    if (payMethod === "Stripe" && invoice?.patientId && stripeConnected) {
-      fetch(`/api/billing/stripe/payment-methods?patientId=${invoice.patientId}`)
-        .then((res) => res.ok ? res.json() : [])
-        .then((data) => {
-          setSavedCards(data);
-          if (data.length > 0) setSelectedCardId(data[0].id);
-          else setSelectedCardId("new");
-        })
-        .catch(() => setSavedCards([]));
-    }
-  }, [payMethod, invoice?.patientId, stripeConnected]);
 
   // Patient search
   const doSearch = useCallback(async (q: string) => {
@@ -246,50 +195,6 @@ export function InvoiceModal({ invoice, services, products, clinicInfo, onClose,
     });
   }
 
-  async function handleStripeNewCard() {
-    if (!invoice || payAmount <= 0) return;
-    setStripeLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/billing/stripe/payment-intent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId: invoice.id, amount: payAmount }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create payment");
-      setStripeClientSecret(data.clientSecret);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to initialize payment");
-    } finally {
-      setStripeLoading(false);
-    }
-  }
-
-  async function handleStripeSavedCard() {
-    if (!invoice || payAmount <= 0 || selectedCardId === "new") return;
-    setStripeLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/billing/stripe/charge-saved", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId: invoice.id, paymentMethodId: selectedCardId, amount: payAmount }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to charge card");
-      if (data.status === "requires_action" && data.clientSecret) {
-        setStripeClientSecret(data.clientSecret);
-      } else {
-        onClose();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to charge card");
-    } finally {
-      setStripeLoading(false);
-    }
-  }
-
   async function handleRefund(paymentId: string) {
     setRefundingPaymentId(paymentId);
     setError(null);
@@ -307,36 +212,6 @@ export function InvoiceModal({ invoice, services, products, clinicInfo, onClose,
     } finally {
       setRefundingPaymentId(null);
     }
-  }
-
-  function handleRecordPayment() {
-    if (payAmount <= 0 || !invoice) return;
-    setError(null);
-
-    if (payMethod === "Stripe") {
-      if (selectedCardId === "new") {
-        handleStripeNewCard();
-      } else {
-        handleStripeSavedCard();
-      }
-      return;
-    }
-
-    startTransition(async () => {
-      if (payMethod === "Wallet") {
-        const result = await payWithWallet(invoice.id, payAmount);
-        if (!result.success) { setError(result.error); return; }
-      } else {
-        const result = await recordPayment({
-          invoiceId: invoice.id,
-          amount: payAmount,
-          paymentMethod: payMethod,
-          reference: payReference || undefined,
-        });
-        if (!result.success) { setError(result.error); return; }
-      }
-      onClose();
-    });
   }
 
   return (
@@ -641,10 +516,16 @@ export function InvoiceModal({ invoice, services, products, clinicInfo, onClose,
             </div>
           </div>
 
-          {/* Payment Section (only for existing invoices) */}
+          {/* Payment Summary (read-only for existing invoices) */}
           {invoice && (
             <div className="border-t pt-4 space-y-3">
-              <h3 className="text-sm font-medium text-gray-700">Payments</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-gray-700">Payments</h3>
+                <div className="flex justify-between text-sm font-medium">
+                  <span className="mr-2">Balance Due:</span>
+                  <span className={balance <= 0 ? "text-green-600" : "text-red-600"}>${balance.toFixed(2)}</span>
+                </div>
+              </div>
               {invoice.payments.length > 0 && (
                 <table className="w-full text-sm border rounded-lg overflow-hidden">
                   <thead className="bg-gray-50 border-b">
@@ -686,143 +567,18 @@ export function InvoiceModal({ invoice, services, products, clinicInfo, onClose,
                   </tbody>
                 </table>
               )}
-              <div className="flex justify-between text-sm font-medium">
-                <span>Balance Due</span>
-                <span className={balance <= 0 ? "text-green-600" : "text-red-600"}>${balance.toFixed(2)}</span>
-              </div>
               {balance > 0 && (
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-end gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Amount</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={0.01}
-                          step={0.01}
-                          max={balance}
-                          value={payAmount}
-                          onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
-                          className="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setPayAmount(balance)}
-                          className="rounded-lg border border-purple-300 bg-purple-50 px-3 py-2 text-xs font-medium text-purple-700 hover:bg-purple-100 whitespace-nowrap"
-                        >
-                          Pay in Full
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Method</label>
-                      <select value={payMethod} onChange={(e) => {
-                        setPayMethod(e.target.value);
-                        setStripeClientSecret(null);
-                        if (e.target.value === "Wallet" && invoice?.patientId && walletBalance === null) {
-                          getWalletBalanceAction(invoice.patientId).then(setWalletBalance);
-                        }
-                      }} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
-                        {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                      </select>
-                      {payMethod === "Wallet" && walletBalance !== null && (
-                        <div className="text-xs text-gray-500 mt-1">Balance: ${walletBalance.toFixed(2)}</div>
-                      )}
-                    </div>
-                    {payMethod !== "Stripe" && (
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Reference</label>
-                        <input
-                          type="text"
-                          value={payReference}
-                          onChange={(e) => setPayReference(e.target.value)}
-                          placeholder="Optional"
-                          className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                        />
-                      </div>
-                    )}
-                    {payMethod !== "Stripe" && (
-                      <button
-                        onClick={handleRecordPayment}
-                        disabled={isPending || payAmount <= 0}
-                        className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                      >
-                        Record Payment
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Stripe payment flow */}
-                  {payMethod === "Stripe" && !stripeClientSecret && (
-                    <div className="rounded-lg border border-gray-200 p-4 space-y-3">
-                      {savedCards.length > 0 && (
-                        <div className="space-y-2">
-                          <label className="block text-xs text-gray-500 font-medium">Select Card</label>
-                          {savedCards.map((card) => (
-                            <label key={card.id} className="flex items-center gap-3 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="stripe-card"
-                                value={card.id}
-                                checked={selectedCardId === card.id}
-                                onChange={() => setSelectedCardId(card.id)}
-                                className="text-purple-600"
-                              />
-                              <CreditCard className="size-4 text-gray-400" />
-                              <span className="text-sm">
-                                {card.cardBrand || "Card"} **** {card.cardLast4}
-                                {card.cardExpMonth && card.cardExpYear && (
-                                  <span className="text-gray-400 ml-2">
-                                    {String(card.cardExpMonth).padStart(2, "0")}/{card.cardExpYear}
-                                  </span>
-                                )}
-                              </span>
-                            </label>
-                          ))}
-                          <label className="flex items-center gap-3 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="stripe-card"
-                              value="new"
-                              checked={selectedCardId === "new"}
-                              onChange={() => setSelectedCardId("new")}
-                              className="text-purple-600"
-                            />
-                            <Plus className="size-4 text-gray-400" />
-                            <span className="text-sm">New card</span>
-                          </label>
-                        </div>
-                      )}
-                      <button
-                        onClick={handleRecordPayment}
-                        disabled={stripeLoading || payAmount <= 0}
-                        className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {stripeLoading ? (
-                          <>
-                            <Loader2 className="size-4 animate-spin" /> Processing...
-                          </>
-                        ) : selectedCardId === "new" ? (
-                          "Continue to Card Entry"
-                        ) : (
-                          `Charge $${payAmount.toFixed(2)}`
-                        )}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Stripe Elements inline form */}
-                  {payMethod === "Stripe" && stripeClientSecret && stripeAccountId && (
-                    <div className="rounded-lg border border-gray-200 p-4">
-                      <StripeInlineCheckout
-                        clientSecret={stripeClientSecret}
-                        stripeAccountId={stripeAccountId}
-                        onSuccess={onClose}
-                        onError={(msg) => setError(msg)}
-                      />
-                    </div>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onCollectPayment?.(invoice.id);
+                  }}
+                  className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-700 transition-colors"
+                >
+                  <CreditCard className="size-4" />
+                  Collect Payment
+                </button>
               )}
             </div>
           )}

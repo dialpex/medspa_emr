@@ -692,7 +692,8 @@ model Invoice {
   discountPercent Float?
   taxAmount     Float         @default(0)
   taxRate       Float?
-  total         Float         @default(0)
+  total          Float         @default(0)
+  gratuityAmount Float         @default(0)
   notes         String?
   dueDate       DateTime?
   paidAt        DateTime?

@@ -6,9 +6,12 @@ import {
   XIcon,
   Loader2Icon,
   FileTextIcon,
+  CreditCardIcon,
+  CalendarPlusIcon,
 } from "lucide-react";
 import {
   getAppointmentWithPatient,
+  updateAppointmentStatus,
   getPatientTransactionHistory,
   type AppointmentDetail,
   type PatientTransaction,
@@ -18,13 +21,16 @@ import {
   checkInAppointment,
   markNoShow,
   beginService,
-  completeSession,
-  checkOutAppointment,
   getAppointmentTimestamps,
   type TodayPermissions,
 } from "@/lib/actions/today";
+import { createChart, getCharts } from "@/lib/actions/charts";
+import { createInvoiceFromAppointmentAction, getCheckoutDataAction } from "@/lib/actions/checkout";
 import { derivePhase } from "@/lib/today-utils";
 import { AppointmentPanelContent } from "@/components/appointment-panel-content";
+import { CheckoutDrawer } from "@/app/(dashboard)/checkout/checkout-drawer";
+import { CheckoutContent } from "@/app/(dashboard)/checkout/checkout-content";
+import type { CheckoutData } from "@/lib/services/checkout-shared";
 import { cn } from "@/lib/utils";
 
 type DetailWithTimestamps = AppointmentDetail & {
@@ -48,6 +54,7 @@ export function TodayDetailPanel({
   const [transactions, setTransactions] = useState<PatientTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
 
   const isOpen = !!appointmentId;
 
@@ -103,6 +110,53 @@ export function TodayDetailPanel({
     },
     [detail, refreshDetail]
   );
+
+  /** Move to Completed then open checkout drawer */
+  const handleCheckOut = useCallback(
+    (apptId: string) => {
+      startTransition(async () => {
+        await updateAppointmentStatus(apptId, "Completed");
+        const invoiceResult = await createInvoiceFromAppointmentAction(apptId);
+        if (!invoiceResult.success) return;
+        const data = await getCheckoutDataAction(invoiceResult.invoiceId);
+        setCheckoutData(data);
+        await refreshDetail();
+      });
+    },
+    [refreshDetail]
+  );
+
+  const handleCloseCheckout = useCallback(() => {
+    setCheckoutData(null);
+    refreshDetail();
+  }, [refreshDetail]);
+
+  /** Navigate to chart — find existing or create new */
+  const handleOpenChart = useCallback(async () => {
+    if (!detail) return;
+    const existing = await getCharts({ patientId: detail.patientId ?? undefined });
+    const existingChart = existing.find((c) => c.appointmentId === detail.id);
+    if (existingChart) {
+      router.push(
+        existingChart.status === "Draft"
+          ? `/charts/${existingChart.id}/edit`
+          : `/charts/${existingChart.id}`
+      );
+      return;
+    }
+    router.push(`/charts/new?patientId=${detail.patientId}&appointmentId=${detail.id}`);
+  }, [detail, router]);
+
+  /** Reschedule — navigate to calendar with patient pre-filled */
+  const handleReschedule = useCallback(() => {
+    if (!detail) return;
+    router.push(
+      `/calendar?reschedulePatientId=${detail.patientId}&reschedulePatientName=${encodeURIComponent(
+        `${detail.patientFirstName} ${detail.patientLastName}`
+      )}&rescheduleProviderId=${detail.providerId || ""}`
+    );
+    onClose();
+  }, [detail, router, onClose]);
 
   const phase = detail
     ? derivePhase({
@@ -168,9 +222,10 @@ export function TodayDetailPanel({
             {/* Actions Footer */}
             {detail && phase && (
               <div className="border-t bg-gray-50/50 p-4 space-y-2">
-                {phase === "upcoming" && (
+                {/* Scheduled: Confirm, Check In, Cancel */}
+                {detail.status === "Scheduled" && (
                   <>
-                    {permissions.canConfirm && detail.status === "Scheduled" && (
+                    {permissions.canConfirm && (
                       <button
                         onClick={() => handleAction(confirmAppointment)}
                         disabled={isPending}
@@ -180,6 +235,33 @@ export function TodayDetailPanel({
                         Confirm
                       </button>
                     )}
+                    <div className="flex gap-2">
+                      {permissions.canCheckIn && (
+                        <button
+                          onClick={() => handleAction(checkInAppointment)}
+                          disabled={isPending}
+                          className="flex-1 py-2.5 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                        >
+                          {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
+                          Check In
+                        </button>
+                      )}
+                      {permissions.canEdit && (
+                        <button
+                          onClick={() => handleAction((id) => updateAppointmentStatus(id, "Cancelled"))}
+                          disabled={isPending}
+                          className="py-2.5 px-4 text-sm font-medium text-red-600 bg-white rounded-lg hover:bg-red-50 disabled:opacity-50 border border-red-200 shadow-sm"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Confirmed: Check In, No Show, Cancel */}
+                {detail.status === "Confirmed" && (
+                  <>
                     {permissions.canCheckIn && (
                       <button
                         onClick={() => handleAction(checkInAppointment)}
@@ -190,82 +272,130 @@ export function TodayDetailPanel({
                         Check In
                       </button>
                     )}
-                    {permissions.canCheckIn && new Date() > new Date(detail.startTime) && (
+                    <div className="flex gap-2">
+                      {permissions.canCheckIn && (
+                        <button
+                          onClick={() => handleAction(markNoShow)}
+                          disabled={isPending}
+                          className="flex-1 py-2.5 px-4 text-sm font-medium text-orange-600 bg-white rounded-lg hover:bg-orange-50 disabled:opacity-50 border border-orange-200 shadow-sm"
+                        >
+                          No Show
+                        </button>
+                      )}
+                      {permissions.canEdit && (
+                        <button
+                          onClick={() => handleAction((id) => updateAppointmentStatus(id, "Cancelled"))}
+                          disabled={isPending}
+                          className="py-2.5 px-4 text-sm font-medium text-red-600 bg-white rounded-lg hover:bg-red-50 disabled:opacity-50 border border-red-200 shadow-sm"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* CheckedIn: Begin Service (provider only), Check Out (all) */}
+                {detail.status === "CheckedIn" && (
+                  <>
+                    {permissions.isProvider && permissions.canBeginService && (
                       <button
-                        onClick={() => handleAction(markNoShow)}
+                        onClick={() => {
+                          startTransition(async () => {
+                            const result = await beginService(detail.id);
+                            if (result.success && result.data) {
+                              router.push(`/charts/${result.data.chartId}/edit`);
+                            } else {
+                              await refreshDetail();
+                            }
+                          });
+                        }}
                         disabled={isPending}
-                        className="w-full py-2.5 px-4 text-sm font-medium text-red-600 bg-white rounded-lg hover:bg-red-50 disabled:opacity-50 flex items-center justify-center gap-2 border border-red-200 shadow-sm"
+                        className="w-full py-2.5 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
                       >
                         {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
-                        Mark No Show
+                        Begin Service
+                      </button>
+                    )}
+                    {permissions.canCheckOut && (
+                      <button
+                        onClick={() => handleCheckOut(detail.id)}
+                        disabled={isPending}
+                        className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                      >
+                        {isPending ? (
+                          <Loader2Icon className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CreditCardIcon className="h-4 w-4" />
+                        )}
+                        Check Out
                       </button>
                     )}
                   </>
                 )}
-                {phase === "here" && permissions.canBeginService && (
-                  <button
-                    onClick={() => {
-                      startTransition(async () => {
-                        const result = await beginService(detail.id);
-                        if (result.success && result.data) {
-                          router.push(`/charts/${result.data.chartId}/edit`);
-                        } else {
-                          await refreshDetail();
-                        }
-                      });
-                    }}
-                    disabled={isPending}
-                    className="w-full py-2.5 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
-                  >
-                    {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
-                    Begin Service
-                  </button>
+
+                {/* InProgress: Chart (provider only), Check Out (all) */}
+                {detail.status === "InProgress" && (
+                  <>
+                    {permissions.isProvider && permissions.canOpenChart && (
+                      <button
+                        onClick={handleOpenChart}
+                        className="w-full py-2.5 px-4 text-sm font-medium text-purple-700 bg-white rounded-lg hover:bg-purple-50 flex items-center justify-center gap-2 border border-purple-200 shadow-sm"
+                      >
+                        <FileTextIcon className="h-4 w-4" />
+                        Chart
+                      </button>
+                    )}
+                    {permissions.canCheckOut && (
+                      <button
+                        onClick={() => handleCheckOut(detail.id)}
+                        disabled={isPending}
+                        className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                      >
+                        {isPending ? (
+                          <Loader2Icon className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CreditCardIcon className="h-4 w-4" />
+                        )}
+                        Check Out
+                      </button>
+                    )}
+                  </>
                 )}
-                {phase === "with_provider" && permissions.canCompleteSession && (
+
+                {/* Completed: Open Chart (provider only) */}
+                {detail.status === "Completed" && permissions.isProvider && permissions.canOpenChart && (
                   <button
-                    onClick={() => handleAction(completeSession)}
-                    disabled={isPending}
-                    className="w-full py-2.5 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                    onClick={handleOpenChart}
+                    className="w-full py-2.5 px-4 text-sm font-medium text-purple-700 bg-white rounded-lg hover:bg-purple-50 flex items-center justify-center gap-2 border border-purple-200 shadow-sm"
                   >
-                    {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
-                    Complete Session
-                  </button>
-                )}
-                {phase === "done" && permissions.canCheckOut && !detail.checkedOutAt && (
-                  <button
-                    onClick={() => handleAction(checkOutAppointment)}
-                    disabled={isPending}
-                    className="w-full py-2.5 px-4 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
-                  >
-                    {isPending && <Loader2Icon className="h-4 w-4 animate-spin" />}
-                    Check Out
+                    <FileTextIcon className="h-4 w-4" />
+                    Open Chart
                   </button>
                 )}
 
-                {/* Chart button */}
-                {permissions.canOpenChart &&
-                  detail.hasChart &&
-                  detail.chartId &&
-                  (phase === "with_provider" || phase === "done") && (
-                    <button
-                      onClick={() => {
-                        router.push(
-                          detail.chartStatus === "Draft"
-                            ? `/charts/${detail.chartId}/edit`
-                            : `/charts/${detail.chartId}`
-                        );
-                      }}
-                      className="w-full py-2.5 px-4 text-sm font-medium text-purple-700 bg-white rounded-lg hover:bg-purple-50 flex items-center justify-center gap-2 border border-purple-200 shadow-sm"
-                    >
-                      <FileTextIcon className="h-4 w-4" />
-                      Open Chart
-                    </button>
-                  )}
+                {/* Cancelled / NoShow: Reschedule */}
+                {(detail.status === "Cancelled" || detail.status === "NoShow") && (
+                  <button
+                    onClick={handleReschedule}
+                    className="w-full py-2.5 px-4 text-sm font-medium text-gray-700 bg-white rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 border border-gray-200 shadow-sm"
+                  >
+                    <CalendarPlusIcon className="h-4 w-4" />
+                    Reschedule
+                  </button>
+                )}
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* Checkout Drawer */}
+      <CheckoutDrawer open={!!checkoutData} onClose={handleCloseCheckout}>
+        {checkoutData && (
+          <CheckoutContent initialData={checkoutData} onClose={handleCloseCheckout} />
+        )}
+      </CheckoutDrawer>
     </>
   );
 }

@@ -35,6 +35,7 @@ export type InvoiceDetail = {
   taxAmount: number;
   taxRate: number | null;
   total: number;
+  gratuityAmount: number;
   notes: string | null;
   dueDate: Date | null;
   paidAt: Date | null;

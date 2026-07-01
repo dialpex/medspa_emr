@@ -70,7 +70,7 @@ export type ProviderDayViewProps = {
   appointments: CalendarAppointment[];
   providers: Provider[];
   currentDate: string;
-  permissions: { canCreate: boolean; canEdit: boolean; canDelete: boolean };
+  permissions: { canCreate: boolean; canEdit: boolean; canDelete: boolean; isProvider: boolean };
   onEventClick: (appointmentId: string) => void;
   onSlotClick: (x: number, y: number, startTime: Date, endTime: Date) => void;
 };
